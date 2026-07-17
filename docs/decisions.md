@@ -14,6 +14,18 @@ related:
 
 # Decisions (ADR-style log)
 
+## Plan-limit gate temporarily disabled for testing
+
+The user asked to "remove the strip[e] barrier for now" to exercise the
+product without hitting `402 Payment Required` walls. Rather than ripping out
+the plan/billing code, `services/plans.ts`'s `PLANS` table was changed so
+**every tier** (`free`/`pro`/`team`) gets team-level limits (unlimited repos,
+unlimited scans/day, webhook scans enabled) — the production limits are kept
+as a commented-out block in the same file for a one-line revert. Orgs still
+display their real plan name in the billing UI; only enforcement changed.
+Verified: toggling webhook auto-scan on a `free`-plan org, previously a
+402, now succeeds. See [[known-issues]] for when this should be reverted.
+
 ## Scope expanded from MVP to full SaaS mid-plan
 
 The original brief (`master build prompt`) specified a 3–4 week internship-demo

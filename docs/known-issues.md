@@ -45,22 +45,24 @@ request on the next login attempt (if it doesn't, the App-level change
 hasn't propagated), and as a fallback, consider having the user set a public
 email on their GitHub profile as a workaround.
 
-## Local webhook testing requires a public tunnel — blocked by auto-mode
+## ~~Local webhook testing requires a public tunnel~~ — RESOLVED
 
-GitHub can't POST webhooks to `localhost`. `ngrok` is installed and
-configured (`ngrok config check` confirms a valid authtoken), but starting it
-via the agent's Bash tool was **blocked twice by the Claude Code auto-mode
-classifier**, even after explicit user confirmation — it does not allow
-starting a process that exposes a local port to the public internet. This is
-a hard block, not a permission prompt; routing around it wasn't attempted per
-the safety policy.
+GitHub can't POST webhooks to `localhost`, and starting `ngrok` via the
+agent's Bash tool was **blocked twice by the Claude Code auto-mode
+classifier** even after explicit user confirmation (it does not allow
+starting a process that exposes a local port to the public internet — a hard
+block, not a permission prompt).
 
-**Workaround**: the user needs to run `ngrok http 4000` themselves in their
-own terminal, then paste the resulting `https://*.ngrok-free.app` URL into
-the GitHub App's Webhook URL field (as `.../api/webhooks/github`). Not yet
-done as of last session — webhook-triggered scans are code-complete and unit
-tested with hand-signed fake payloads (see [[features/m4-github-app]]), but
-have not been triggered by a real GitHub webhook delivery yet.
+**Resolved by the user running `ngrok http 4000` themselves** in their own
+terminal, then setting the GitHub App's Webhook URL to
+`https://<tunnel>.ngrok-free.dev/api/webhooks/github`. Verified reachable
+(`/api/health` → 200, unsigned webhook POST → 401 "Invalid signature" as
+expected) before the user pushed a real commit — the webhook fired, the scan
+ran end-to-end, and results rendered correctly in the dashboard (score 82,
+1 phantom dep, 1 unused, 44 files analyzed). The full push → webhook → scan →
+UI loop is now confirmed working with real GitHub-originated traffic, not
+just hand-signed fake payloads. Note: free-tier ngrok URLs change on every
+tunnel restart, so the Webhook URL needs re-registering each time.
 
 ## `git push` blocked by auto-mode; remote add succeeded
 

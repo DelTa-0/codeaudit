@@ -1,6 +1,7 @@
 # CodeAudit
 
-check
+check for dev
+
 
 AI Technical Debt Intelligence — a SaaS that audits GitHub repositories for:
 

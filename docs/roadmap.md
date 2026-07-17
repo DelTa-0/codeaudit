@@ -28,8 +28,8 @@ one actually contains.
 ## Immediate next steps (picking back up)
 
 1. **Finish debugging GitHub OAuth email 403** — see [[known-issues#GitHub OAuth email permission]]
-2. **Set up the ngrok tunnel manually** and register the real webhook URL on the GitHub App, then trigger a real push/PR to confirm the end-to-end webhook → scan → PR comment loop (currently only proven with hand-signed fake payloads)
-3. **Connect a real Stripe test-mode account** — set `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`/price IDs, run an actual test-mode checkout to confirm the full redirect + webhook flow (not just a signed fake payload)
+2. ~~Set up the ngrok tunnel and register the real webhook URL~~ — **DONE**: real push → webhook → scan confirmed working end-to-end, see [[known-issues#~~Local webhook testing requires a public tunnel~~ — RESOLVED]]. Still to confirm: a **pull_request** event triggering the sticky PR comment specifically (push has been verified, PR path hasn't yet)
+3. **Connect a real Stripe test-mode account** — set `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`/price IDs, run an actual test-mode checkout to confirm the full redirect + webhook flow (not just a signed fake payload). Currently moot for testing — plan limits are temporarily disabled, see [[decisions#Plan-limit gate temporarily disabled for testing]]
 4. **Install the GitHub App on a real private repo** and confirm private-repo cloning via installation token works end-to-end
 
 ## Explicit post-M5 backlog (from the original plan, never started)
