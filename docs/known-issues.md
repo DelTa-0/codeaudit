@@ -64,6 +64,40 @@ UI loop is now confirmed working with real GitHub-originated traffic, not
 just hand-signed fake payloads. Note: free-tier ngrok URLs change on every
 tunnel restart, so the Webhook URL needs re-registering each time.
 
+## ~~Repo connected via URL paste has no linked installation~~ — FIXED
+
+Repos connected through the plain "paste a github.com URL" flow
+(`POST /orgs/:orgId/repos`, [[features/m2-scan-engine]]) get `installation_id
+= NULL` — that flow doesn't go through the GitHub App picker
+(`POST /orgs/:orgId/github-repos`) which is what actually links a
+`github_installations` row. `queue/prComment.ts`'s `processPrCommentJob()`
+checks `if (!repo?.installation_id) return;` and exits silently by design —
+no error, no log line, just nothing happens. This meant the first real PR
+test (`pull_request` webhook → scan completed with `pr_number` set) produced
+no comment, with nothing in the logs to explain why.
+
+**Fixed by manually linking the installation**: looked up the real
+installation ID via the GitHub API (`GET /app/installations` using the App
+JWT, filtered by `account.login`), inserted a `github_installations` row for
+the org, and pointed the `repositories.installation_id` at it directly in
+Postgres. After that, a second PR push correctly produced
+`[pr-comment] posted on DelTa-0/codeaudit#1`.
+
+**Root-caused and fixed**: `routes/repos.ts`'s `POST /orgs/:orgId/repos`
+(URL-paste flow) now calls a new `findInstallationMatch(orgId, fullName)`
+helper before inserting — it lists every `github_installations` row for the
+org, calls `listInstallationRepos()` for each, and if the target repo shows
+up in any of them, links `installation_id` + `github_repo_id` +
+`private`/`default_branch` on insert instead of leaving them null. Degrades
+gracefully to the old unlinked behavior if the org has no installation yet
+(e.g. hasn't installed the GitHub App at all) or a stale/revoked installation
+lookup fails.
+
+Verified: connected `DelTa-0/InfoAi-ARB` via the plain URL-paste endpoint for
+an org that already had installation `147130657` linked — the new
+`repositories` row came back with `installation_id` and `github_repo_id`
+populated automatically, no manual DB patch needed this time.
+
 ## `git push` blocked by auto-mode; remote add succeeded
 
 Similarly, `git push -u origin main` was blocked by the same classifier even
