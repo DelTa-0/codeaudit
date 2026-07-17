@@ -143,12 +143,18 @@ export async function exchangeOauthCode(code: string): Promise<{
   };
   let email = user.email;
   if (!email) {
-    const emails = (await githubFetch("/user/emails", tokenData.access_token)) as {
-      email: string;
-      primary: boolean;
-      verified: boolean;
-    }[];
-    email = emails.find((e) => e.primary && e.verified)?.email ?? emails[0]?.email ?? null;
+    try {
+      const emails = (await githubFetch("/user/emails", tokenData.access_token)) as {
+        email: string;
+        primary: boolean;
+        verified: boolean;
+      }[];
+      email = emails.find((e) => e.primary && e.verified)?.email ?? emails[0]?.email ?? null;
+    } catch (err) {
+      // Requires the App's "Email addresses" account permission (Read-only).
+      // Without it this 403s — fall back to no-email rather than failing the login.
+      console.error("GitHub /user/emails failed (check App account permissions):", err);
+    }
   }
   return { githubUserId: user.id, email, name: user.name, avatarUrl: user.avatar_url };
 }
