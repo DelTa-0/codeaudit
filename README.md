@@ -1,5 +1,7 @@
 # CodeAudit
 
+check
+
 AI Technical Debt Intelligence — a SaaS that audits GitHub repositories for:
 
 1. **Phantom dependencies** — hallucinated packages that don't exist on npm
