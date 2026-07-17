@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -12,6 +12,15 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
   const [busy, setBusy] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+
+  // GitHub OAuth callback hands the JWT back via URL fragment.
+  useEffect(() => {
+    const match = window.location.hash.match(/token=([^&]+)/);
+    if (match) {
+      window.history.replaceState(null, "", window.location.pathname);
+      void login(match[1]).then(() => navigate("/"));
+    }
+  }, []);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -66,6 +75,12 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
               {busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}
             </Button>
           </form>
+          <div className="my-4 flex items-center gap-3 text-xs text-muted">
+            <div className="h-px flex-1 bg-border" /> or <div className="h-px flex-1 bg-border" />
+          </div>
+          <Button variant="ghost" className="w-full" onClick={() => (window.location.href = "/api/auth/github")}>
+            Continue with GitHub
+          </Button>
           <p className="mt-4 text-center text-sm text-muted">
             {mode === "login" ? (
               <>

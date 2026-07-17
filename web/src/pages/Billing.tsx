@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { useParams } from "react-router-dom";
+import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { Card, Button, Badge } from "../components/ui";
 
@@ -28,6 +30,20 @@ export function Billing() {
   const { orgs } = useAuth();
   const org = orgs.find((o) => o.id === orgId);
   const currentPlan = org?.plan ?? "free";
+  const [error, setError] = useState<string | null>(null);
+
+  const upgrade = async (plan: string) => {
+    setError(null);
+    try {
+      const session = await api<{ url: string }>(`/api/orgs/${orgId}/billing/checkout`, {
+        method: "POST",
+        body: { plan },
+      });
+      window.location.href = session.url;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Checkout failed");
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -36,6 +52,7 @@ export function Billing() {
         <p className="mt-1 text-sm text-muted">
           Current plan: <Badge label={currentPlan} />
         </p>
+        {error && <p className="mt-2 text-sm text-danger">{error}</p>}
       </div>
       <div className="grid gap-4 sm:grid-cols-3">
         {PLANS.map((plan) => (
@@ -51,7 +68,7 @@ export function Billing() {
               variant={plan.id === currentPlan ? "ghost" : "primary"}
               disabled={plan.id === currentPlan}
               className="mt-4 w-full"
-              onClick={() => alert("Stripe checkout is configured in M5 — set STRIPE_SECRET_KEY.")}
+              onClick={() => void upgrade(plan.id)}
             >
               {plan.id === currentPlan ? "Current plan" : "Upgrade"}
             </Button>

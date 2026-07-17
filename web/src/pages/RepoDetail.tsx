@@ -55,7 +55,26 @@ export function RepoDetail() {
         </div>
         <div className="flex items-center gap-4">
           <ScoreRing score={repo.latest_score !== null ? Number(repo.latest_score) : null} size={72} />
-          <Button onClick={startScan}>Scan now</Button>
+          <div className="flex flex-col gap-2">
+            <Button onClick={startScan}>Scan now</Button>
+            <Button
+              variant="ghost"
+              onClick={async () => {
+                setError(null);
+                try {
+                  await api(`/api/repos/${repoId}/webhook`, {
+                    method: "PATCH",
+                    body: { enabled: !repo.webhook_enabled },
+                  });
+                  await load();
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : "Failed to toggle webhook");
+                }
+              }}
+            >
+              {repo.webhook_enabled ? "Disable auto-scan" : "Enable auto-scan"}
+            </Button>
+          </div>
         </div>
       </div>
       {error && <p className="text-sm text-danger">{error}</p>}

@@ -45,8 +45,37 @@ React (5173) ──proxy──▶ Express API (4000) ──▶ BullMQ (Redis) �
 - `server/` — Express API (`src/index.ts`) + BullMQ worker (`src/worker.ts`), SQL migrations in `migrations/`
 - `web/` — React dashboard (Vite, Tailwind v4)
 
-## Roadmap
+## GitHub App integration
 
-- GitHub App: OAuth sign-in, private repos, auto-scan on push, PR sticky comments (M4)
-- Stripe test-mode billing with plan limits (M5)
-- Python/PyPI ecosystem, SSE live updates, Slack notifications (backlog)
+Implemented: OAuth sign-in ("Continue with GitHub"), App installation linking,
+private-repo cloning via installation tokens, HMAC-verified webhooks
+(`POST /api/webhooks/github`) that auto-scan on push / pull_request, and a
+sticky PR comment with the score delta and findings table.
+
+To activate, register a GitHub App (permissions: contents read, pull requests
+write; events: push, pull_request, installation) and set `GITHUB_APP_ID`,
+`GITHUB_APP_PRIVATE_KEY_PATH`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`,
+`GITHUB_WEBHOOK_SECRET` in `.env`.
+
+## Billing (Stripe, test mode)
+
+Implemented: Checkout sessions, customer portal, signature-verified webhook
+(`POST /api/webhooks/stripe`) driving plan upgrades/downgrades, and plan-limit
+enforcement (repo counts, private repos, scans/day, webhook scans) returning
+`402` when exceeded.
+
+To activate, set `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
+`STRIPE_PRICE_PRO`, `STRIPE_PRICE_TEAM` (test-mode values).
+
+## Testing
+
+```bash
+npm run test:ground-truth --workspace server
+```
+
+Runs the analysis engine against a seeded fixture with known ground truth
+(phantom package, unused dep, two dead exports) — 7 assertions.
+
+## Backlog
+
+- Python/PyPI ecosystem, SSE live updates, Slack notifications

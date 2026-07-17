@@ -1,5 +1,12 @@
 import { Worker } from "bullmq";
-import { redisConnection, type ScanJobData } from "./queue/index.js";
+import {
+  redisConnection,
+  prCommentQueue,
+  type ScanJobData,
+  type PrCommentJobData,
+} from "./queue/index.js";
+import { processPrCommentJob } from "./queue/prComment.js";
+import { getInstallationToken, authenticatedCloneUrl, githubConfigured } from "./services/github.js";
 import { query, queryOne } from "./db/pool.js";
 import { cloneRepoSandboxed, cleanupScanDir } from "./analysis/clone.js";
 import { parseManifest } from "./analysis/manifest.js";
@@ -27,14 +34,26 @@ async function processScanJob(scanJobId: string) {
   }>("SELECT * FROM scan_jobs WHERE id = $1", [scanJobId]);
   if (!scan) throw new Error(`scan_job ${scanJobId} not found`);
 
-  const repo = await queryOne<{ full_name: string; private: boolean; default_branch: string }>(
-    "SELECT full_name, private, default_branch FROM repositories WHERE id = $1",
+  const repo = await queryOne<{
+    full_name: string;
+    private: boolean;
+    default_branch: string;
+    installation_id: string | null;
+  }>(
+    `SELECT r.full_name, r.private, r.default_branch, gi.installation_id
+     FROM repositories r LEFT JOIN github_installations gi ON gi.id = r.installation_id
+     WHERE r.id = $1`,
     [scan.repo_id],
   );
   if (!repo) throw new Error(`repository for scan ${scanJobId} not found`);
 
-  // M4 adds installation-token clone URLs for private repos.
-  const cloneUrl = `https://github.com/${repo.full_name}.git`;
+  let cloneUrl = `https://github.com/${repo.full_name}.git`;
+  if (repo.private) {
+    if (!repo.installation_id || !githubConfigured())
+      throw new Error("Private repository requires a linked GitHub App installation");
+    const token = await getInstallationToken(Number(repo.installation_id));
+    cloneUrl = authenticatedCloneUrl(repo.full_name, token);
+  }
 
   try {
     await setStatus(scanJobId, "cloning", "Cloning repository");
@@ -98,6 +117,12 @@ async function processScanJob(scanJobId: string) {
     console.log(
       `[scan ${scanJobId}] ${repo.full_name} complete — score ${summary.score} (${summary.counts.phantom} phantom, ${summary.counts.unused} unused, ${zombies.length} zombies)`,
     );
+
+    const scanRow = await queryOne<{ pr_number: number | null }>(
+      "SELECT pr_number FROM scan_jobs WHERE id = $1",
+      [scanJobId],
+    );
+    if (scanRow?.pr_number) await prCommentQueue.add("pr-comment", { scanJobId });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await query(
@@ -120,7 +145,14 @@ const worker = new Worker<ScanJobData>(
 worker.on("ready", () => console.log("Scan worker ready"));
 worker.on("failed", (job, err) => console.error(`job ${job?.id} failed`, err));
 
+const prCommentWorker = new Worker<PrCommentJobData>(
+  "pr-comment",
+  async (job) => processPrCommentJob(job.data.scanJobId),
+  { connection: redisConnection, concurrency: 2 },
+);
+prCommentWorker.on("failed", (job, err) => console.error(`pr-comment ${job?.id} failed`, err));
+
 process.on("SIGINT", async () => {
-  await worker.close();
+  await Promise.all([worker.close(), prCommentWorker.close()]);
   process.exit(0);
 });
