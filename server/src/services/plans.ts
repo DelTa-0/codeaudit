@@ -8,11 +8,20 @@ export interface PlanLimits {
   scansPerDay: number;
 }
 
+// TESTING: Stripe/plan-limit gate temporarily disabled — every tier gets team-level
+// limits so the product can be exercised end-to-end without billing. Orgs still
+// display their real plan name in the UI; only the enforced limits are unified.
+// Revert by restoring the commented values below once billing testing resumes.
 export const PLANS: Record<string, PlanLimits> = {
-  free: { privateRepos: 1, totalRepos: 3, webhookScans: false, scansPerDay: 10 },
-  pro: { privateRepos: 10, totalRepos: 25, webhookScans: true, scansPerDay: 200 },
-  team: { privateRepos: Infinity, totalRepos: Infinity, webhookScans: true, scansPerDay: 2000 },
+  free: { privateRepos: Infinity, totalRepos: Infinity, webhookScans: true, scansPerDay: Infinity },
+  pro: { privateRepos: Infinity, totalRepos: Infinity, webhookScans: true, scansPerDay: Infinity },
+  team: { privateRepos: Infinity, totalRepos: Infinity, webhookScans: true, scansPerDay: Infinity },
 };
+// const PLANS_PRODUCTION: Record<string, PlanLimits> = {
+//   free: { privateRepos: 1, totalRepos: 3, webhookScans: false, scansPerDay: 10 },
+//   pro: { privateRepos: 10, totalRepos: 25, webhookScans: true, scansPerDay: 200 },
+//   team: { privateRepos: Infinity, totalRepos: Infinity, webhookScans: true, scansPerDay: 2000 },
+// };
 
 export async function getOrgPlan(orgId: string): Promise<{ plan: string; limits: PlanLimits }> {
   const org = await queryOne<{ plan: string; plan_status: string }>(
