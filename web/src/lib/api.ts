@@ -56,10 +56,25 @@ export interface Repo {
   private: boolean;
   default_branch: string;
   webhook_enabled: boolean;
+  gate_enabled?: boolean;
+  min_score?: string | null;
+  autofix_enabled?: boolean;
+  badge_token?: string | null;
+  installation_id?: string | null;
   latest_score: string | null;
   last_scan_status?: string | null;
   last_scan_at?: string | null;
   trend?: { id: string; created_at: string; score: string | null }[];
+}
+
+export interface AiAuthorshipStats {
+  aiCommits: number;
+  totalCommits: number;
+  shareOfFiles: number;
+  aiFindingDensity: number;
+  humanFindingDensity: number;
+  aiFiles: number;
+  humanFiles: number;
 }
 
 export interface ScanSummary {
@@ -73,10 +88,12 @@ export interface ScanSummary {
     zombies: number;
     filesAnalyzed: number;
   };
+  ai?: AiAuthorshipStats | null;
 }
 
 export interface Scan {
   id: string;
+  repo_id?: string;
   trigger: string;
   branch: string | null;
   commit_sha: string | null;

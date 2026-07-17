@@ -1,7 +1,12 @@
 import OpenAI from "openai";
-import { config } from "../lib/config.js";
 import type { DeadCodeCandidate } from "./deadcode.js";
 import type { RepoAnalysis } from "./imports.js";
+
+export interface LlmConfig {
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+}
 
 export interface ReviewedFinding {
   filePath: string;
@@ -28,9 +33,9 @@ For each candidate symbol, judge whether it is truly dead code (unreachable / ne
 Response schema:
 {"findings":[{"symbol_name":"string","verdict":"dead_code"|"alive"|"uncertain","confidence":0.0-1.0,"reasoning":"one or two sentences"}]}`;
 
-function getClient(): OpenAI | null {
-  if (!config.llm.apiKey) return null;
-  return new OpenAI({ apiKey: config.llm.apiKey, baseURL: config.llm.baseUrl });
+function getClient(llm: LlmConfig | undefined): OpenAI | null {
+  if (!llm?.apiKey) return null;
+  return new OpenAI({ apiKey: llm.apiKey, baseURL: llm.baseUrl });
 }
 
 function truncateBody(body: string): string {
@@ -72,6 +77,7 @@ function parseVerdicts(raw: string): LlmVerdict[] {
 
 async function reviewFileBatch(
   client: OpenAI,
+  model: string,
   filePath: string,
   candidates: DeadCodeCandidate[],
   importExports: string[],
@@ -97,7 +103,7 @@ ${candidateBlocks}`;
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
       const completion = await client.chat.completions.create({
-        model: config.llm.model,
+        model,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: userPrompt },
@@ -144,9 +150,10 @@ ${candidateBlocks}`;
 export async function reviewCandidatesWithLlm(
   candidates: DeadCodeCandidate[],
   analysis: RepoAnalysis,
+  llm?: LlmConfig,
 ): Promise<ReviewedFinding[]> {
   if (candidates.length === 0) return [];
-  const client = getClient();
+  const client = getClient(llm);
   if (!client) {
     return candidates.map((c) => ({
       filePath: c.filePath,
@@ -175,6 +182,7 @@ export async function reviewCandidatesWithLlm(
       const [filePath, fileCandidates] = queue.shift()!;
       const reviewed = await reviewFileBatch(
         client!,
+        llm!.model,
         filePath,
         fileCandidates,
         analysis.fileImportExports.get(filePath) ?? [],

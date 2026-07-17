@@ -23,7 +23,8 @@ export async function cloneRepoSandboxed(
   fs.mkdirSync(dir, { recursive: true });
 
   const git = simpleGit({ timeout: { block: CLONE_TIMEOUT_MS } });
-  const args = ["--depth", "1", "--single-branch"];
+  // Depth 100 (not 1) so AI-authorship attribution has commit history to read.
+  const args = ["--depth", "100", "--single-branch"];
   if (ref) args.push("--branch", ref);
   await git.clone(cloneUrl, dir, args);
 

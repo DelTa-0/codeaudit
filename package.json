@@ -2,14 +2,16 @@
   "name": "codeaudit",
   "private": true,
   "version": "0.1.0",
-  "workspaces": ["server", "web"],
+  "workspaces": ["packages/engine", "server", "web", "cli"],
   "scripts": {
     "dev": "concurrently -n api,worker,web -c blue,magenta,green \"npm:dev:api\" \"npm:dev:worker\" \"npm:dev:web\"",
     "dev:api": "npm run dev --workspace server",
     "dev:worker": "npm run dev:worker --workspace server",
     "dev:web": "npm run dev --workspace web",
     "migrate": "npm run migrate --workspace server",
-    "build": "npm run build --workspace server && npm run build --workspace web",
+    "build:engine": "npm run build --workspace @codeaudit/engine",
+    "build:cli": "npm run build --workspace @codeaudit/engine && npm run build --workspace codeaudit",
+    "build": "npm run build:engine && npm run build --workspace server && npm run build --workspace web",
     "lint": "npm run typecheck --workspace server"
   },
   "devDependencies": {

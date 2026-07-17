@@ -55,29 +55,12 @@ export function RepoDetail() {
         </div>
         <div className="flex items-center gap-4">
           <ScoreRing score={repo.latest_score !== null ? Number(repo.latest_score) : null} size={72} />
-          <div className="flex flex-col gap-2">
-            <Button onClick={startScan}>Scan now</Button>
-            <Button
-              variant="ghost"
-              onClick={async () => {
-                setError(null);
-                try {
-                  await api(`/api/repos/${repoId}/webhook`, {
-                    method: "PATCH",
-                    body: { enabled: !repo.webhook_enabled },
-                  });
-                  await load();
-                } catch (err) {
-                  setError(err instanceof Error ? err.message : "Failed to toggle webhook");
-                }
-              }}
-            >
-              {repo.webhook_enabled ? "Disable auto-scan" : "Enable auto-scan"}
-            </Button>
-          </div>
+          <Button onClick={startScan}>Scan now</Button>
         </div>
       </div>
       {error && <p className="text-sm text-danger">{error}</p>}
+
+      <RepoSettings repo={repo} onChanged={load} onError={setError} />
 
       {trendData.length >= 2 && (
         <Card>
@@ -128,5 +111,170 @@ export function RepoDetail() {
         )}
       </Card>
     </div>
+  );
+}
+
+function SettingRow({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-3">
+      <div>
+        <p className="text-sm font-medium">{title}</p>
+        <p className="text-xs text-muted">{description}</p>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * Every automated behavior is opt-in and clearly described — nothing acts on
+ * the repo unless its owner turned it on here.
+ */
+function RepoSettings({
+  repo,
+  onChanged,
+  onError,
+}: {
+  repo: Repo;
+  onChanged: () => Promise<void>;
+  onError: (msg: string | null) => void;
+}) {
+  const [minScore, setMinScore] = useState(repo.min_score ? String(Number(repo.min_score)) : "");
+  const [badgeMarkdown, setBadgeMarkdown] = useState<string | null>(null);
+
+  const call = async (fn: () => Promise<unknown>) => {
+    onError(null);
+    try {
+      await fn();
+      await onChanged();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Request failed");
+    }
+  };
+
+  return (
+    <Card>
+      <p className="mb-1 text-sm font-medium text-muted">Repository settings</p>
+      <p className="mb-2 text-xs text-muted">
+        All automations are off by default and only report or propose — merging and blocking
+        decisions always stay with you.
+      </p>
+      <div className="divide-y divide-border">
+        <SettingRow
+          title="Auto-scan on push & PR"
+          description="GitHub webhooks trigger a scan on every push and pull request."
+        >
+          <Button
+            variant="ghost"
+            onClick={() =>
+              call(() =>
+                api(`/api/repos/${repo.id}/webhook`, {
+                  method: "PATCH",
+                  body: { enabled: !repo.webhook_enabled },
+                }),
+              )
+            }
+          >
+            {repo.webhook_enabled ? "On — turn off" : "Off — turn on"}
+          </Button>
+        </SettingRow>
+
+        <SettingRow
+          title="Merge gate check"
+          description="Posts a pass/fail GitHub check against your score threshold. Whether it blocks merges is up to your branch-protection rules."
+        >
+          {repo.gate_enabled && (
+            <input
+              className="w-16 rounded-lg border border-border bg-surface-2 px-2 py-1 text-sm"
+              type="number"
+              min={0}
+              max={100}
+              placeholder="min"
+              value={minScore}
+              onChange={(e) => setMinScore(e.target.value)}
+              onBlur={() =>
+                call(() =>
+                  api(`/api/repos/${repo.id}/gate`, {
+                    method: "PATCH",
+                    body: { enabled: true, minScore: minScore === "" ? null : Number(minScore) },
+                  }),
+                )
+              }
+            />
+          )}
+          <Button
+            variant="ghost"
+            onClick={() =>
+              call(() =>
+                api(`/api/repos/${repo.id}/gate`, {
+                  method: "PATCH",
+                  body: {
+                    enabled: !repo.gate_enabled,
+                    minScore: minScore === "" ? null : Number(minScore),
+                  },
+                }),
+              )
+            }
+          >
+            {repo.gate_enabled ? "On — turn off" : "Off — turn on"}
+          </Button>
+        </SettingRow>
+
+        <SettingRow
+          title="Auto-fix PRs"
+          description="Allows admins to request a PR removing unused dependencies from a scan report. PRs are only ever proposed — you review and merge."
+        >
+          <Button
+            variant="ghost"
+            onClick={() =>
+              call(() =>
+                api(`/api/repos/${repo.id}/autofix`, {
+                  method: "PATCH",
+                  body: { enabled: !repo.autofix_enabled },
+                }),
+              )
+            }
+          >
+            {repo.autofix_enabled ? "On — turn off" : "Off — turn on"}
+          </Button>
+        </SettingRow>
+
+        <SettingRow
+          title="README badge"
+          description="Public SVG badge showing the latest score — safe to embed anywhere."
+        >
+          <Button
+            variant="ghost"
+            onClick={async () => {
+              onError(null);
+              try {
+                const data = await api<{ markdown: string }>(`/api/repos/${repo.id}/badge`, {
+                  method: "POST",
+                });
+                setBadgeMarkdown(data.markdown);
+              } catch (err) {
+                onError(err instanceof Error ? err.message : "Request failed");
+              }
+            }}
+          >
+            Get badge
+          </Button>
+        </SettingRow>
+      </div>
+      {badgeMarkdown && (
+        <div className="mt-2 rounded-lg bg-surface-2 p-3">
+          <p className="mb-1 text-xs text-muted">Paste into your README:</p>
+          <code className="block break-all font-mono text-xs">{badgeMarkdown}</code>
+        </div>
+      )}
+    </Card>
   );
 }

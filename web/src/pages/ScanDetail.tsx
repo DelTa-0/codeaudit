@@ -3,10 +3,11 @@ import { useParams } from "react-router-dom";
 import {
   api,
   type Scan,
+  type Repo,
   type DependencyFinding,
   type CodeFinding,
 } from "../lib/api";
-import { Card, Badge, EmptyState, Spinner, ScoreRing } from "../components/ui";
+import { Button, Card, Badge, EmptyState, Spinner, ScoreRing } from "../components/ui";
 
 const STEPS = ["pending", "cloning", "analyzing", "complete"] as const;
 
@@ -62,6 +63,8 @@ export function ScanDetail() {
   const [codeFindings, setCodeFindings] = useState<CodeFinding[] | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [repo, setRepo] = useState<Repo | null>(null);
+  const [autofixMessage, setAutofixMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -73,13 +76,15 @@ export function ScanDetail() {
         if (stopped) return;
         setScan(s);
         if (s.status === "complete") {
-          const [d, c] = await Promise.all([
+          const [d, c, r] = await Promise.all([
             api<DependencyFinding[]>(`/api/scans/${scanId}/dependencies?per_page=100`),
             api<CodeFinding[]>(`/api/scans/${scanId}/code-findings?per_page=100`),
+            s.repo_id ? api<Repo>(`/api/repos/${s.repo_id}`).catch(() => null) : Promise.resolve(null),
           ]);
           if (!stopped) {
             setDeps(d);
             setCodeFindings(c);
+            setRepo(r);
           }
         } else if (s.status !== "failed") {
           timer = setTimeout(poll, 2000);
@@ -138,6 +143,75 @@ export function ScanDetail() {
           </div>
         </Card>
       )}
+
+      {scan.summary?.ai && scan.summary.ai.totalCommits > 0 && (
+        <Card>
+          <p className="mb-3 text-sm font-medium text-muted">AI-assisted code</p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div>
+              <p className="font-mono text-xl font-bold text-primary">
+                {Math.round(scan.summary.ai.shareOfFiles * 100)}%
+              </p>
+              <p className="text-xs text-muted">of files AI-touched</p>
+            </div>
+            <div>
+              <p className="font-mono text-xl font-bold">
+                {scan.summary.ai.aiCommits}/{scan.summary.ai.totalCommits}
+              </p>
+              <p className="text-xs text-muted">AI-assisted commits</p>
+            </div>
+            <div>
+              <p className="font-mono text-xl font-bold text-warning">
+                {scan.summary.ai.aiFindingDensity}
+              </p>
+              <p className="text-xs text-muted">findings /100 AI files</p>
+            </div>
+            <div>
+              <p className="font-mono text-xl font-bold text-success">
+                {scan.summary.ai.humanFindingDensity}
+              </p>
+              <p className="text-xs text-muted">findings /100 human files</p>
+            </div>
+          </div>
+          <p className="mt-2 text-xs text-muted">
+            Attribution heuristic: Co-Authored-By trailers and bot authors in the last 100
+            commits. Advisory only.
+          </p>
+        </Card>
+      )}
+
+      {scan.status === "complete" &&
+        repo?.autofix_enabled &&
+        repo?.installation_id &&
+        (scan.summary?.counts.unused ?? 0) > 0 && (
+          <Card className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium">
+                {scan.summary!.counts.unused} unused{" "}
+                {scan.summary!.counts.unused === 1 ? "dependency" : "dependencies"} can be removed
+              </p>
+              <p className="text-xs text-muted">
+                Opens a pull request for review — nothing is merged without you.
+              </p>
+            </div>
+            <Button
+              onClick={async () => {
+                setAutofixMessage(null);
+                try {
+                  const res = await api<{ message: string }>(`/api/scans/${scan.id}/autofix`, {
+                    method: "POST",
+                  });
+                  setAutofixMessage(res.message);
+                } catch (err) {
+                  setAutofixMessage(err instanceof Error ? err.message : "Request failed");
+                }
+              }}
+            >
+              Create fix PR
+            </Button>
+          </Card>
+        )}
+      {autofixMessage && <p className="text-sm text-muted">{autofixMessage}</p>}
 
       {deps && (
         <Card>

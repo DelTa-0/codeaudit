@@ -4,17 +4,28 @@ import {
   prCommentQueue,
   type ScanJobData,
   type PrCommentJobData,
+  type AutofixJobData,
 } from "./queue/index.js";
 import { processPrCommentJob } from "./queue/prComment.js";
-import { getInstallationToken, authenticatedCloneUrl, githubConfigured } from "./services/github.js";
+import { processAutofixJob } from "./queue/autofix.js";
+import {
+  getInstallationToken,
+  authenticatedCloneUrl,
+  githubConfigured,
+  createCheckRun,
+} from "./services/github.js";
 import { query, queryOne } from "./db/pool.js";
 import { cloneRepoSandboxed, cleanupScanDir } from "./analysis/clone.js";
-import { parseManifest } from "./analysis/manifest.js";
-import { analyzeRepo } from "./analysis/imports.js";
-import { checkDependencies } from "./analysis/registry.js";
-import { findDeadCodeCandidates } from "./analysis/deadcode.js";
-import { reviewCandidatesWithLlm } from "./analysis/llm.js";
-import { computeSummary } from "./analysis/score.js";
+import { computeAiAuthorship } from "./analysis/aiAuthorship.js";
+import {
+  parseManifest,
+  analyzeRepo,
+  checkDependencies,
+  findDeadCodeCandidates,
+  reviewCandidatesWithLlm,
+  computeSummary,
+} from "@codeaudit/engine";
+import { config } from "./lib/config.js";
 
 async function setStatus(scanJobId: string, status: string, progress: string) {
   await query("UPDATE scan_jobs SET status = $2, progress = $3 WHERE id = $1", [
@@ -30,6 +41,7 @@ async function processScanJob(scanJobId: string) {
     repo_id: string;
     org_id: string;
     branch: string | null;
+    commit_sha: string | null;
     trigger: string;
   }>("SELECT * FROM scan_jobs WHERE id = $1", [scanJobId]);
   if (!scan) throw new Error(`scan_job ${scanJobId} not found`);
@@ -39,8 +51,11 @@ async function processScanJob(scanJobId: string) {
     private: boolean;
     default_branch: string;
     installation_id: string | null;
+    gate_enabled: boolean;
+    min_score: string | null;
   }>(
-    `SELECT r.full_name, r.private, r.default_branch, gi.installation_id
+    `SELECT r.full_name, r.private, r.default_branch, r.gate_enabled, r.min_score,
+            gi.installation_id
      FROM repositories r LEFT JOIN github_installations gi ON gi.id = r.installation_id
      WHERE r.id = $1`,
     [scan.repo_id],
@@ -84,7 +99,13 @@ async function processScanJob(scanJobId: string) {
 
     await setStatus(scanJobId, "analyzing", "Reviewing dead-code candidates");
     const candidates = findDeadCodeCandidates(analysis);
-    const zombies = await reviewCandidatesWithLlm(candidates, analysis);
+    const zombies = await reviewCandidatesWithLlm(
+      candidates,
+      analysis,
+      config.llm.apiKey
+        ? { apiKey: config.llm.apiKey, baseUrl: config.llm.baseUrl, model: config.llm.model }
+        : undefined,
+    );
     for (const z of zombies) {
       await query(
         `INSERT INTO code_findings
@@ -104,7 +125,10 @@ async function processScanJob(scanJobId: string) {
       );
     }
 
-    const summary = computeSummary(deps, zombies, analysis.fileCount);
+    await setStatus(scanJobId, "analyzing", "Attributing AI-assisted code");
+    const aiStats = await computeAiAuthorship(dir, zombies);
+
+    const summary = { ...computeSummary(deps, zombies, analysis.fileCount), ai: aiStats };
     await query(
       `UPDATE scan_jobs SET status = 'complete', progress = 'Complete',
          summary = $2, completed_at = now() WHERE id = $1`,
@@ -123,6 +147,28 @@ async function processScanJob(scanJobId: string) {
       [scanJobId],
     );
     if (scanRow?.pr_number) await prCommentQueue.add("pr-comment", { scanJobId });
+
+    // Merge gate: only when the repo owner opted in, and only reports —
+    // blocking is the owner's branch-protection choice on GitHub.
+    if (
+      repo.gate_enabled &&
+      repo.installation_id &&
+      scan.commit_sha &&
+      githubConfigured()
+    ) {
+      const threshold = repo.min_score !== null ? Number(repo.min_score) : 0;
+      const passed = summary.score >= threshold;
+      try {
+        await createCheckRun(Number(repo.installation_id), repo.full_name, scan.commit_sha, {
+          conclusion: passed ? "success" : "failure",
+          title: `Score ${summary.score} (${summary.grade}) — threshold ${threshold}`,
+          summary: `| Finding | Count |\n| --- | --- |\n| Phantom dependencies | ${summary.counts.phantom} |\n| Suspicious packages | ${summary.counts.suspicious} |\n| Unused dependencies | ${summary.counts.unused} |\n| Zombie code | ${summary.counts.zombies} |\n\nAutomated analysis — verify before acting. Configure or disable this check in CodeAudit repo settings.`,
+        });
+        console.log(`[gate] check run posted for ${repo.full_name}@${scan.commit_sha.slice(0, 7)}: ${passed ? "success" : "failure"}`);
+      } catch (err) {
+        console.error(`[gate] check run failed for ${repo.full_name} (does the App have Checks write permission?)`, err);
+      }
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await query(
@@ -131,6 +177,19 @@ async function processScanJob(scanJobId: string) {
       [scanJobId, message.slice(0, 1000)],
     );
     console.error(`[scan ${scanJobId}] failed:`, err);
+
+    // A failed scan never blocks anyone's merge — report neutral if gated.
+    if (repo.gate_enabled && repo.installation_id && scan.commit_sha && githubConfigured()) {
+      try {
+        await createCheckRun(Number(repo.installation_id), repo.full_name, scan.commit_sha, {
+          conclusion: "neutral",
+          title: "Scan failed — no verdict",
+          summary: `The CodeAudit scan could not complete (${message.slice(0, 200)}). This check is neutral so it never blocks your merge on our failure.`,
+        });
+      } catch (checkErr) {
+        console.error(`[gate] neutral check failed for ${repo.full_name}`, checkErr);
+      }
+    }
   } finally {
     cleanupScanDir(scanJobId);
   }
@@ -152,7 +211,14 @@ const prCommentWorker = new Worker<PrCommentJobData>(
 );
 prCommentWorker.on("failed", (job, err) => console.error(`pr-comment ${job?.id} failed`, err));
 
+const autofixWorker = new Worker<AutofixJobData>(
+  "autofix",
+  async (job) => processAutofixJob(job.data.scanJobId, job.data.requestedBy),
+  { connection: redisConnection, concurrency: 1 },
+);
+autofixWorker.on("failed", (job, err) => console.error(`autofix ${job?.id} failed`, err));
+
 process.on("SIGINT", async () => {
-  await Promise.all([worker.close(), prCommentWorker.close()]);
+  await Promise.all([worker.close(), prCommentWorker.close(), autofixWorker.close()]);
   process.exit(0);
 });

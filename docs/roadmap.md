@@ -13,6 +13,19 @@ related:
 
 # Roadmap
 
+## Feature pack (post-M5, all built 2026-07-17)
+
+Research-driven additions (SonarQube gates / Codecov badges / Renovate
+auto-PRs / 2026 AI-debt reports). Everything is opt-in per repo, default off,
+audit-logged — the system only reports or proposes, never acts unilaterally.
+
+- [x] **`packages/engine/`** — analysis modules extracted to a shared workspace (`@codeaudit/engine`), used by server and CLI; ground-truth test still 7/7
+- [x] **CLI `npx codeaudit scan`** — limited funnel edition: static-only (no LLM/history/PR), `--json`, `--min-score`, exit 1 on phantom deps, SaaS footer. Verified against the fixture
+- [x] **README badge** — `GET /api/badge/:token.svg`, unguessable token, 5-min cache; "Get badge" in the repo settings card. Verified (97 A green SVG)
+- [x] **Merge gate** — GitHub check run (success/failure vs `min_score`, neutral on scan failure) posted only when `gate_enabled`; blocking is the owner's branch-protection choice. Toggle verified; live check needs **Checks: read & write** on the App
+- [x] **Auto-fix PRs** — double opt-in (repo toggle + explicit button); removes ≤10 unused deps on a `codeaudit/*` branch and opens a PR with requester attribution. Consent gates verified (403/400 paths); live PR needs **Contents: read & write** on the App
+- [x] **AI-authorship metrics** — clone deepened to 100 commits; Co-Authored-By/bot heuristic; `summary.ai` + dashboard card. Verified live: 95% AI-touched on this very repo
+
 ## The 5-milestone plan (all code-complete)
 
 Originally scoped as `M1–M5` in the approved implementation plan. All five

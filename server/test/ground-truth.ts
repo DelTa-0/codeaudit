@@ -5,10 +5,12 @@
 // Run: npm run test:ground-truth
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseManifest } from "../src/analysis/manifest.js";
-import { analyzeRepo } from "../src/analysis/imports.js";
-import { checkDependencies } from "../src/analysis/registry.js";
-import { findDeadCodeCandidates } from "../src/analysis/deadcode.js";
+import {
+  parseManifest,
+  analyzeRepo,
+  checkDependencies,
+  findDeadCodeCandidates,
+} from "@codeaudit/engine";
 
 const fixtureDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixture");
 

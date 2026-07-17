@@ -1,6 +1,6 @@
 import { queryOne } from "../db/pool.js";
 import { upsertPrComment, githubConfigured } from "../services/github.js";
-import type { ScanSummary } from "../analysis/score.js";
+import type { ScanSummary } from "@codeaudit/engine";
 
 export async function processPrCommentJob(scanJobId: string) {
   if (!githubConfigured()) return;

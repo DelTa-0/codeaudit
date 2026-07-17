@@ -102,6 +102,66 @@ githubRouter.post(
   },
 );
 
+const gateSchema = z.object({
+  enabled: z.boolean(),
+  minScore: z.number().min(0).max(100).nullable().optional(),
+});
+
+/** Merge-gate settings — opt-in per repo; the check only reports, blocking is
+ * decided by the owner's own GitHub branch-protection rules. */
+githubRouter.patch("/repos/:repoId/gate", validateBody(gateSchema), async (req, res, next) => {
+  try {
+    const repo = await queryOne<{ id: string; org_id: string; role: string }>(
+      `SELECT r.id, r.org_id, m.role FROM repositories r
+       JOIN org_members m ON m.org_id = r.org_id AND m.user_id = $2
+       WHERE r.id = $1`,
+      [req.params.repoId, req.user!.id],
+    );
+    if (!repo) throw notFound("Repository not found");
+    if (repo.role === "developer") throw notFound("Repository not found");
+    const { enabled, minScore } = req.body as z.infer<typeof gateSchema>;
+    await query("UPDATE repositories SET gate_enabled = $2, min_score = $3 WHERE id = $1", [
+      repo.id,
+      enabled,
+      minScore ?? null,
+    ]);
+    await logAudit(repo.org_id, req.user!.id, "gate.updated", repo.id, { enabled, minScore });
+    res.json({ ok: true, enabled, minScore: minScore ?? null });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const autofixToggleSchema = z.object({ enabled: z.boolean() });
+
+/** Autofix opt-in toggle — enabling this only allows a human to REQUEST a fix
+ * PR later; nothing runs automatically. */
+githubRouter.patch(
+  "/repos/:repoId/autofix",
+  validateBody(autofixToggleSchema),
+  async (req, res, next) => {
+    try {
+      const repo = await queryOne<{ id: string; org_id: string; role: string }>(
+        `SELECT r.id, r.org_id, m.role FROM repositories r
+         JOIN org_members m ON m.org_id = r.org_id AND m.user_id = $2
+         WHERE r.id = $1`,
+        [req.params.repoId, req.user!.id],
+      );
+      if (!repo) throw notFound("Repository not found");
+      if (repo.role === "developer") throw notFound("Repository not found");
+      const { enabled } = req.body as z.infer<typeof autofixToggleSchema>;
+      await query("UPDATE repositories SET autofix_enabled = $2 WHERE id = $1", [
+        repo.id,
+        enabled,
+      ]);
+      await logAudit(repo.org_id, req.user!.id, "autofix.toggled", repo.id, { enabled });
+      res.json({ ok: true, enabled });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 const webhookToggleSchema = z.object({ enabled: z.boolean() });
 
 githubRouter.patch(
