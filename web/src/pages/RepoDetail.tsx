@@ -149,6 +149,7 @@ function RepoSettings({
 }) {
   const [minScore, setMinScore] = useState(repo.min_score ? String(Number(repo.min_score)) : "");
   const [badgeMarkdown, setBadgeMarkdown] = useState<string | null>(null);
+  const [cliUsage, setCliUsage] = useState<string | null>(null);
 
   const call = async (fn: () => Promise<unknown>) => {
     onError(null);
@@ -248,6 +249,28 @@ function RepoSettings({
         </SettingRow>
 
         <SettingRow
+          title="CLI / CI uploads"
+          description="Per-repo token letting `npx codeaudit scan --upload` report results into this dashboard from any machine or CI."
+        >
+          <Button
+            variant="ghost"
+            onClick={async () => {
+              onError(null);
+              try {
+                const data = await api<{ usage: string }>(`/api/repos/${repo.id}/cli-token`, {
+                  method: "POST",
+                });
+                setCliUsage(data.usage);
+              } catch (err) {
+                onError(err instanceof Error ? err.message : "Request failed");
+              }
+            }}
+          >
+            Get token
+          </Button>
+        </SettingRow>
+
+        <SettingRow
           title="README badge"
           description="Public SVG badge showing the latest score — safe to embed anywhere."
         >
@@ -273,6 +296,14 @@ function RepoSettings({
         <div className="mt-2 rounded-lg bg-surface-2 p-3">
           <p className="mb-1 text-xs text-muted">Paste into your README:</p>
           <code className="block break-all font-mono text-xs">{badgeMarkdown}</code>
+        </div>
+      )}
+      {cliUsage && (
+        <div className="mt-2 rounded-lg bg-surface-2 p-3">
+          <p className="mb-1 text-xs text-muted">
+            Run locally or add to CI (keep the token secret — treat it like a password):
+          </p>
+          <code className="block break-all font-mono text-xs">{cliUsage}</code>
         </div>
       )}
     </Card>

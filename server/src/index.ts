@@ -11,6 +11,7 @@ import { githubRouter } from "./routes/github.js";
 import { webhooksRouter } from "./routes/webhooks.js";
 import { billingRouter, stripeWebhookRouter } from "./routes/billing.js";
 import { badgeRouter, publicBadgeRouter } from "./routes/badge.js";
+import { cliTokenRouter, cliUploadRouter } from "./routes/cliScans.js";
 
 const app = express();
 app.use(cors({ origin: config.appUrl }));
@@ -23,6 +24,7 @@ app.use(express.json({ limit: "100kb" }));
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 app.use("/api", publicBadgeRouter); // no auth — README-embeddable SVG
+app.use("/api", cliUploadRouter); // no JWT — authed by per-repo CLI token
 app.use("/api/auth", authRouter);
 app.use("/api/auth", githubAuthRouter);
 app.use("/api/orgs", orgsRouter);
@@ -31,6 +33,7 @@ app.use("/api", scansRouter);
 app.use("/api", githubRouter);
 app.use("/api", billingRouter);
 app.use("/api", badgeRouter);
+app.use("/api", cliTokenRouter);
 
 app.use((req, res) => res.status(404).json({ error: "Not found" }));
 

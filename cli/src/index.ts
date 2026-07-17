@@ -26,6 +26,9 @@ function usage(): never {
 Options:
   --json          machine-readable output (for CI)
   --min-score N   exit 1 if the score is below N
+  --upload        send results to your CodeAudit dashboard (requires a token)
+  --token T       per-repo CLI token (or set CODEAUDIT_TOKEN)
+  --api URL       API base URL (or set CODEAUDIT_API_URL, default http://localhost:4000)
   -h, --help      show this help
 
 Exit codes: 0 ok · 1 phantom deps found or score below --min-score · 2 usage/error`);
@@ -36,6 +39,9 @@ interface CliArgs {
   dir: string;
   json: boolean;
   minScore: number | null;
+  upload: boolean;
+  token: string | null;
+  apiUrl: string;
 }
 
 function parseArgs(argv: string[]): CliArgs {
@@ -46,9 +52,15 @@ function parseArgs(argv: string[]): CliArgs {
   let dir = ".";
   let json = false;
   let minScore: number | null = null;
+  let upload = false;
+  let token: string | null = process.env.CODEAUDIT_TOKEN ?? null;
+  let apiUrl = process.env.CODEAUDIT_API_URL ?? "http://localhost:4000";
   while (args.length) {
     const arg = args.shift()!;
     if (arg === "--json") json = true;
+    else if (arg === "--upload") upload = true;
+    else if (arg === "--token") token = args.shift() ?? null;
+    else if (arg === "--api") apiUrl = args.shift() ?? apiUrl;
     else if (arg === "--min-score") {
       const value = Number(args.shift());
       if (!Number.isFinite(value)) usage();
@@ -56,7 +68,49 @@ function parseArgs(argv: string[]): CliArgs {
     } else if (!arg.startsWith("-")) dir = arg;
     else usage();
   }
-  return { dir: path.resolve(dir), json, minScore };
+  return { dir: path.resolve(dir), json, minScore, upload, token, apiUrl };
+}
+
+async function uploadResults(
+  apiUrl: string,
+  token: string,
+  summary: { score: number; grade: string; counts: Record<string, number> },
+  deps: unknown[],
+  candidates: ReviewedFinding[],
+): Promise<{ ok: boolean; url?: string; error?: string }> {
+  try {
+    const res = await fetch(`${apiUrl.replace(/\/$/, "")}/api/cli-scans`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        token,
+        score: summary.score,
+        grade: summary.grade,
+        counts: summary.counts,
+        dependencies: (deps as {
+          packageName: string;
+          declaredVersion: string | null;
+          status: string;
+          registryMetadata: Record<string, unknown> | null;
+        }[]).slice(0, 500),
+        deadCodeCandidates: candidates.slice(0, 200).map((c) => ({
+          filePath: c.filePath,
+          lineStart: c.lineStart,
+          lineEnd: c.lineEnd,
+          symbolName: c.symbolName,
+          findingType: c.findingType,
+          confidence: c.confidence,
+          reasoning: c.reasoning,
+        })),
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
+    if (!res.ok) return { ok: false, error: data.error ?? `upload failed (${res.status})` };
+    return { ok: true, url: data.url };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "upload failed" };
+  }
 }
 
 const statusColor: Record<string, string> = {
@@ -67,7 +121,11 @@ const statusColor: Record<string, string> = {
 };
 
 async function main() {
-  const { dir, json, minScore } = parseArgs(process.argv.slice(2));
+  const { dir, json, minScore, upload, token, apiUrl } = parseArgs(process.argv.slice(2));
+  if (upload && !token) {
+    console.error("codeaudit: --upload requires a token (--token or CODEAUDIT_TOKEN). Generate one in your repo settings.");
+    process.exit(2);
+  }
   if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
     console.error(`codeaudit: not a directory: ${dir}`);
     process.exit(2);
@@ -94,6 +152,11 @@ async function main() {
   const belowMin = minScore !== null && summary.score < minScore;
   const exitCode = phantomCount > 0 || belowMin ? 1 : 0;
 
+  let uploadResult: { ok: boolean; url?: string; error?: string } | null = null;
+  if (upload && token) {
+    uploadResult = await uploadResults(apiUrl, token, summary, deps, staticFindings);
+  }
+
   if (json) {
     console.log(
       JSON.stringify(
@@ -103,6 +166,7 @@ async function main() {
           counts: summary.counts,
           dependencies: deps,
           deadCodeCandidates: staticFindings,
+          upload: uploadResult,
           exitCode,
         },
         null,
@@ -143,6 +207,12 @@ async function main() {
   if (phantomCount > 0)
     console.log(`${RED}${BOLD}${phantomCount} phantom dependenc${phantomCount === 1 ? "y" : "ies"} — remove before shipping${RESET}`);
   if (belowMin) console.log(`${RED}Score below --min-score ${minScore}${RESET}`);
+
+  if (uploadResult) {
+    if (uploadResult.ok)
+      console.log(`${GREEN}✓ Uploaded to your CodeAudit dashboard${RESET}${uploadResult.url ? ` ${DIM}${uploadResult.url}${RESET}` : ""}`);
+    else console.log(`${RED}✗ Upload failed: ${uploadResult.error}${RESET}`);
+  }
 
   console.log(`\n${DIM}→ Track trends, gate PRs, and get AI-reviewed findings: connect this repo at codeaudit.dev${RESET}\n`);
   process.exit(exitCode);
