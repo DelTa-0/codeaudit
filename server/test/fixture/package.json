@@ -1,0 +1,9 @@
+{
+  "name": "ground-truth-fixture",
+  "version": "1.0.0",
+  "dependencies": {
+    "react-toolkitz": "^2.1.0",
+    "lodash": "^4.17.21",
+    "date-fns": "^4.1.0"
+  }
+}
