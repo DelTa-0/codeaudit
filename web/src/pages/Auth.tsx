@@ -18,7 +18,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
     const match = window.location.hash.match(/token=([^&]+)/);
     if (match) {
       window.history.replaceState(null, "", window.location.pathname);
-      void login(match[1]).then(() => navigate("/"));
+      void login(match[1]).then(() => navigate("/dashboard"));
     }
   }, []);
 
@@ -30,7 +30,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
       const body = mode === "register" ? { email, password, name: name || undefined } : { email, password };
       const data = await api<{ token: string }>(`/api/auth/${mode}`, { method: "POST", body });
       await login(data.token);
-      navigate("/");
+      navigate("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {

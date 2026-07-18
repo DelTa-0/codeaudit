@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom
 import "./styles.css";
 import { AuthProvider, useAuth } from "./lib/auth";
 import { Layout } from "./components/Layout";
+import { Landing } from "./pages/Landing";
 import { AuthPage } from "./pages/Auth";
 import { Dashboard } from "./pages/Dashboard";
 import { RepoDetail } from "./pages/RepoDetail";
@@ -28,11 +29,12 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/" element={<Landing />} />
         <Route path="/login" element={<AuthPage mode="login" />} />
         <Route path="/register" element={<AuthPage mode="register" />} />
         <Route element={<RequireAuth />}>
           <Route element={<Layout />}>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/repos/:repoId" element={<RepoDetail />} />
             <Route path="/scans/:scanId" element={<ScanDetail />} />
             <Route path="/orgs/:orgId/members" element={<Members />} />

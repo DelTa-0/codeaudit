@@ -11,12 +11,12 @@ export function Layout() {
       <header className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
           <div className="flex items-center gap-6">
-            <Link to="/" className="font-mono text-sm font-semibold tracking-tight">
+            <Link to="/dashboard" className="font-mono text-sm font-semibold tracking-tight">
               <span className="text-primary">◆</span> CodeAudit
             </Link>
             {org && (
               <nav className="flex items-center gap-4 text-sm text-muted">
-                <Link className="hover:text-foreground" to="/">
+                <Link className="hover:text-foreground" to="/dashboard">
                   Repositories
                 </Link>
                 <Link className="hover:text-foreground" to={`/orgs/${org.id}/members`}>

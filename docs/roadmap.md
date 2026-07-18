@@ -13,6 +13,39 @@ related:
 
 # Roadmap
 
+## Public landing page (2026-07-17)
+
+Imported a full 12-section marketing design from Claude Design
+(`claude.ai/design`, project "Nominal design reference", file
+`CodeAudit Site.dc.html`) via the `DesignSync` MCP tool's `get_file` method,
+and ported it 1:1 into `web/src/pages/Landing.tsx` +
+`web/src/components/landing/*` (Nav, Hero, HeroScanDemo, Problem,
+HowItWorks, Features, Cli, PrExample, DashboardPreview, Trust, Pricing,
+FinalCta, Footer). Deliberately scoped-separate cream/Geist brand (`#f7f6f1`
+bg, `#101512` text) from the dashboard's dark theme — inline styles, no
+changes to `styles.css`.
+
+Routing restructured: `/` is now the public landing page; the app moved from
+`/` to `/dashboard`. Authenticated users hitting `/` auto-redirect to
+`/dashboard` (checked in `Landing.tsx` via `useAuth()`). Updated
+`Auth.tsx`'s post-login/register redirect targets and `Layout.tsx`'s nav
+links accordingly.
+
+Ported the design's `DCLogic` animation class to a `useScanDemo()` +
+`useCopyCommand()` hook pair (`web/src/lib/useScanDemo.ts`): rotating hero
+word (2.4s), animated terminal log reveal (650ms/line) with a looping
+score count-up to 82, and clipboard-copy feedback for the three
+`npx codeaudit scan .` CTAs. Verified via direct in-page JS polling (avoided
+relying on tool-roundtrip screenshots, which have enough latency to miss the
+1.5s copy-feedback window or land mid-animation-cycle and look "frozen"
+when it isn't — worth remembering for future animation verification).
+
+- [x] All 12 sections render, no console errors
+- [x] Copy-to-clipboard verified end-to-end (icon → "✓ copied" → reverts)
+- [x] Logged-out `/` shows landing; logged-in `/` redirects to `/dashboard`; `/dashboard` still renders the existing repo list correctly, dark theme unaffected
+- [x] No horizontal overflow at 375px mobile width
+- [ ] Not yet done: swap the placeholder footer links (Docs, GitHub App, Security, Privacy, Contact) for real pages/anchors when those exist
+
 ## Feature pack (post-M5, all built 2026-07-17)
 
 Research-driven additions (SonarQube gates / Codecov badges / Renovate
