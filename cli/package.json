@@ -1,19 +1,43 @@
 {
   "name": "codeaudit",
   "version": "0.1.0",
-  "private": true,
-  "type": "module",
+  "description": "Static scan for AI-generated technical debt — hallucinated (phantom) npm dependencies and dead-code candidates. Runs locally, no account needed.",
+  "keywords": [
+    "cli",
+    "static-analysis",
+    "dependencies",
+    "npm-audit",
+    "dead-code",
+    "ai",
+    "slopsquatting",
+    "supply-chain-security"
+  ],
+  "author": "CodeAudit",
+  "license": "MIT",
+  "homepage": "https://github.com/DelTa-0/codeaudit",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DelTa-0/codeaudit.git",
+    "directory": "cli"
+  },
+  "bugs": "https://github.com/DelTa-0/codeaudit/issues",
+  "engines": {
+    "node": ">=18"
+  },
   "bin": {
     "codeaudit": "dist/index.js"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "build": "tsc -p tsconfig.json"
-  },
-  "dependencies": {
-    "@codeaudit/engine": "*"
+    "build": "tsc --noEmit -p tsconfig.json && node build.mjs",
+    "prepublishOnly": "npm run build"
   },
   "devDependencies": {
+    "@codeaudit/engine": "*",
     "@types/node": "^22.10.0",
+    "esbuild": "^0.28.1",
     "typescript": "^5.7.0"
   }
 }

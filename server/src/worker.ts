@@ -22,9 +22,9 @@ import {
   analyzeRepo,
   checkDependencies,
   findDeadCodeCandidates,
-  reviewCandidatesWithLlm,
   computeSummary,
 } from "@codeaudit/engine";
+import { reviewCandidatesWithLlm } from "@codeaudit/engine/llm";
 import { config } from "./lib/config.js";
 
 async function setStatus(scanJobId: string, status: string, progress: string) {

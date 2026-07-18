@@ -13,6 +13,74 @@ related:
 
 # Roadmap
 
+## CLI made npm-publish-ready (2026-07-18, not yet published)
+
+The CLI previously only worked inside this monorepo (workspace-linked
+`@codeaudit/engine`, no real npm package). Packaged it for real standalone
+distribution — `npm publish` has **not** been run (one-way, world-visible
+action; needs explicit go-ahead) but everything up to that point is done
+and verified.
+
+- **Split `@codeaudit/engine`'s public API**: the main `"."` export no
+  longer re-exports `reviewCandidatesWithLlm`/`LlmConfig` (which pulls in
+  the `openai` SDK) — that now lives at a separate `"./llm"` subpath
+  (`packages/engine/package.json` `exports` map). `server/src/worker.ts`
+  updated to import from `@codeaudit/engine/llm`. This means the CLI's
+  import graph never reaches `openai`, keeping the bundle lean and correct
+  regardless of tree-shaking behavior.
+- **Bundled the CLI with esbuild** (`cli/build.mjs`) into a single
+  self-contained `dist/index.js` — no `node_modules` needed at install
+  time. `cli/package.json`: `private: true` removed, real publish metadata
+  added (description, keywords, repository, license, `files: ["dist"]`),
+  `@codeaudit/engine` moved from `dependencies` to `devDependencies` (only
+  needed to build, not to run the published package).
+
+### Two real bugs the isolated-install test caught (not typecheck, not "run it in the monorepo")
+
+1. **A stray, unrelated Yarn PnP manifest** at `C:\Users\ASUS\.pnp.cjs`
+   (last modified May 2024, nothing to do with this project) sat in the
+   ancestor directory chain of `cli/`. esbuild auto-detects `.pnp.cjs`
+   files during its upward directory search and — once found, anywhere,
+   no matter how far up — switches its *entire* resolver to Yarn PnP mode,
+   overriding otherwise-correctly-installed regular `node_modules`
+   resolution. No JS-API option exists to disable this. Fixed by renaming
+   the stray file aside (`.pnp.cjs.bak`, reversible, done with explicit
+   user confirmation since it's outside the project).
+2. **`format: "esm"` output broke at runtime** (not at build time,
+   not at typecheck): `@babel/traverse` pulls in the `debug` package,
+   which does a conditional `require("tty")`. esbuild's CJS-into-ESM
+   interop shim can't resolve that dynamically and throws `Dynamic
+   require of "tty" is not supported` the moment `@babel/traverse` loads
+   — only surfaced by actually running the packed-and-installed CLI in an
+   isolated directory, never by `tsc` or by running inside the monorepo
+   (where the unbundled workspace version doesn't hit esbuild's shim at
+   all). Fixed by building to `format: "cjs"` instead (removed
+   `"type": "module"` from `cli/package.json` to match) — correct for a
+   standalone leaf executable, no downside.
+
+### Verification performed
+
+`npm pack` → real `.tgz` → `npm install` in a directory completely
+outside the monorepo (no ancestor `package.json`, no workspace context) →
+scaffolded a fresh throwaway "someone else's project" (one real npm
+package `left-pad`, one fabricated non-existent package, two dead
+exports) → ran the installed `codeaudit` binary against it:
+correctly reported `left-pad` **healthy** (verified against the live
+npm registry), the fake package **phantom**, both dead exports as
+candidates, exit code 1. Zero dependency on the monorepo at any point in
+this test. Also confirmed both `@codeaudit/engine` and
+`@codeaudit/engine/llm` resolve correctly at real Node runtime (not just
+`tsc`), and the server/worker still boot and pass the ground-truth test
+after the export-map change.
+
+### Still open before a real `npm publish`
+
+- Confirm the `codeaudit` name is genuinely available (an unauthenticated
+  `npm view codeaudit` 404 is a good sign but not a guarantee — `npm
+  publish --dry-run` while logged in is the real check)
+- Decide on a real semver starting point (currently `0.1.0`)
+- `npm publish` itself — explicit user action, not run by the agent
+
 ## App light/dark theme + UI polish (2026-07-18)
 
 Added a light/dark theme toggle to the dashboard app (was dark-only) and did
