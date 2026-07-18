@@ -257,9 +257,9 @@ export function ScanDetail() {
           ) : (
             <div className="divide-y divide-border">
               {codeFindings.map((f) => (
-                <div key={f.id} className="py-3">
+                <div key={f.id} className="py-1">
                   <button
-                    className="flex w-full items-center justify-between text-left"
+                    className="flex w-full cursor-pointer items-center justify-between rounded-md px-2 py-2 text-left transition-colors hover:bg-surface-2/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                     onClick={() => setExpanded(expanded === f.id ? null : f.id)}
                   >
                     <div>

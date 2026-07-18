@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { Button, Input, Card } from "../components/ui";
+import { ThemeToggle } from "../components/ThemeToggle";
 
 export function AuthPage({ mode }: { mode: "login" | "register" }) {
   const [email, setEmail] = useState("");
@@ -39,7 +40,10 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
+    <div className="relative flex min-h-screen items-center justify-center px-4">
+      <div className="absolute right-4 top-4">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-sm">
         <div className="mb-6 text-center">
           <div className="font-mono text-lg font-semibold tracking-tight">

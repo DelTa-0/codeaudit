@@ -94,7 +94,7 @@ export function RepoDetail() {
               <Link
                 key={scan.id}
                 to={`/scans/${scan.id}`}
-                className="flex items-center justify-between py-3 hover:bg-surface-2/50"
+                className="flex items-center justify-between rounded-md px-2 py-3 transition-colors hover:bg-surface-2/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
               >
                 <div className="flex items-center gap-3">
                   <Badge label={scan.status} />
@@ -194,7 +194,7 @@ function RepoSettings({
         >
           {repo.gate_enabled && (
             <input
-              className="w-16 rounded-lg border border-border bg-surface-2 px-2 py-1 text-sm"
+              className="w-16 rounded-lg border border-border bg-surface-2 px-2 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
               type="number"
               min={0}
               max={100}

@@ -13,6 +13,66 @@ related:
 
 # Roadmap
 
+## App light/dark theme + UI polish (2026-07-18)
+
+Added a light/dark theme toggle to the dashboard app (was dark-only) and did
+a consistency pass across Dashboard, RepoDetail, ScanDetail, Members,
+Billing, Layout, and Auth.
+
+- `web/src/styles.css`: light theme override block keyed by
+  `:root[data-theme="light"]` (same CSS var names as the existing dark
+  tokens, so every `bg-*`/`text-*`/`border-*` utility already routed through
+  them repaints automatically — no per-component changes needed).
+  `prefers-reduced-motion` respected.
+- No-FOUC init script in `web/index.html` sets `data-theme` from
+  `localStorage` (or `prefers-color-scheme`) before first paint.
+- `web/src/lib/theme.ts` (`useTheme()`) + `web/src/components/ThemeToggle.tsx`
+  (SVG sun/moon, no emoji) — mounted in `Layout.tsx`'s header and on the
+  standalone `Auth.tsx` page (which sits outside `Layout`).
+- Polish: focus-visible rings + `cursor-pointer` added to `Button` and other
+  interactive elements across pages that lacked them; active-route
+  highlighting on the nav (`NavLink`); hover feedback on previously-plain
+  clickable rows (scan history, zombie-finding expanders).
+
+### Bugs found and fixed during verification
+
+1. **CSS comment self-terminated mid-sentence.** The light-theme override's
+   explanatory comment contained the literal substring `*/` inside prose
+   (`bg-*/text-*/border-*`), which is the CSS comment *close* token — it
+   closed the comment early, leaving the rest of the sentence as raw invalid
+   CSS. That garbage text got fused with the next selector
+   (`:root[data-theme="light"]`) into one broken prelude, which the browser's
+   parser error-recovery silently dropped in its entirety — the whole light
+   theme rule vanished from the parsed stylesheet with no console error.
+   Diagnosed by walking the live `CSSStyleSheet`/`CSSLayerBlockRule` tree via
+   `document.styleSheets` in the browser (confirmed the rule was flat-out
+   missing from parsed CSSOM despite being present in the raw `<style>`
+   text). **Fix:** reworded the comment to avoid a literal `*/` mid-sentence.
+2. **`transition: background-color/color` on `body` didn't retrigger when
+   only the referenced `var(--color-background)` changed.** After the fix
+   above, the CSS custom property itself toggled instantly and correctly
+   (confirmed via `getComputedStyle(root).getPropertyValue(...)`), but
+   `body`'s actual rendered `background-color`/`color` stayed on the old
+   value indefinitely — a known class of browser quirk where a transition's
+   change-detection doesn't always fire correctly when the *specified* value
+   (`var(--color-background)`) is textually unchanged even though its
+   *resolved* value changed. **Fix:** dropped the transition on `body`;
+   instant theme switching, no loss in practice.
+3. Also hit (and ruled out as unrelated) a stale-Vite-dev-server red herring
+   mid-debugging: `curl localhost:5173` and the Browser pane's `fetch` to the
+   same URL returned different compiled CSS for a few minutes after editing
+   — resolved itself/wasn't the real bug; a `touch` on the file was enough
+   to unstick it. Worth remembering next time compiled output looks stale:
+   verify with direct CSSOM/`getPropertyValue` inspection before assuming
+   it's a caching problem.
+
+Verified: toggle click (fresh tab, single click) flips both the DOM
+attribute and the actual rendered background/text color in the same tick,
+in both directions; theme persists across navigation and reload; Dashboard/
+RepoDetail/Members/Billing all confirmed rendering correctly in light mode
+via computed-style + page-text checks; dark mode unaffected (regression
+checked).
+
 ## Public landing page (2026-07-17)
 
 Imported a full 12-section marketing design from Claude Design

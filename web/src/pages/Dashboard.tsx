@@ -73,8 +73,12 @@ export function Dashboard() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           {repos.map((repo) => (
-            <Link key={repo.id} to={`/repos/${repo.id}`}>
-              <Card className="transition-colors hover:border-primary/50">
+            <Link
+              key={repo.id}
+              to={`/repos/${repo.id}`}
+              className="rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+            >
+              <Card className="cursor-pointer transition-colors hover:border-primary/50">
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="font-mono text-sm font-medium">{repo.full_name}</p>

@@ -58,7 +58,7 @@ export function Members() {
               onChange={(e) => setEmail(e.target.value)}
             />
             <select
-              className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
+              className="cursor-pointer rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
               value={role}
               onChange={(e) => setRole(e.target.value as "developer" | "admin")}
             >
