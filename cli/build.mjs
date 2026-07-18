@@ -1,6 +1,6 @@
 // Bundles the CLI into a single self-contained dist/index.js — no
 // node_modules dependency at install time, so `npm publish` ships a package
-// that works standalone via `npx codeaudit`, without needing the monorepo's
+// that works standalone via `npx codeaudit-scan`, without needing the monorepo's
 // workspace linking or any of its own dependencies resolved on the consumer's
 // machine. @codeaudit/engine's "./llm" subpath (which pulls in the "openai"
 // SDK) is never imported by the CLI, so it never enters this bundle either.

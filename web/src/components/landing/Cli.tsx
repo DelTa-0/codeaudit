@@ -64,7 +64,7 @@ export function Cli() {
               cursor: "pointer",
             }}
           >
-            $ npx codeaudit scan . <span style={{ color: "#5d675e", fontSize: 12 }}>{copied ? "✓ copied" : "⧉"}</span>
+            $ npx codeaudit-scan scan . <span style={{ color: "#5d675e", fontSize: 12 }}>{copied ? "✓ copied" : "⧉"}</span>
           </span>
         </div>
         <div
@@ -76,7 +76,7 @@ export function Cli() {
             font: "400 13px/1.75 'JetBrains Mono',monospace",
           }}
         >
-          <div><span style={{ color: "#7b857c" }}>~/vibe/codeaudit ›</span> <span style={{ color: "#f0c064" }}>npx</span> <span style={{ color: "#e8ede8" }}>codeaudit scan</span></div>
+          <div><span style={{ color: "#7b857c" }}>~/vibe/codeaudit ›</span> <span style={{ color: "#f0c064" }}>npx</span> <span style={{ color: "#e8ede8" }}>codeaudit-scan scan</span></div>
           <div style={{ marginTop: 12 }}><span style={{ color: "#e8ede8", fontWeight: 600 }}>CodeAudit</span> <span style={{ color: "#7b857c" }}>· static scan of ~/vibe/codeaudit</span></div>
           <div style={{ marginTop: 12, color: "#e8ede8", fontWeight: 600 }}>Dependencies</div>
           <div><span style={{ color: "#ff8a70" }}>  phantom</span><span style={{ color: "#e8ede8" }}>    react-toolkitz</span></div>

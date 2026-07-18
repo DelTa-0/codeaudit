@@ -32,7 +32,7 @@ cliTokenRouter.post("/repos/:repoId/cli-token", async (req, res, next) => {
     }
     res.json({
       token,
-      usage: `CODEAUDIT_TOKEN=${token} npx codeaudit scan . --upload --api ${config.apiUrl}`,
+      usage: `CODEAUDIT_TOKEN=${token} npx codeaudit-scan scan . --upload --api ${config.apiUrl}`,
     });
   } catch (err) {
     next(err);

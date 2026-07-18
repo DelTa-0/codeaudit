@@ -1,5 +1,5 @@
 {
-  "name": "codeaudit",
+  "name": "codeaudit-scan",
   "version": "0.1.0",
   "description": "Static scan for AI-generated technical debt — hallucinated (phantom) npm dependencies and dead-code candidates. Runs locally, no account needed.",
   "keywords": [
@@ -25,7 +25,7 @@
     "node": ">=18"
   },
   "bin": {
-    "codeaudit": "dist/index.js"
+    "codeaudit-scan": "dist/index.js"
   },
   "files": [
     "dist"

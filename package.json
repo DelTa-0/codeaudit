@@ -10,7 +10,7 @@
     "dev:web": "npm run dev --workspace web",
     "migrate": "npm run migrate --workspace server",
     "build:engine": "npm run build --workspace @codeaudit/engine",
-    "build:cli": "npm run build --workspace @codeaudit/engine && npm run build --workspace codeaudit",
+    "build:cli": "npm run build --workspace @codeaudit/engine && npm run build --workspace codeaudit-scan",
     "build": "npm run build:engine && npm run build --workspace server && npm run build --workspace web",
     "lint": "npm run typecheck --workspace server"
   },

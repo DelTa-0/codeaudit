@@ -31,7 +31,7 @@ See [README.md § Quick start](../README.md#quick-start) and
 full command sequence and every env var (core, LLM, GitHub App, Stripe).
 
 Workspaces as of the feature pack: `packages/engine` (`@codeaudit/engine`,
-shared analysis core), `server`, `web`, `cli` (`npx codeaudit`) — `npm
+shared analysis core), `server`, `web`, `cli` (`npx codeaudit-scan`) — `npm
 install` at the repo root installs all four.
 
 Migrations now number three files: `001_core.sql` (initial schema),

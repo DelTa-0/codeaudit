@@ -13,7 +13,7 @@ export interface DemoLine {
 }
 
 export const SCAN_LINES: DemoLine[] = [
-  { t: "$ npx codeaudit scan .", c: "#e8ede8" },
+  { t: "$ npx codeaudit-scan scan .", c: "#e8ede8" },
   { t: "→ cloning acme/checkout-service … done (1.2s)", c: "#8a948b" },
   { t: "→ parsing 214 files · 142 dependencies", c: "#8a948b" },
   { t: "→ checking npm registry (live) …", c: "#8a948b" },
@@ -74,7 +74,7 @@ export function useScanDemo() {
   };
 }
 
-const COPY_COMMAND = "npx codeaudit scan .";
+const COPY_COMMAND = "npx codeaudit-scan scan .";
 
 export function useCopyCommand() {
   const [copied, setCopied] = useState(false);

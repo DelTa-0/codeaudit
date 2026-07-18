@@ -56,7 +56,7 @@ export function FinalCta() {
             whiteSpace: "nowrap",
           }}
         >
-          npx codeaudit scan . <span style={{ color: "#5d675e", fontSize: 12 }}>{copied ? "✓ copied" : "⧉"}</span>
+          npx codeaudit-scan scan . <span style={{ color: "#5d675e", fontSize: 12 }}>{copied ? "✓ copied" : "⧉"}</span>
         </span>
       </div>
       <span style={{ marginTop: 22, font: "400 12.5px 'JetBrains Mono',monospace", color: "#5d675e" }}>

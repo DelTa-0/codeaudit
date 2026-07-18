@@ -13,6 +13,30 @@ related:
 
 # Roadmap
 
+## CLI package renamed to `codeaudit-scan` (2026-07-18)
+
+First real `npm publish` attempt of `codeaudit` was rejected outright by
+the registry (403, not just "name taken"): *"Package name too similar to
+existing package code-audit."* npm suggested a scoped fallback
+(`@doughnot/codeaudit`); tried an unscoped alternative instead —
+`codeaudit-scan` cleared `npm publish --dry-run` cleanly.
+
+Also fixed the `bin` name to match the package name exactly
+(`"codeaudit-scan": "dist/index.js"`, was `"codeaudit"`) — npm's own docs
+note `npx <name>` reliably resolves the single bin when the names match;
+rather than lean on npx's fallback-to-sole-bin behavior (inconclusive in a
+local tarball-path test), matching names removes the ambiguity entirely.
+
+**The installed command is now `codeaudit-scan`, with `scan` as its
+subcommand** — i.e. `npx codeaudit-scan scan .`, not `npx codeaudit scan .`.
+Updated every reference across the landing page (Hero/Cli/FinalCta copy
+buttons and the scripted terminal demo), README, docs/setup.md, the
+RepoDetail settings-card description, and the server-generated CLI/CI
+upload usage string (`routes/cliScans.ts`) to match. Re-verified with a
+fresh isolated `npm pack` → install-outside-the-monorepo → run test using
+the exact new command — same correct phantom/healthy/dead-code output as
+before the rename.
+
 ## CLI made npm-publish-ready (2026-07-18, not yet published)
 
 The CLI previously only worked inside this monorepo (workspace-linked
