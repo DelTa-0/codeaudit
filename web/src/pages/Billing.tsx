@@ -48,32 +48,36 @@ export function Billing() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold">Billing</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Billing</h1>
         <p className="mt-1 text-sm text-muted">
           Current plan: <Badge label={currentPlan} />
         </p>
         {error && <p className="mt-2 text-sm text-danger">{error}</p>}
       </div>
       <div className="grid gap-4 sm:grid-cols-3">
-        {PLANS.map((plan) => (
-          <Card key={plan.id} className={plan.id === currentPlan ? "border-primary/60" : ""}>
-            <p className="text-sm font-semibold">{plan.name}</p>
-            <p className="mt-1 font-mono text-2xl font-bold">{plan.price}</p>
-            <ul className="mt-3 space-y-1 text-sm text-muted">
-              {plan.features.map((f) => (
-                <li key={f}>· {f}</li>
-              ))}
-            </ul>
-            <Button
-              variant={plan.id === currentPlan ? "ghost" : "primary"}
-              disabled={plan.id === currentPlan}
-              className="mt-4 w-full"
-              onClick={() => void upgrade(plan.id)}
-            >
-              {plan.id === currentPlan ? "Current plan" : "Upgrade"}
-            </Button>
-          </Card>
-        ))}
+        {PLANS.map((plan) => {
+          const isPro = plan.id === "pro";
+          const isCurrent = plan.id === currentPlan;
+          return (
+            <Card key={plan.id} tone={isPro ? "ink" : "default"} className={!isPro && isCurrent ? "border-primary/60" : ""}>
+              <p className={`text-sm font-semibold ${isPro ? "text-primary" : ""}`}>{plan.name}</p>
+              <p className="mt-1 font-mono text-2xl font-bold">{plan.price}</p>
+              <ul className={`mt-3 space-y-1 text-sm ${isPro ? "text-ink-foreground/70" : "text-muted"}`}>
+                {plan.features.map((f) => (
+                  <li key={f}>· {f}</li>
+                ))}
+              </ul>
+              <Button
+                variant={isCurrent ? "ghost" : isPro ? "primary" : "ghost"}
+                disabled={isCurrent}
+                className={`mt-4 w-full ${isCurrent && isPro ? "border-ink-foreground/30 text-ink-foreground hover:bg-ink-foreground/10" : ""}`}
+                onClick={() => void upgrade(plan.id)}
+              >
+                {isCurrent ? "Current plan" : "Upgrade"}
+              </Button>
+            </Card>
+          );
+        })}
       </div>
     </div>
   );

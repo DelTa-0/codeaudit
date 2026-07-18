@@ -50,7 +50,7 @@ export function RepoDetail() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-mono text-xl font-semibold">{repo.full_name}</h1>
+          <h1 className="font-mono text-2xl font-semibold tracking-tight">{repo.full_name}</h1>
           <p className="mt-1 text-sm text-muted">Default branch: {repo.default_branch}</p>
         </div>
         <div className="flex items-center gap-4">

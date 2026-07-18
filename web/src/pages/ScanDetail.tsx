@@ -111,7 +111,7 @@ export function ScanDetail() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-semibold">Scan report</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Scan report</h1>
 
       <Card>
         <StatusStepper status={scan.status} progress={scan.progress} />

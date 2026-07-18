@@ -3,17 +3,20 @@
 @theme {
   --font-sans: "Inter", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", monospace;
-  --color-background: #0a0c12;
-  --color-surface: #11141d;
-  --color-surface-2: #181c28;
-  --color-border: #232837;
-  --color-foreground: #e7eaf2;
-  --color-muted: #8b93a7;
-  --color-primary: #6366f1;
-  --color-primary-hover: #818cf8;
+  --color-background: #0b0c10;
+  --color-surface: #16171d;
+  --color-surface-2: #1e1f27;
+  --color-border: #2a2b35;
+  --color-foreground: #f1f1f4;
+  --color-muted: #9a9aa5;
+  --color-primary: #ff6a3d;
+  --color-primary-hover: #ff8560;
+  --color-ink: #14161f;
+  --color-ink-foreground: #f1f1f4;
   --color-danger: #f87171;
   --color-warning: #fbbf24;
   --color-success: #34d399;
+  --shadow-soft: 0 1px 2px rgba(20, 22, 31, 0.04), 0 12px 28px -12px rgba(20, 22, 31, 0.16);
 }
 
 :root {
@@ -22,20 +25,24 @@
 
 /* Light theme override — same token names, so every bg-, text-, and
    border- utility (already routed through these CSS vars) repaints
-   automatically. */
+   automatically. Warm lavender-grey canvas + orange accent + navy "ink"
+   pills, matching the reference dashboard style. */
 :root[data-theme="light"] {
   color-scheme: light;
-  --color-background: #f8fafc;
+  --color-background: #eef0f6;
   --color-surface: #ffffff;
-  --color-surface-2: #f1f5f9;
-  --color-border: #e2e8f0;
-  --color-foreground: #0f172a;
-  --color-muted: #475569;
-  --color-primary: #4f46e5;
-  --color-primary-hover: #4338ca;
+  --color-surface-2: #f5f6fa;
+  --color-border: #e7e9f2;
+  --color-foreground: #14161f;
+  --color-muted: #6b7280;
+  --color-primary: #f4511e;
+  --color-primary-hover: #d8430f;
+  --color-ink: #14161f;
+  --color-ink-foreground: #f7f7fa;
   --color-danger: #dc2626;
   --color-warning: #b45309;
   --color-success: #059669;
+  --shadow-soft: 0 1px 2px rgba(20, 22, 31, 0.03), 0 16px 32px -16px rgba(20, 22, 31, 0.14);
 }
 
 body {
@@ -43,6 +50,10 @@ body {
   color: var(--color-foreground);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+}
+
+.shadow-soft {
+  box-shadow: var(--shadow-soft);
 }
 
 @media (prefers-reduced-motion: reduce) {
