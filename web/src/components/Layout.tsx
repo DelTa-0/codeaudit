@@ -2,6 +2,7 @@ import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { ThemeToggle } from "./ThemeToggle";
 import { Avatar } from "./ui";
+import { LogoMark } from "./Logo";
 
 export function Layout() {
   const { user, orgs, logout } = useAuth();
@@ -19,7 +20,9 @@ export function Layout() {
         <header className="flex items-center justify-between rounded-2xl border border-border bg-surface px-4 py-2.5 shadow-soft">
           <div className="flex items-center gap-6">
             <Link to="/dashboard" className="flex items-center gap-2 font-mono text-sm font-semibold tracking-tight">
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-white">◆</span>
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-white">
+                <LogoMark size={18} />
+              </span>
               CodeAudit
             </Link>
             {org && (

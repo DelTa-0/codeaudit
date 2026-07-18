@@ -1,3 +1,5 @@
+import { LogoMark } from "../Logo";
+
 export function Footer() {
   return (
     <footer style={{ background: "#0b0f0c", borderTop: "1px solid #1c231d", padding: "56px 48px 40px" }}>
@@ -14,11 +16,10 @@ export function Footer() {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                font: "600 12px 'JetBrains Mono',monospace",
                 color: "#9ef0c6",
               }}
             >
-              ✓
+              <LogoMark size={14} />
             </div>
             <span style={{ font: "600 15px Geist,sans-serif", color: "#f7f6f1" }}>CodeAudit</span>
           </div>

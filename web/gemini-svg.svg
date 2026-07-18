@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 450" width="100%" height="100%">
+    <defs>
+        <style>
+            .brand-text {
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                font-weight: 600;
+                fill: #1a2530;
+                font-size: 52px;
+                letter-spacing: -0.5px;
+            }
+            .logo-mark {
+                fill: none;
+                stroke: #1a2530;
+                stroke-width: 24;
+                stroke-linecap: round;
+                stroke-linejoin: round;
+            }
+            .arrow {
+                fill: #1a2530;
+            }
+        </style>
+    </defs>
+
+    <g transform="translate(0, -10)">
+        <!-- Outer Target Ring -->
+        <circle cx="250" cy="180" r="110" class="logo-mark" />
+
+        <!-- Inner 'C' Shape -->
+        <path d="M 292 138 A 60 60 0 1 0 292 222" class="logo-mark" />
+
+        <!-- Export/Clean Arrow -->
+        <path d="M 252 180 L 315 180" stroke="#1a2530" stroke-width="24" stroke-linecap="square" />
+        <polygon points="310,150 355,180 310,210" class="arrow" />
+    </g>
+
+    <!-- Brand Name -->
+    <text x="250" y="375" text-anchor="middle" class="brand-text">CodeAudit</text>
+</svg>

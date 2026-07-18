@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { Button, Input, Card } from "../components/ui";
 import { ThemeToggle } from "../components/ThemeToggle";
+import { LogoMark } from "../components/Logo";
 
 export function AuthPage({ mode }: { mode: "login" | "register" }) {
   const [email, setEmail] = useState("");
@@ -55,8 +56,11 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
       </div>
       <div className="w-full max-w-sm">
         <div className="mb-6 text-center">
-          <div className="font-mono text-lg font-semibold tracking-tight">
-            <span className="text-primary">◆</span> CodeAudit
+          <div className="flex items-center justify-center gap-2 font-mono text-lg font-semibold tracking-tight">
+            <span className="text-primary">
+              <LogoMark size={22} />
+            </span>
+            CodeAudit
           </div>
           <p className="mt-1 text-sm text-muted">AI technical debt intelligence</p>
         </div>

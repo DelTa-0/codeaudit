@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { LogoMark } from "../Logo";
 
 export function Nav() {
   return (
@@ -26,11 +27,10 @@ export function Nav() {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            font: "600 13px 'JetBrains Mono',monospace",
-            color: "#9ef0c6",
+            color: "#f7f6f1",
           }}
         >
-          ✓
+          <LogoMark size={16} />
         </div>
         <span style={{ font: "600 16px Geist,sans-serif", letterSpacing: "-.01em" }}>CodeAudit</span>
       </div>
