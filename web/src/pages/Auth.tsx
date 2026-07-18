@@ -41,6 +41,15 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
 
   return (
     <div className="relative flex min-h-screen items-center justify-center px-4">
+      <Link
+        to="/"
+        className="absolute left-4 top-4 flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-sm text-muted transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M19 12H5M12 19l-7-7 7-7" />
+        </svg>
+        Back to site
+      </Link>
       <div className="absolute right-4 top-4">
         <ThemeToggle />
       </div>
