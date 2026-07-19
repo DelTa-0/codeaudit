@@ -1,10 +1,11 @@
 # CodeAudit
 
-AI Technical Debt Intelligence — a SaaS that audits GitHub repositories for:
+AI Technical Debt Intelligence — a SaaS that audits GitHub repositories
+(**JS/TS + Python**, polyglot repos analyze both at once) for:
 
-1. **Phantom dependencies** — hallucinated packages that don't exist on npm
+1. **Phantom dependencies** — hallucinated packages that don't exist on npm or PyPI
 2. **Suspicious dependencies** — near-zero downloads or very recently published (typosquat heuristic)
-3. **Unused dependencies** — declared in `package.json` but never imported
+3. **Unused dependencies** — declared in `package.json` / `requirements.txt` / `pyproject.toml` but never imported
 4. **Zombie code** — exported functions/components with zero call-sites, judged by an LLM with confidence scores
 
 **Stack:** PostgreSQL · Express · React · Node (PERN) + Redis/BullMQ job queue + an OpenAI-compatible LLM (Groq by default).
@@ -365,7 +366,6 @@ the database or a live clone.
 Explicitly out of scope so far — not gaps in what was promised, just not
 started yet:
 
-- Python/PyPI ecosystem support
 - Server-sent events for live scan status (currently ~2s polling)
 - Slack/Discord notifications
 - Real email transport for org invites (currently logged to the server console in dev)

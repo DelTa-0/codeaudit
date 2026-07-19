@@ -10,6 +10,12 @@ import {
   checkDependencies,
   findDeadCodeCandidates,
   computeSummary,
+  detectEcosystems,
+  parsePythonManifest,
+  analyzePythonRepo,
+  checkPythonDependencies,
+  type DependencyVerdict,
+  type DeadCodeCandidate,
   type ReviewedFinding,
 } from "@codeaudit/engine";
 
@@ -131,10 +137,28 @@ async function main() {
     process.exit(2);
   }
 
-  const manifest = parseManifest(dir);
-  const analysis = analyzeRepo(dir);
-  const deps = manifest ? await checkDependencies(manifest, analysis.importedPackages) : [];
-  const candidates = findDeadCodeCandidates(analysis);
+  const ecosystems = detectEcosystems(dir);
+  const deps: DependencyVerdict[] = [];
+  const candidates: DeadCodeCandidate[] = [];
+  let fileCount = 0;
+
+  if (ecosystems.includes("npm")) {
+    const manifest = parseManifest(dir);
+    const analysis = analyzeRepo(dir);
+    fileCount += analysis.fileCount;
+    if (manifest) deps.push(...(await checkDependencies(manifest, analysis.importedPackages)));
+    candidates.push(...findDeadCodeCandidates(analysis));
+  }
+
+  if (ecosystems.includes("pypi")) {
+    const pyManifest = parsePythonManifest(dir);
+    const pyAnalysis = analyzePythonRepo(dir);
+    fileCount += pyAnalysis.fileCount;
+    deps.push(...(await checkPythonDependencies(dir, pyManifest, pyAnalysis.importedPackages)));
+    candidates.push(...findDeadCodeCandidates(pyAnalysis));
+  }
+
+  const polyglot = ecosystems.length > 1;
 
   // Static-only findings: candidates at fixed confidence, no LLM verdict.
   const staticFindings: ReviewedFinding[] = candidates.map((c) => ({
@@ -147,7 +171,7 @@ async function main() {
     reasoning: "candidate — LLM verification available on codeaudit.dev",
   }));
 
-  const summary = computeSummary(deps, staticFindings, analysis.fileCount);
+  const summary = computeSummary(deps, staticFindings, fileCount);
   const phantomCount = summary.counts.phantom;
   const belowMin = minScore !== null && summary.score < minScore;
   const exitCode = phantomCount > 0 || belowMin ? 1 : 0;
@@ -185,7 +209,8 @@ async function main() {
     console.log(`${BOLD}Dependencies${RESET}`);
     for (const d of interesting) {
       const color = statusColor[d.status] ?? "";
-      console.log(`  ${color}${d.status.padEnd(10)}${RESET} ${d.packageName}`);
+      const eco = polyglot ? `${DIM}${d.ecosystem.padEnd(5)}${RESET} ` : "";
+      console.log(`  ${color}${d.status.padEnd(10)}${RESET} ${eco}${d.packageName}`);
     }
     console.log(`  ${DIM}${summary.counts.healthy} healthy packages not shown${RESET}\n`);
   } else {
@@ -202,7 +227,7 @@ async function main() {
 
   const scoreColor = summary.score >= 75 ? GREEN : summary.score >= 50 ? YELLOW : RED;
   console.log(
-    `${BOLD}Score: ${scoreColor}${summary.score} (${summary.grade})${RESET}  ${DIM}· ${analysis.fileCount} files analyzed${RESET}`,
+    `${BOLD}Score: ${scoreColor}${summary.score} (${summary.grade})${RESET}  ${DIM}· ${fileCount} files analyzed (${ecosystems.join(" + ") || "no ecosystems detected"})${RESET}`,
   );
   if (phantomCount > 0)
     console.log(`${RED}${BOLD}${phantomCount} phantom dependenc${phantomCount === 1 ? "y" : "ies"} — remove before shipping${RESET}`);

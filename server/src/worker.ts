@@ -23,6 +23,12 @@ import {
   checkDependencies,
   findDeadCodeCandidates,
   computeSummary,
+  detectEcosystems,
+  parsePythonManifest,
+  analyzePythonRepo,
+  checkPythonDependencies,
+  type DependencyVerdict,
+  type DeadCodeCandidate,
 } from "@codeaudit/engine";
 import { reviewCandidatesWithLlm } from "@codeaudit/engine/llm";
 import { config } from "./lib/config.js";
@@ -74,22 +80,48 @@ async function processScanJob(scanJobId: string) {
     await setStatus(scanJobId, "cloning", "Cloning repository");
     const dir = await cloneRepoSandboxed(cloneUrl, scanJobId, scan.branch ?? undefined);
 
-    await setStatus(scanJobId, "analyzing", "Parsing source files");
-    const manifest = parseManifest(dir);
-    const analysis = analyzeRepo(dir);
+    const ecosystems = detectEcosystems(dir);
+    await setStatus(
+      scanJobId,
+      "analyzing",
+      `Parsing source files (${ecosystems.join(" + ") || "no ecosystems detected"})`,
+    );
 
-    await setStatus(scanJobId, "analyzing", "Verifying dependencies against npm registry");
-    const deps = manifest
-      ? await checkDependencies(manifest, analysis.importedPackages)
-      : [];
+    const deps: DependencyVerdict[] = [];
+    const allCandidates: DeadCodeCandidate[] = [];
+    // Merged per-file import context for the LLM across both analyzers.
+    const mergedFileImportExports = new Map<string, string[]>();
+    let fileCount = 0;
+
+    if (ecosystems.includes("npm")) {
+      const manifest = parseManifest(dir);
+      const analysis = analyzeRepo(dir);
+      fileCount += analysis.fileCount;
+      await setStatus(scanJobId, "analyzing", "Verifying dependencies against the npm registry");
+      if (manifest) deps.push(...(await checkDependencies(manifest, analysis.importedPackages)));
+      allCandidates.push(...findDeadCodeCandidates(analysis));
+      for (const [k, v] of analysis.fileImportExports) mergedFileImportExports.set(k, v);
+    }
+
+    if (ecosystems.includes("pypi")) {
+      const pyManifest = parsePythonManifest(dir);
+      const pyAnalysis = analyzePythonRepo(dir);
+      fileCount += pyAnalysis.fileCount;
+      await setStatus(scanJobId, "analyzing", "Verifying dependencies against the PyPI registry");
+      deps.push(...(await checkPythonDependencies(dir, pyManifest, pyAnalysis.importedPackages)));
+      allCandidates.push(...findDeadCodeCandidates(pyAnalysis));
+      for (const [k, v] of pyAnalysis.fileImportExports) mergedFileImportExports.set(k, v);
+    }
+
     for (const d of deps) {
       await query(
         `INSERT INTO dependency_findings
            (scan_job_id, package_name, ecosystem, declared_version, status, registry_metadata)
-         VALUES ($1, $2, 'npm', $3, $4, $5)`,
+         VALUES ($1, $2, $3, $4, $5, $6)`,
         [
           scanJobId,
           d.packageName,
+          d.ecosystem,
           d.declaredVersion,
           d.status,
           d.registryMetadata ? JSON.stringify(d.registryMetadata) : null,
@@ -98,10 +130,9 @@ async function processScanJob(scanJobId: string) {
     }
 
     await setStatus(scanJobId, "analyzing", "Reviewing dead-code candidates");
-    const candidates = findDeadCodeCandidates(analysis);
     const zombies = await reviewCandidatesWithLlm(
-      candidates,
-      analysis,
+      allCandidates,
+      { fileImportExports: mergedFileImportExports },
       config.llm.apiKey
         ? { apiKey: config.llm.apiKey, baseUrl: config.llm.baseUrl, model: config.llm.model }
         : undefined,
@@ -128,7 +159,7 @@ async function processScanJob(scanJobId: string) {
     await setStatus(scanJobId, "analyzing", "Attributing AI-assisted code");
     const aiStats = await computeAiAuthorship(dir, zombies);
 
-    const summary = { ...computeSummary(deps, zombies, analysis.fileCount), ai: aiStats };
+    const summary = { ...computeSummary(deps, zombies, fileCount), ai: aiStats };
     await query(
       `UPDATE scan_jobs SET status = 'complete', progress = 'Complete',
          summary = $2, completed_at = now() WHERE id = $1`,

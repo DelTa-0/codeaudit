@@ -149,7 +149,7 @@ ${candidateBlocks}`;
  */
 export async function reviewCandidatesWithLlm(
   candidates: DeadCodeCandidate[],
-  analysis: RepoAnalysis,
+  analysis: Pick<RepoAnalysis, "fileImportExports">,
   llm?: LlmConfig,
 ): Promise<ReviewedFinding[]> {
   if (candidates.length === 0) return [];

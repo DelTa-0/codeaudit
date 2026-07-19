@@ -217,32 +217,46 @@ export function ScanDetail() {
         <Card>
           <p className="mb-3 text-sm font-medium text-muted">Dependencies ({deps.length})</p>
           {deps.length === 0 ? (
-            <EmptyState title="No dependencies found" hint="The repo may not have a package.json." />
+            <EmptyState
+              title="No dependencies found"
+              hint="The repo may not have a package.json, requirements.txt, or pyproject.toml."
+            />
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-xs text-muted">
-                  <th className="pb-2 font-medium">Package</th>
-                  <th className="pb-2 font-medium">Version</th>
-                  <th className="pb-2 font-medium">Status</th>
-                  <th className="pb-2 font-medium">Weekly downloads</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {deps.map((d) => (
-                  <tr key={d.id}>
-                    <td className="py-2 font-mono">{d.package_name}</td>
-                    <td className="py-2 font-mono text-muted">{d.declared_version ?? "—"}</td>
-                    <td className="py-2">
-                      <Badge label={d.status} />
-                    </td>
-                    <td className="py-2 font-mono text-muted">
-                      {d.registry_metadata?.weeklyDownloads?.toLocaleString() ?? "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            (() => {
+              const polyglot = new Set(deps.map((d) => d.ecosystem)).size > 1;
+              return (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-xs text-muted">
+                      <th className="pb-2 font-medium">Package</th>
+                      {polyglot && <th className="pb-2 font-medium">Ecosystem</th>}
+                      <th className="pb-2 font-medium">Version</th>
+                      <th className="pb-2 font-medium">Status</th>
+                      <th className="pb-2 font-medium">Downloads</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {deps.map((d) => (
+                      <tr key={d.id}>
+                        <td className="py-2 font-mono">{d.package_name}</td>
+                        {polyglot && (
+                          <td className="py-2">
+                            <Badge label={d.ecosystem} />
+                          </td>
+                        )}
+                        <td className="py-2 font-mono text-muted">{d.declared_version ?? "—"}</td>
+                        <td className="py-2">
+                          <Badge label={d.status} />
+                        </td>
+                        <td className="py-2 font-mono text-muted">
+                          {d.registry_metadata?.weeklyDownloads?.toLocaleString() ?? "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              );
+            })()
           )}
         </Card>
       )}

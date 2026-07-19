@@ -70,6 +70,7 @@ const uploadSchema = z.object({
         packageName: z.string().max(214),
         declaredVersion: z.string().max(100).nullable(),
         status: z.enum(["phantom", "unused", "healthy", "suspicious"]),
+        ecosystem: z.enum(["npm", "pypi"]).default("npm"),
         registryMetadata: z.record(z.string(), z.unknown()).nullable().optional(),
       }),
     )
@@ -114,13 +115,14 @@ cliUploadRouter.post("/cli-scans", uploadLimiter, validateBody(uploadSchema), as
     for (const d of body.dependencies) {
       await query(
         `INSERT INTO dependency_findings (scan_job_id, package_name, ecosystem, declared_version, status, registry_metadata)
-         VALUES ($1, $2, 'npm', $3, $4, $5)`,
+         VALUES ($1, $2, $6, $3, $4, $5)`,
         [
           scan.id,
           d.packageName,
           d.declaredVersion,
           d.status,
           d.registryMetadata ? JSON.stringify(d.registryMetadata) : null,
+          d.ecosystem,
         ],
       );
     }

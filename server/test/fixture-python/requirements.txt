@@ -1,0 +1,4 @@
+# Ground-truth fixture: one real+used, one fake, one real-but-unused
+requests>=2.31
+totally-fake-pypi-pkg-xyz==1.0.0
+rich>=13.0  # declared but never imported

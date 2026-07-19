@@ -13,6 +13,46 @@ related:
 
 # Roadmap
 
+## Python ecosystem support (2026-07-19)
+
+The engine, worker, CLI, and dashboard now analyze **JS/TS + Python**, with
+polyglot repos running both analyzers in one scan and merging findings.
+User-decided approach: pragmatic hand-written line-based Python parsing (no
+tree-sitter WASM — that's the documented accuracy upgrade path), manifests
+via `requirements*.txt` + `pyproject.toml` (PEP 621 `[project]` +
+`[tool.poetry.*]`, parsed with `smol-toml`).
+
+- `packages/engine/src/python/`: `manifest.ts`, `imports.ts` (line-oriented
+  import/def/class/reference extraction returning the same `RepoAnalysis`
+  shape as the JS analyzer, so dead-code filtering + LLM review run
+  unchanged), `registry.ts` (PyPI JSON API + pypistats downloads,
+  best-effort), `stdlib.ts` (~300 hardcoded stdlib names), `aliases.ts`
+  (cv2→opencv-python etc. + PEP 503 normalization)
+- `detect.ts` — `detectEcosystems()`; worker and CLI both run
+  detect-and-merge; `DependencyVerdict` gained `ecosystem: "npm" | "pypi"`
+  and the worker/CLI-upload INSERTs stopped hardcoding `'npm'`
+- Dashboard: ecosystem badge column appears only on polyglot scans; CLI
+  prints an ecosystem tag when polyglot and `--json` carries `ecosystem`
+
+**False positive found and fixed during live verification**: scanning
+`pallets/itsdangerous` flagged `test-itsdangerous` as phantom — it's a
+*local test module* (`tests/test_itsdangerous.py`) imported by a sibling
+test file, and the original local-module check only looked in the repo root
+and `src/`. Fixed by deriving the local-module name set from the actual
+Python file tree (every `.py` basename + every package directory segment).
+Re-scan: clean 100 (A), zero phantoms.
+
+Verified: Python ground-truth suite 11/11 (phantom/unused/healthy/stdlib-
+excluded/local-module-excluded/dead-code); JS suite still 7/7; live server
+scan of `pallets/itsdangerous` (real PyPI metadata + pypistats downloads
+rendering in the dashboard); polyglot self-scan regression byte-identical
+npm results; bundled CLI (with `smol-toml` inlined) verified in an isolated
+install against scaffolded Python and polyglot projects — correct verdicts,
+`(npm + pypi)` labeling, exit codes.
+
+Out of scope, documented: tree-sitter parser upgrade, Pipfile/conda/
+setup.py manifests, per-ecosystem score weighting.
+
 ## CLI package renamed to `codeaudit-scan` (2026-07-18)
 
 First real `npm publish` attempt of `codeaudit` was rejected outright by

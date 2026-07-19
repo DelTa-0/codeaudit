@@ -1,9 +1,12 @@
 import type { Manifest } from "./manifest.js";
 
+export type Ecosystem = "npm" | "pypi";
+
 export interface DependencyVerdict {
   packageName: string;
   declaredVersion: string | null;
   status: "phantom" | "unused" | "healthy" | "suspicious";
+  ecosystem: Ecosystem;
   registryMetadata: Record<string, unknown> | null;
 }
 
@@ -12,7 +15,7 @@ const CONCURRENCY = 5;
 const SUSPICIOUS_WEEKLY_DOWNLOADS = 50;
 const SUSPICIOUS_AGE_DAYS = 90;
 
-async function fetchJson(url: string): Promise<{ status: number; data: unknown }> {
+export async function fetchJson(url: string): Promise<{ status: number; data: unknown }> {
   const res = await fetch(url, {
     headers: { accept: "application/json" },
     signal: AbortSignal.timeout(10_000),
@@ -89,13 +92,20 @@ export async function checkDependencies(
           const veryNew = ageDays < SUSPICIOUS_AGE_DAYS;
           status = lowDownloads || veryNew ? "suspicious" : "healthy";
         }
-        verdicts.push({ packageName: name, declaredVersion, status, registryMetadata: meta });
+        verdicts.push({
+          packageName: name,
+          declaredVersion,
+          status,
+          ecosystem: "npm",
+          registryMetadata: meta,
+        });
       } catch (err) {
         // Registry unreachable — record as healthy-unknown rather than failing the scan.
         verdicts.push({
           packageName: name,
           declaredVersion,
           status: isDeclared && !isImported ? "unused" : "healthy",
+          ecosystem: "npm",
           registryMetadata: { error: "registry_unreachable" },
         });
       }

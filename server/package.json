@@ -7,6 +7,7 @@
     "dev:worker": "tsx watch src/worker.ts",
     "migrate": "tsx src/db/migrate.ts",
     "test:ground-truth": "tsx test/ground-truth.ts",
+    "test:ground-truth-python": "tsx test/ground-truth-python.ts",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
