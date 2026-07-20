@@ -47,6 +47,12 @@ const checks: [string, boolean][] = [
   ["zombie_formatter flagged", candNames.has("zombie_formatter")],
   ["used_helper NOT flagged", !candNames.has("used_helper")],
   ["main NOT flagged (entry name)", !candNames.has("main")],
+  // Precision fixes from the real-world FastAPI review:
+  ["python-docx connected to lazy `import docx` (not unused)", verdict("python-docx") !== "unused" && verdict("python-docx") !== undefined],
+  ["uvicorn (CLI-invoked, never imported) NOT flagged unused", verdict("uvicorn") !== "unused" && verdict("uvicorn") !== undefined],
+  ["decorated route handler `health` NOT flagged", !candNames.has("health")],
+  ["same-file-called `internal_helper` NOT flagged", !candNames.has("internal_helper")],
+  ["genuinely-uncalled `lazy_docx_load` still flagged", candNames.has("lazy_docx_load")],
 ];
 console.log("--- checks ---");
 let failed = 0;

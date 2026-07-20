@@ -7,6 +7,9 @@
  */
 export const IMPORT_TO_PYPI: Record<string, string> = {
   cv2: "opencv-python",
+  docx: "python-docx",
+  fitz: "pymupdf",
+  multipart: "python-multipart",
   yaml: "pyyaml",
   sklearn: "scikit-learn",
   PIL: "pillow",

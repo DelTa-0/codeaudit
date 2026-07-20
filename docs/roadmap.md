@@ -13,6 +13,45 @@ related:
 
 # Roadmap
 
+## Python precision fixes from real-world review (2026-07-20)
+
+The user ran the published CLI against a real FastAPI/scraper project and
+had the output independently reviewed — verdict: "mostly inaccurate"
+(~38 of 40 findings were false positives). The review was correct about
+*what* was wrong; two of its guesses about *why* were not:
+
+1. **`python-docx` flagged unused** — reviewer guessed "missed the lazy
+   in-function import". Wrong mechanism: the parser *does* catch indented
+   imports; the real bug was an alias gap — `import docx` mapped to the
+   distribution `docx` (a real, ancient PyPI package) instead of
+   `python-docx`. Fixed in `aliases.ts` (+ `fitz`→`pymupdf`,
+   `multipart`→`python-multipart`).
+2. **`lxml`/`uvicorn`/`python-multipart` flagged unused** — genuinely
+   invisible to import analysis (string-arg parser backends, CLI-invoked
+   servers, framework peer deps). Added a small documented
+   `NEVER_FLAG_UNUSED` allowlist in `python/registry.ts`.
+3. **FastAPI route handlers + Pydantic models + same-file helpers flagged
+   dead** — the dominant FP class, two mechanisms:
+   - decorator-wired defs (`@app.get`, `@pytest.fixture`, …) are never
+     name-referenced → now skipped entirely (column-0 decorator walk-back
+     in `python/imports.ts`)
+   - the Python analyzer marked every non-underscore symbol "exported",
+     which bypassed the shared candidate filter's same-file-reference
+     rescue — `strip_html` called by `clean_listing` in the same module
+     was still flagged. Now any symbol referenced within its own file is
+     downgraded to non-exported so the rescue applies. (This also covers
+     `__main__`-block calls and `response_model=Model` references.)
+
+Ground-truth suite extended from 11 to 16 checks covering all three fix
+classes plus a genuinely-dead lazy-importing function that must *stay*
+flagged. Synthetic reproduction of the reviewer's exact scenario now
+reports only the findings the reviewer confirmed real (pillow unused, one
+truly-uncalled function). JS suite still 7/7.
+
+Known remaining limitation (documented, accepted): transitive-only deps
+like `w3lib` (pulled by scrapy) can still show unused; deeper dependency-
+graph awareness is future work alongside the tree-sitter upgrade path.
+
 ## Python ecosystem support (2026-07-19)
 
 The engine, worker, CLI, and dashboard now analyze **JS/TS + Python**, with

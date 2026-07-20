@@ -110,6 +110,26 @@ export function analyzePythonRepo(repoDir: string): RepoAnalysis {
       const name = defMatch?.[1] ?? classMatch?.[1];
       if (!name) continue;
 
+      // Decorated definitions (@app.get(...), @pytest.fixture, @click.command,
+      // @celery.task, ...) are wired up by their framework, never by a name
+      // reference — static call-graph analysis cannot see that dispatch, so
+      // they must never be dead-code candidates. Top-level decorators sit at
+      // column 0 directly above the def; walk up past blank/comment/indented
+      // (multi-line decorator args) lines to the nearest column-0 line.
+      let back = i - 1;
+      let decorated = false;
+      while (back >= 0) {
+        const raw = lines[back];
+        const trimmed = raw.trim();
+        if (trimmed === "" || trimmed.startsWith("#") || /^[\s)\]}]/.test(raw)) {
+          back--;
+          continue;
+        }
+        decorated = raw.startsWith("@");
+        break;
+      }
+      if (decorated) continue;
+
       // body extends until the next column-0 statement (or EOF)
       let end = i + 1;
       while (end < lines.length) {
@@ -156,6 +176,19 @@ export function analyzePythonRepo(repoDir: string): RepoAnalysis {
     }
 
     fileImportExports.set(rel, importLines.slice(0, 40));
+  }
+
+  // Same-file usage is liveness. Unlike JS, Python has no export keyword —
+  // every top-level name *could* be imported elsewhere, so the analyzer
+  // marks non-underscore symbols "exported", which would bypass the shared
+  // candidate filter's same-file rescue and flag internal helpers that are
+  // only called within their own module (the dominant false-positive class
+  // in real FastAPI-style codebases). Downgrade any symbol referenced in
+  // its own file to non-exported so that rescue applies.
+  for (const sym of symbols) {
+    if (sym.exported && references.get(sym.name)?.has(sym.filePath)) {
+      sym.exported = false;
+    }
   }
 
   return { importedPackages, symbols, references, fileCount: files.length, fileImportExports };

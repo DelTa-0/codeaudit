@@ -10,6 +10,24 @@ const CONCURRENCY = 5;
 const SUSPICIOUS_MONTHLY_DOWNLOADS = 200;
 const SUSPICIOUS_AGE_DAYS = 90;
 
+/**
+ * Distributions that are legitimately declared without ever being imported
+ * by name: CLI-invoked servers/tools, string-referenced parser backends
+ * (BeautifulSoup(html, "lxml")), and framework peer requirements
+ * (python-multipart for FastAPI's UploadFile). Import analysis cannot see
+ * these usage patterns, so "declared but never imported" is not evidence of
+ * anything — never flag them unused.
+ */
+const NEVER_FLAG_UNUSED = new Set([
+  "uvicorn",
+  "gunicorn",
+  "lxml",
+  "python-multipart",
+  "setuptools",
+  "wheel",
+  "pip",
+]);
+
 async function checkPyPiPackage(name: string) {
   const cached = cache.get(name);
   if (cached) return cached;
@@ -111,7 +129,7 @@ export async function checkPythonDependencies(
         let status: DependencyVerdict["status"];
         if (!exists) {
           status = "phantom";
-        } else if (isDeclared && !isImported) {
+        } else if (isDeclared && !isImported && !NEVER_FLAG_UNUSED.has(normalized)) {
           status = "unused";
         } else {
           const monthly = (meta?.weeklyDownloads as number | null) ?? null;
