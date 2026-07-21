@@ -65,3 +65,62 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---- Print / PDF export (the /scans/:id/report route) ----
+   The browser's own "Save as PDF" is the PDF generator, so this block is the
+   whole export pipeline: drop app chrome, force legible light-on-white ink
+   regardless of the viewer's theme, and keep table rows from splitting across
+   page breaks. */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  /* Printers ignore background colours by default; force real black text on
+     white so a dark-theme viewer doesn't export an unreadable page. */
+  :root,
+  :root[data-theme="dark"],
+  :root[data-theme="light"] {
+    --color-background: #ffffff;
+    --color-foreground: #111111;
+    --color-muted: #555555;
+    --color-border: #999999;
+    --color-surface: #ffffff;
+    --color-surface-2: #f4f4f4;
+  }
+
+  body {
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  .report-page {
+    max-width: none;
+    padding: 0;
+  }
+
+  .report-section {
+    break-inside: auto;
+  }
+
+  .report-section h2 {
+    break-after: avoid;
+  }
+
+  .report-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .report-table thead {
+    display: table-header-group; /* repeat headers on each page */
+  }
+
+  .report-table tr {
+    break-inside: avoid;
+  }
+
+  @page {
+    margin: 16mm;
+  }
+}

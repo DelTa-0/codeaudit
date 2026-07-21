@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import {
   api,
   type Scan,
@@ -246,7 +246,14 @@ export function ScanDetail() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Scan report</h1>
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="text-2xl font-semibold tracking-tight">Scan report</h1>
+        {scan.status === "complete" && (
+          <Link to={`/scans/${scan.id}/report`}>
+            <Button variant="ghost">Export report</Button>
+          </Link>
+        )}
+      </div>
 
       <Card>
         <StatusStepper status={scan.status} progress={scan.progress} />

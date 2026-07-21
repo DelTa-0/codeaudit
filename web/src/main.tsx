@@ -9,6 +9,7 @@ import { AuthPage } from "./pages/Auth";
 import { Dashboard } from "./pages/Dashboard";
 import { RepoDetail } from "./pages/RepoDetail";
 import { ScanDetail } from "./pages/ScanDetail";
+import { ScanReport } from "./pages/ScanReport";
 import { Members } from "./pages/Members";
 import { Billing } from "./pages/Billing";
 import { Spinner } from "./components/ui";
@@ -40,6 +41,9 @@ function App() {
             <Route path="/orgs/:orgId/members" element={<Members />} />
             <Route path="/orgs/:orgId/billing" element={<Billing />} />
           </Route>
+          {/* Outside <Layout> on purpose — the printable report carries no app
+              nav/chrome so Save-as-PDF produces a clean document. */}
+          <Route path="/scans/:scanId/report" element={<ScanReport />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
