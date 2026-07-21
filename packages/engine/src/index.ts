@@ -5,6 +5,23 @@
 export { parseManifest, type Manifest } from "./manifest.js";
 export { analyzeRepo, listSourceFiles, type RepoAnalysis, type SymbolInfo } from "./imports.js";
 export { checkDependencies, type DependencyVerdict, type Ecosystem } from "./registry.js";
+export {
+  checkVulnerabilities,
+  applyVulnerabilities,
+  collectVulnTargets,
+  coerceVersion,
+  severityRank,
+  type VulnAdvisory,
+  type VulnSeverity,
+  type PackageVulns,
+} from "./vulns.js";
+export {
+  resolveNpmTree,
+  resolvePythonTree,
+  type ResolvedTree,
+  type ResolvedPackage,
+} from "./lockfile.js";
+export { checkTyposquat, type TyposquatHit } from "./typosquat.js";
 export { findDeadCodeCandidates, type DeadCodeCandidate } from "./deadcode.js";
 export type { ReviewedFinding } from "./llm.js";
 export { computeSummary, type ScanSummary } from "./score.js";

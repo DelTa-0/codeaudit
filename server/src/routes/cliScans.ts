@@ -59,6 +59,7 @@ const uploadSchema = z.object({
     suspicious: z.number().int().min(0),
     unused: z.number().int().min(0),
     healthy: z.number().int().min(0),
+    vulnerable: z.number().int().min(0).default(0),
     zombies: z.number().int().min(0),
     filesAnalyzed: z.number().int().min(0),
   }),
@@ -69,7 +70,7 @@ const uploadSchema = z.object({
       z.object({
         packageName: z.string().max(214),
         declaredVersion: z.string().max(100).nullable(),
-        status: z.enum(["phantom", "unused", "healthy", "suspicious"]),
+        status: z.enum(["phantom", "unused", "healthy", "suspicious", "vulnerable"]),
         ecosystem: z.enum(["npm", "pypi"]).default("npm"),
         registryMetadata: z.record(z.string(), z.unknown()).nullable().optional(),
       }),
@@ -104,6 +105,7 @@ cliUploadRouter.post("/cli-scans", uploadLimiter, validateBody(uploadSchema), as
       grade: body.grade,
       counts: body.counts,
       source: "cli",
+      reviewStatus: "skipped",
     };
     const [scan] = await query<{ id: string }>(
       `INSERT INTO scan_jobs (repo_id, org_id, trigger, branch, commit_sha, status, progress, summary, completed_at)

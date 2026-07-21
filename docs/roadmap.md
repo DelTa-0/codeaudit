@@ -13,6 +13,170 @@ related:
 
 # Roadmap
 
+## Supply-chain + tech-debt expansion — CVE / typosquat / lockfile / hotspots (2026-07-21)
+
+Competitor research (Socket.dev, Snyk, CodeScene, SonarQube) surfaced four
+gaps that kept CodeAudit from being a credible "audit" rather than only a
+hallucination detector. All four shipped this session, layered onto the
+existing `DependencyVerdict → findings → score → PR-comment → badge` pipeline,
+and — critically — kept the shared `packages/engine/` LLM-free and heavy-dep-
+free so the CLI still bundles them (they're static/HTTP only).
+
+1. **Known-vulnerability (CVE) scanning** — new `packages/engine/src/vulns.ts`
+   queries the free, key-less [OSV.dev](https://osv.dev) batch API for every
+   resolved package, hydrates advisory severity, and attaches CVE/GHSA ids. New
+   `vulnerable` status on `DependencyVerdict`; `score.ts` penalizes per-package
+   by max severity (critical −20 … low −1, `unknown` −4). Runs in **both** the
+   worker and the CLI (unlike LLM review). Surfaced as a "Known vulnerabilities"
+   card in `ScanDetail.tsx` and a 🛡️ row + escalated recommendation in
+   `prComment.ts`. Verified live against real OSV: `lodash@4.17.4` +
+   `minimist@1.2.0` → both `vulnerable` (critical) with real GHSA ids, score 60(C).
+2. **Lockfile / transitive resolution** — new `packages/engine/src/lockfile.ts`
+   parses `package-lock.json` (v2/v3 + v1), `yarn.lock`, `poetry.lock`, and
+   pinned `requirements.txt` into a resolved tree (exact versions + which names
+   are pulled in transitively). Two payoffs: OSV matching uses exact versions
+   and now surfaces **transitive** CVEs (appended as `vulnerable` verdicts via
+   `applyVulnerabilities`), and a declared-but-unimported package that's
+   required transitively is no longer false-flagged `unused` (new optional
+   `transitivelyRequired` guard threaded into `checkDependencies` /
+   `checkPythonDependencies`). Best-effort: no lockfile → prior behavior.
+3. **Typosquat / slopsquat similarity** — new `packages/engine/src/typosquat.ts`
+   with a hand-rolled Damerau-Levenshtein (OSA) distance against curated
+   popular-package lists (`data/popular.ts`, ~130 npm + ~95 PyPI, kept as a TS
+   module so it compiles to dist/ and bundles into the esbuild CLI with no
+   asset-copy step). A distance-1 name escalates an otherwise-healthy package to
+   `suspicious` **unless** it's clearly established (≥100k downloads — keeps
+   legit near-neighbors like `preact`≈`react` from firing); distance-2 only
+   enriches an already-suspicious verdict. Renders "looks like `express` —
+   possible slopsquat" in the dep table.
+4. **Hotspot / churn intelligence** — `server/src/analysis/aiAuthorship.ts`
+   reuses its existing `git log --name-only` walk to rank files by change-
+   frequency × current size, tagged AI-vs-human (reusing `isAiFile`) and whether
+   they already carry a finding. New "Hotspots" card in `ScanDetail.tsx`. Stays
+   server-side (needs git history), best-effort/null-on-failure like the rest of
+   that module.
+
+Ground-truth suite extended 13 → 27 checks (typosquat, `coerceVersion`,
+lockfile parsing + transitive-required set) — all pass, zero regression on the
+original 13. Web production build + all four workspace typechecks clean; the
+standalone esbuild CLI bundle verified running against a vulnerable fixture.
+Env `XAI_*`→`GROQ_*` rename and Pipfile/conda/setup.py manifests still open.
+
+## The publish-gap regression recurred mid-session — 0.2.2 and 0.2.3 (2026-07-20/21)
+
+Immediately after shipping Phases 1–4 below, a live scan of an unrelated
+project (`pulsewatch`, a React+Express+Sequelize+BullMQ monitoring app)
+surfaced the identical failure mode this whole investigation was about:
+Phase 2's engine fixes (npm `NEVER_FLAG_UNUSED`, workspace awareness, JS
+same-file rescue) were committed to `packages/engine` but `cli/package.json`
+was never re-bumped or republished after 0.2.1. `codeaudit-scan` stayed at
+0.2.1 while `main` had already moved past it — the exact mistake this
+session's Phase 3 guard was built to prevent, recreated within the same
+session, because "fixed the code" and "shipped the fix" were still treated
+as separate steps.
+
+Two more real, previously-undiscovered false-positive classes turned up
+during that pulsewatch verification, fixed the same pass:
+- **Build-only CLI tools** (`typescript`, `tsx`, `esbuild`) — added to
+  `registry.ts`'s `NEVER_FLAG_UNUSED`.
+- **ORM peer drivers** (`pg`/`pg-hstore` behind Sequelize's
+  `dialect: "postgres"`, invisible to static analysis since Sequelize
+  `require`s them internally by string) — deliberately *not* blanket-
+  allowlisted like the others, since `pg` is also a package people import
+  directly; a genuinely-never-touched-Postgres "unused pg" finding would
+  still be real. Instead added a conditional `isImplicitOrmDriver()` check
+  in `registry.ts` that only exempts Sequelize's dialect-driver family
+  (`pg`, `mysql2`, `mariadb`, `tedious`, `sqlite3`, `oracledb`) when
+  `sequelize`/`sequelize-typescript` is itself genuinely declared or
+  imported. `@splinetool/runtime` (peer runtime required internally by
+  `@splinetool/react-spline`) got the same blanket-allowlist treatment as
+  the build tools, since it's narrow/specific enough to be low-risk.
+- **Compiled build output scanned as source**: `imports.ts`'s `SKIP_DIRS`
+  only exact-matched directory names (`dist`, `build`, `out`), missing a
+  differently-named build folder like `dist-server` — which caused a
+  literal duplicate dead-code candidate (`getFrom` flagged once in
+  `server/services/MailTransport.ts` and again in the compiled
+  `dist-server/server/services/MailTransport.js`). Generalized to a
+  `SKIP_DIR_PATTERN` matching `^(dist|build|out)(-|$)`.
+
+JS ground-truth suite extended 11 → 13 checks (`typescript`/`tsx` NOT
+unused, `pg` NOT unused specifically when `sequelize` is present).
+`codeaudit-scan` published as `0.2.2` then `0.2.3` (two publishes because the
+first didn't include the ORM-driver/build-output fixes discovered *during*
+verification of 0.2.2 itself). Pulsewatch score: 46.8(D) → 71.5(C) after
+0.2.2 → 89.5(B) after 0.2.3, with the 6 remaining dead-code candidates and 2
+remaining "unused" findings (`@google/genai`, `ioredis`) all independently
+confirmed as genuine (zero references anywhere in the codebase for each).
+
+**Lesson, stated plainly for next time**: an engine fix is not done when the
+code changes and tests pass — it is done when the published package reflects
+it. Bump-and-publish is not a follow-up step to schedule later; it's the
+last line of the same change.
+
+## Making CodeAudit Actually Useful — Phases 1–4 shipped (2026-07-20)
+
+Follow-up to the entry below: the `a2b9411` fix already existed in `main` but
+had never been republished — `codeaudit-scan@0.2.0` was published
+2026-07-20T14:31:27Z and `a2b9411` was committed 16 minutes later, so every
+real-world run since then (including an independent review of an unrelated
+FastAPI+Pydantic finance app that rediscovered the same false-positive
+classes) audited stale, already-fixed code. Full investigation and phased
+plan in [[known-issues#Fixed-in-`main` Python false positives never reached
+npm]]. Phases 1–4 shipped this session:
+
+1. **Published `codeaudit-scan@0.2.1`** — the existing fix is now live.
+   Re-verified against the scrapper repo: score 62(C) → 93.3(A),
+   `lxml`/`uvicorn`/`python-multipart`/`python-docx` no longer flagged
+   unused.
+2. **Closed the remaining live (not just unpublished) engine gaps**:
+   - `registry.ts` gained an npm `NEVER_FLAG_UNUSED` allowlist
+     (`concurrently`, `nodemon`, `cross-env`, `husky`, `tailwindcss`,
+     `postcss`, `autoprefixer`, plus `eslint-plugin-*`/`eslint-config-*`/
+     `@types/*` prefix matching) mirroring the Python-side allowlist.
+   - `registry.ts` gained workspace-member awareness
+     (`resolveWorkspaceMemberNames`, mirroring Python's
+     `collectLocalModuleNames`) — a workspace-linked dependency (e.g.
+     `@codeaudit/engine`) no longer 404s against the public registry and
+     gets misflagged phantom. `checkDependencies` signature gained a
+     leading `repoDir` param; all three call sites updated
+     (`cli/src/index.ts`, `server/src/worker.ts`,
+     `server/test/ground-truth.ts`).
+   - `deadcode.ts`'s same-file rescue (previously Python-only, via a
+     downgrade workaround in `python/imports.ts`) generalized to a
+     one-line shared fix: any symbol referenced within its own file is
+     alive regardless of `exported` status. Fixes the JS/TS analog of the
+     bug the Python analyzer already had fixed — an exported helper called
+     only within its own file is no longer misflagged dead.
+   - `llm.ts`/`score.ts`: unified the two silent, opposite LLM failure
+     modes. A failed batch now falls back to unfiltered static candidates
+     (matching the no-API-key path) instead of silently vanishing;
+     `reviewCandidatesWithLlm` returns `{ findings, reviewStatus: "full" |
+     "partial" | "skipped" }`, threaded into `ScanSummary` via
+     `computeSummary`'s new optional 4th param.
+   - JS ground-truth suite extended 7 → 11 checks (workspace member,
+     script-only devDependency, exported-same-file-only helper); Python
+     suite unchanged, still 16/16. Self-scan of the codeaudit repo itself
+     confirms `@codeaudit/engine` and `concurrently` no longer flagged
+     (remaining `react-toolkitz`/`@fixture/internal` phantoms are the
+     test fixtures under `server/test/fixture/` being swept into a
+     whole-repo scan — pre-existing, documented, out of scope here).
+3. **Publish can no longer silently drift from source**: `cli/package.json`
+   gained a `prepublishOnly` that runs both ground-truth suites via
+   `--prefix ../server` before any publish can proceed. Verified with
+   `npm publish --dry-run` — both suites ran and passed, tarball built.
+4. **Reverted the disabled billing gate** — see
+   [[decisions#~~Plan-limit gate temporarily disabled for testing~~ —
+   REVERTED (2026-07-20)]]. Real per-tier limits restored in
+   `services/plans.ts`; new `server/test/plan-limits.ts`
+   (`npm run test:plan-limits`, 7/7 passing) guards the free-tier boundary
+   against silently regressing again.
+
+**Not done this session** (Phases 5–8 of the same plan, need external
+accounts/infra decisions, not pure code changes): real Stripe test-mode
+verification, the GitHub OAuth email 403, GitHub App live verification,
+a real deployment target (Dockerfiles/hosting/TLS), CI/CD, email transport
+for invites, `XAI_*`→`GROQ_*` rename, monitoring/alerting.
+
 ## Python precision fixes from real-world review (2026-07-20)
 
 The user ran the published CLI against a real FastAPI/scraper project and
@@ -304,6 +468,32 @@ one actually contains.
 
 ## Immediate next steps (picking back up)
 
+0. **Publish `codeaudit-scan@0.2.1`** — see [[known-issues#Fixed-in-`main`
+   Python false positives never reached npm]]. The real-world-review fix
+   (`a2b9411`) has sat committed-but-unpublished since 2026-07-20; every
+   `npx codeaudit-scan scan` run since then (including a second independent
+   FastAPI+Pydantic review that rediscovered the same false-positive
+   classes) has been auditing stale registry code. This is higher priority
+   than any further engine work — there is no point fixing more false
+   positives if the fixes never ship. Concretely:
+   - [ ] Bump `cli/package.json` version (`0.2.0` → `0.2.1`)
+   - [ ] `npm publish` (explicit user go-ahead required)
+   - [ ] Re-run `npx codeaudit-scan@latest scan` against the scrapper repo
+     and confirm `lxml`/`uvicorn`/`python-multipart`/`python-docx` no
+     longer show as unused and the FastAPI-shaped dead-code candidates are
+     gone
+   - [ ] Add a lightweight release-drift guard so this can't silently
+     recur — e.g. a `postversion`/CI check that fails if `packages/engine`
+     has commits after the currently-published dist-tag's publish
+     timestamp, or simply fold "bump + publish" into the same commit as
+     any engine fix from now on instead of treating them as separable steps
+   - [ ] Audit whether the JS/TS analyzer (`imports.ts`/`deadcode.ts`) has
+     the equivalent gap: it has no same-file-exported-symbol rescue
+     (`python/imports.ts:188-192`'s downgrade logic was never mirrored for
+     JS) — an exported helper called only within its own file would still
+     be misflagged. Either port the same downgrade into the JS analyzer or,
+     better, move the rescue into the shared `deadcode.ts` filter so both
+     languages get it from one fix instead of two.
 1. **Finish debugging GitHub OAuth email 403** — see [[known-issues#GitHub OAuth email permission]]
 2. ~~Set up the ngrok tunnel and register the real webhook URL~~ — **DONE**: real push → webhook → scan confirmed working end-to-end. ~~Confirm pull_request → sticky PR comment~~ — **DONE**: opened a real PR (`DelTa-0/codeaudit#1`), webhook fired, scan ran with `pr_number` set, comment posted (`[pr-comment] posted on DelTa-0/codeaudit#1`). One gotcha hit along the way — see [[known-issues#Repo connected via URL paste has no linked installation → PR comment silently no-ops]]
 3. **Connect a real Stripe test-mode account** — set `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`/price IDs, run an actual test-mode checkout to confirm the full redirect + webhook flow (not just a signed fake payload). Currently moot for testing — plan limits are temporarily disabled, see [[decisions#Plan-limit gate temporarily disabled for testing]]

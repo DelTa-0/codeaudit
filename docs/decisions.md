@@ -14,17 +14,57 @@ related:
 
 # Decisions (ADR-style log)
 
-## Plan-limit gate temporarily disabled for testing
+## OSV.dev for CVE scanning; client-computed scores stay trusted (2026-07-21)
+
+When adding known-vulnerability scanning ([[roadmap#Supply-chain + tech-debt
+expansion — CVE / typosquat / lockfile / hotspots]]), chose **OSV.dev** over
+Snyk/GitHub Advisory API: it's free, needs no API key, covers npm + PyPI (+
+more) in one batch endpoint, and its two-step query (batch → hydrate by id)
+maps cleanly onto the existing `registry.ts` concurrency/timeout pattern. Kept
+CVE lookup in the shared engine (not the server) so the CLI runs it too —
+it's static/HTTP, unlike LLM review which stays server-only.
+
+Deliberately did **not** add a DB migration for vulnerabilities: advisory
+lists ride in the existing `dependency_findings.registry_metadata` JSONB, and
+the new `vulnerable` status reuses the un-constrained `status TEXT` column —
+zero schema change. The score penalty is per-package by *max* severity (not
+per-advisory) so a package with ten advisories doesn't tank the score ten
+times over.
+
+Typosquat detection is intentionally **annotate-not-invent**: it refines the
+existing `suspicious` status (adds `registryMetadata.typosquatOf`) rather than
+introducing a new status, and gates escalation behind a download-count
+"established package" check so popular real neighbors (`preact`≈`react`) never
+fire. Popular-package lists are a committed TS module, not a fetched list —
+offline, deterministic, and bundle-safe for the esbuild CLI.
+
+CLI-uploaded scores remain **trusted as-computed** (`routes/cliScans.ts`
+still stores `score`/`grade`/`counts` verbatim, no server recompute). The CVE
+and typosquat additions run identically in the CLI and the worker, so a CLI
+upload's numbers stay comparable to a hosted scan's for those categories; only
+LLM-verified dead-code still differs (already flagged via `reviewStatus`).
+
+## ~~Plan-limit gate temporarily disabled for testing~~ — REVERTED (2026-07-20)
 
 The user asked to "remove the strip[e] barrier for now" to exercise the
 product without hitting `402 Payment Required` walls. Rather than ripping out
 the plan/billing code, `services/plans.ts`'s `PLANS` table was changed so
 **every tier** (`free`/`pro`/`team`) gets team-level limits (unlimited repos,
-unlimited scans/day, webhook scans enabled) — the production limits are kept
+unlimited scans/day, webhook scans enabled) — the production limits were kept
 as a commented-out block in the same file for a one-line revert. Orgs still
-display their real plan name in the billing UI; only enforcement changed.
-Verified: toggling webhook auto-scan on a `free`-plan org, previously a
-402, now succeeds. See [[known-issues]] for when this should be reverted.
+displayed their real plan name in the billing UI; only enforcement changed.
+
+**Reverted** as Phase 4 of [[roadmap#Making CodeAudit Actually Useful]]: this
+had become a live regression rather than a deliberate testing state — real
+per-tier limits (`free`: 1 private/3 total repos, no webhook scans, 10
+scans/day; `pro`: 10/25, webhook scans on, 200/day; `team`: unlimited, 2000/day)
+are restored as the real exported `PLANS`. A regression test
+(`server/test/plan-limits.ts`, `npm run test:plan-limits`) now asserts the
+free tier is strictly more restrictive than pro/team, so this can't silently
+recur without a failing test. Verifying Stripe checkout/webhook flows against
+a real test-mode account (see [[known-issues#Stripe billing untested against
+real Stripe]]) is only meaningful now that there's a real gate to verify
+against.
 
 ## Scope expanded from MVP to full SaaS mid-plan
 

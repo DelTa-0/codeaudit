@@ -125,10 +125,21 @@ export function ScanDetail() {
       {scan.summary && (
         <Card className="flex items-center gap-6">
           <ScoreRing score={scan.summary.score} />
-          <div className="grid flex-1 grid-cols-2 gap-3 sm:grid-cols-5">
+          <div className="flex-1">
+            {scan.summary.reviewStatus && scan.summary.reviewStatus !== "full" && (
+              <p className="mb-3 rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning">
+                Static-only score — dead-code findings weren't verified by the LLM, so this score
+                is noisier than an LLM-verified scan.
+                {scan.summary.reviewStatus === "skipped"
+                  ? " Typical of CLI uploads run without a hosted scan."
+                  : " Some findings' LLM batch failed and fell back to unfiltered candidates."}
+              </p>
+            )}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             {(
               [
                 ["Phantom", scan.summary.counts.phantom, "text-danger"],
+                ["Vulnerable", scan.summary.counts.vulnerable ?? 0, "text-danger"],
                 ["Suspicious", scan.summary.counts.suspicious, "text-warning"],
                 ["Unused", scan.summary.counts.unused, "text-warning"],
                 ["Zombies", scan.summary.counts.zombies, "text-primary"],
@@ -140,6 +151,7 @@ export function ScanDetail() {
                 <p className="text-xs text-muted">{label}</p>
               </div>
             ))}
+            </div>
           </div>
         </Card>
       )}
@@ -180,6 +192,36 @@ export function ScanDetail() {
         </Card>
       )}
 
+      {scan.summary?.ai?.hotspots && scan.summary.ai.hotspots.length > 0 && (
+        <Card>
+          <p className="mb-1 text-sm font-medium text-muted">Hotspots</p>
+          <p className="mb-3 text-xs text-muted">
+            Files ranked by change frequency × size — where technical debt costs the most.
+            Flagged when they also carry a finding.
+          </p>
+          <div className="divide-y divide-border">
+            {scan.summary.ai.hotspots.map((h) => (
+              <div key={h.path} className="flex items-center gap-3 py-2">
+                <div className="h-1.5 w-24 shrink-0 overflow-hidden rounded-full bg-border">
+                  <div
+                    className="h-full rounded-full bg-primary"
+                    style={{ width: `${Math.max(4, h.score * 100)}%` }}
+                  />
+                </div>
+                <span className="flex-1 truncate font-mono text-xs" title={h.path}>
+                  {h.path}
+                </span>
+                {h.hasFinding && <Badge label="flagged" />}
+                <Badge label={h.ai ? "AI" : "human"} />
+                <span className="shrink-0 font-mono text-xs text-muted">
+                  {h.commits} commits · {h.lines} lines
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       {scan.status === "complete" &&
         repo?.autofix_enabled &&
         repo?.installation_id &&
@@ -213,6 +255,60 @@ export function ScanDetail() {
         )}
       {autofixMessage && <p className="text-sm text-muted">{autofixMessage}</p>}
 
+      {deps && (() => {
+        const vulnerable = deps.filter(
+          (d) => (d.registry_metadata?.vulnerabilities?.length ?? 0) > 0,
+        );
+        if (vulnerable.length === 0) return null;
+        const sevColor: Record<string, string> = {
+          critical: "text-danger",
+          high: "text-danger",
+          medium: "text-warning",
+          low: "text-muted",
+          unknown: "text-muted",
+        };
+        return (
+          <Card>
+            <p className="mb-3 text-sm font-medium text-muted">
+              Known vulnerabilities ({vulnerable.length})
+            </p>
+            <div className="divide-y divide-border">
+              {vulnerable.map((d) => (
+                <div key={d.id} className="py-3">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-sm">{d.package_name}</span>
+                    <span className="text-xs text-muted">{d.declared_version ?? ""}</span>
+                    <span
+                      className={`text-xs font-semibold uppercase ${sevColor[d.registry_metadata?.maxSeverity ?? "unknown"] ?? "text-muted"}`}
+                    >
+                      {d.registry_metadata?.maxSeverity ?? "unknown"}
+                    </span>
+                  </div>
+                  <ul className="mt-2 space-y-1">
+                    {d.registry_metadata!.vulnerabilities!.map((v) => (
+                      <li key={v.id} className="text-xs text-muted">
+                        <a
+                          href={v.url}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className={`font-mono ${sevColor[v.severity] ?? "text-muted"} hover:underline`}
+                        >
+                          {v.id}
+                        </a>
+                        {v.aliases.length > 0 && (
+                          <span className="ml-1 text-muted">({v.aliases.join(", ")})</span>
+                        )}
+                        {v.summary && <span className="ml-2">{v.summary}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </Card>
+        );
+      })()}
+
       {deps && (
         <Card>
           <p className="mb-3 text-sm font-medium text-muted">Dependencies ({deps.length})</p>
@@ -238,7 +334,17 @@ export function ScanDetail() {
                   <tbody className="divide-y divide-border">
                     {deps.map((d) => (
                       <tr key={d.id}>
-                        <td className="py-2 font-mono">{d.package_name}</td>
+                        <td className="py-2 font-mono">
+                          {d.package_name}
+                          {d.registry_metadata?.typosquatOf && (
+                            <span className="ml-2 font-sans text-xs text-warning">
+                              looks like <span className="font-mono">{d.registry_metadata.typosquatOf}</span> — possible slopsquat
+                            </span>
+                          )}
+                          {d.registry_metadata?.transitive && (
+                            <span className="ml-2 font-sans text-xs text-muted">(transitive)</span>
+                          )}
+                        </td>
                         {polyglot && (
                           <td className="py-2">
                             <Badge label={d.ecosystem} />

@@ -1,5 +1,6 @@
 import path from "node:path";
 import { fetchJson, type DependencyVerdict } from "../registry.js";
+import { checkTyposquat } from "../typosquat.js";
 import type { PythonManifest } from "./manifest.js";
 import { PYTHON_STDLIB } from "./stdlib.js";
 import { importNameToDistribution, normalizePyPiName } from "./aliases.js";
@@ -101,9 +102,11 @@ export async function checkPythonDependencies(
   repoDir: string,
   manifest: PythonManifest | null,
   importedNames: Set<string>,
+  options?: { transitivelyRequired?: Set<string> },
 ): Promise<DependencyVerdict[]> {
   const declared = manifest?.dependencies ?? {};
   const localModules = collectLocalModuleNames(repoDir);
+  const transitivelyRequired = options?.transitivelyRequired ?? new Set<string>();
 
   // Distribution name -> the import evidence that maps to it.
   const importedDistributions = new Map<string, string>();
@@ -129,7 +132,12 @@ export async function checkPythonDependencies(
         let status: DependencyVerdict["status"];
         if (!exists) {
           status = "phantom";
-        } else if (isDeclared && !isImported && !NEVER_FLAG_UNUSED.has(normalized)) {
+        } else if (
+          isDeclared &&
+          !isImported &&
+          !NEVER_FLAG_UNUSED.has(normalized) &&
+          !transitivelyRequired.has(normalized)
+        ) {
           status = "unused";
         } else {
           const monthly = (meta?.weeklyDownloads as number | null) ?? null;
@@ -139,12 +147,28 @@ export async function checkPythonDependencies(
           const veryNew = ageDays < SUSPICIOUS_AGE_DAYS;
           status = lowDownloads || veryNew ? "suspicious" : "healthy";
         }
+        // Typosquat/slopsquat check — see registry.ts for the distance/
+        // established-package policy. Downloads here are monthly (PyPI).
+        let registryMetadata = meta;
+        if (status !== "phantom") {
+          const monthlyDl = (meta?.weeklyDownloads as number | null) ?? null;
+          const established = monthlyDl !== null && monthlyDl >= 100_000;
+          const squat = checkTyposquat(normalized, "pypi");
+          if (squat && (status === "suspicious" || (squat.distance === 1 && !established))) {
+            status = "suspicious";
+            registryMetadata = {
+              ...(meta ?? {}),
+              typosquatOf: squat.suspectedTarget,
+              typosquatDistance: squat.distance,
+            };
+          }
+        }
         verdicts.push({
           packageName: normalized,
           declaredVersion,
           status,
           ecosystem: "pypi",
-          registryMetadata: meta,
+          registryMetadata,
         });
       } catch {
         verdicts.push({

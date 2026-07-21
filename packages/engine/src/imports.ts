@@ -9,7 +9,16 @@ const traverse = ((_traverse as unknown as { default?: unknown }).default ??
 
 const SOURCE_EXTENSIONS = new Set([".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"]);
 const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".git", ".next", "coverage", "out", "vendor"]);
+// Build-output directories don't always use the exact bare name (e.g. a
+// server bundled separately from a client build lands in "dist-server",
+// "build-client", etc.) — match the common prefix pattern too, not just the
+// bare-name set above.
+const SKIP_DIR_PATTERN = /^(dist|build|out)(-|$)/;
 const MAX_FILE_BYTES = 1024 * 1024;
+
+function shouldSkipDir(name: string): boolean {
+  return SKIP_DIRS.has(name) || SKIP_DIR_PATTERN.test(name);
+}
 
 export interface SymbolInfo {
   name: string;
@@ -40,7 +49,7 @@ export function listSourceFiles(repoDir: string): string[] {
     const current = stack.pop()!;
     for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
       if (entry.isDirectory()) {
-        if (!SKIP_DIRS.has(entry.name)) stack.push(path.join(current, entry.name));
+        if (!shouldSkipDir(entry.name)) stack.push(path.join(current, entry.name));
       } else if (entry.isFile() && SOURCE_EXTENSIONS.has(path.extname(entry.name))) {
         const full = path.join(current, entry.name);
         if (fs.statSync(full).size <= MAX_FILE_BYTES) files.push(full);

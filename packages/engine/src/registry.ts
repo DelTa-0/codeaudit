@@ -1,11 +1,14 @@
+import fs from "node:fs";
+import path from "node:path";
 import type { Manifest } from "./manifest.js";
+import { checkTyposquat } from "./typosquat.js";
 
 export type Ecosystem = "npm" | "pypi";
 
 export interface DependencyVerdict {
   packageName: string;
   declaredVersion: string | null;
-  status: "phantom" | "unused" | "healthy" | "suspicious";
+  status: "phantom" | "unused" | "healthy" | "suspicious" | "vulnerable";
   ecosystem: Ecosystem;
   registryMetadata: Record<string, unknown> | null;
 }
@@ -14,6 +17,55 @@ const cache = new Map<string, { exists: boolean; meta: Record<string, unknown> |
 const CONCURRENCY = 5;
 const SUSPICIOUS_WEEKLY_DOWNLOADS = 50;
 const SUSPICIOUS_AGE_DAYS = 90;
+
+/**
+ * Packages legitimately declared without ever being `import`/`require`d:
+ * invoked only from package.json scripts (concurrently, nodemon, cross-env,
+ * husky), config-file-only tooling (tailwindcss, postcss), CLI/compiler
+ * tools invoked via a script rather than imported (typescript, tsx,
+ * esbuild), or peer runtimes required internally by another package the app
+ * genuinely imports (pg/pg-hstore behind Sequelize's `dialect: "postgres"`,
+ * @splinetool/runtime behind @splinetool/react-spline) — confirmed against a
+ * real repo where all of these were false positives. Mirrors
+ * python/registry.ts's NEVER_FLAG_UNUSED for the same reason — never flag
+ * them unused.
+ */
+const NEVER_FLAG_UNUSED = new Set([
+  "concurrently",
+  "nodemon",
+  "cross-env",
+  "husky",
+  "tailwindcss",
+  "postcss",
+  "autoprefixer",
+  "typescript",
+  "tsx",
+  "esbuild",
+  "pg-hstore",
+  "@splinetool/runtime",
+]);
+
+/** Prefix families that are config-referenced, not imported, by convention. */
+const NEVER_FLAG_UNUSED_PREFIXES = ["eslint-plugin-", "eslint-config-", "@types/"];
+
+function isNeverFlagUnused(name: string): boolean {
+  if (NEVER_FLAG_UNUSED.has(name)) return true;
+  return NEVER_FLAG_UNUSED_PREFIXES.some((prefix) => name.startsWith(prefix));
+}
+
+/**
+ * Sequelize dialect drivers: Sequelize `require`s these internally based on
+ * a `dialect: "..."` string at runtime, never via a literal import/require
+ * the static analyzer can see. Only exempt them when Sequelize itself is
+ * genuinely present — unlike the always-invisible NEVER_FLAG_UNUSED set,
+ * "declared pg but never touched an ORM or Postgres at all" is still a
+ * legitimate unused finding.
+ */
+const SEQUELIZE_DIALECT_DRIVERS = new Set(["pg", "mysql2", "mariadb", "tedious", "sqlite3", "oracledb"]);
+
+function isImplicitOrmDriver(name: string, names: Set<string>): boolean {
+  return SEQUELIZE_DIALECT_DRIVERS.has(name) && (names.has("sequelize") || names.has("sequelize-typescript"));
+}
 
 export async function fetchJson(url: string): Promise<{ status: number; data: unknown }> {
   const res = await fetch(url, {
@@ -62,12 +114,64 @@ async function checkNpmPackage(name: string) {
   return result;
 }
 
+/**
+ * npm/yarn/pnpm workspace member package names (the "name" field of each
+ * workspace member's own package.json). A dependency that resolves to one
+ * of these is internally linked via a symlink, not the public registry —
+ * declared versions like "*" or "workspace:*" will 404 against
+ * registry.npmjs.org and must never be treated as phantom/unused evidence.
+ */
+function resolveWorkspaceMemberNames(repoDir: string): Set<string> {
+  const names = new Set<string>();
+  let rootPkg: { workspaces?: string[] | { packages?: string[] } } | null = null;
+  try {
+    rootPkg = JSON.parse(fs.readFileSync(path.join(repoDir, "package.json"), "utf8"));
+  } catch {
+    return names;
+  }
+  const patterns = Array.isArray(rootPkg?.workspaces)
+    ? rootPkg.workspaces
+    : (rootPkg?.workspaces?.packages ?? []);
+
+  const memberDirs: string[] = [];
+  for (const pattern of patterns) {
+    if (pattern.endsWith("/*")) {
+      const base = path.join(repoDir, pattern.slice(0, -2));
+      try {
+        for (const entry of fs.readdirSync(base, { withFileTypes: true })) {
+          if (entry.isDirectory()) memberDirs.push(path.join(base, entry.name));
+        }
+      } catch {
+        // pattern's parent dir doesn't exist — skip
+      }
+    } else {
+      memberDirs.push(path.join(repoDir, pattern));
+    }
+  }
+
+  for (const dir of memberDirs) {
+    try {
+      const pkg = JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8")) as {
+        name?: string;
+      };
+      if (pkg.name) names.add(pkg.name);
+    } catch {
+      // no package.json at this member path — skip
+    }
+  }
+  return names;
+}
+
 export async function checkDependencies(
+  repoDir: string,
   manifest: Manifest,
   importedPackages: Set<string>,
+  options?: { transitivelyRequired?: Set<string> },
 ): Promise<DependencyVerdict[]> {
   const declared = { ...manifest.devDependencies, ...manifest.dependencies };
   const names = new Set([...Object.keys(declared), ...importedPackages]);
+  const workspaceMembers = resolveWorkspaceMemberNames(repoDir);
+  const transitivelyRequired = options?.transitivelyRequired ?? new Set<string>();
   const verdicts: DependencyVerdict[] = [];
   const queue = [...names];
 
@@ -77,12 +181,27 @@ export async function checkDependencies(
       const declaredVersion = declared[name] ?? null;
       const isDeclared = name in declared;
       const isImported = importedPackages.has(name);
+      // A declared-but-unimported package that another dependency pulls in
+      // transitively isn't dead weight — don't flag it unused.
+      const neverUnused =
+        isNeverFlagUnused(name) || isImplicitOrmDriver(name, names) || transitivelyRequired.has(name);
+      if (workspaceMembers.has(name)) {
+        // Internally linked, not on the public registry — never phantom.
+        verdicts.push({
+          packageName: name,
+          declaredVersion,
+          status: isDeclared && !isImported && !neverUnused ? "unused" : "healthy",
+          ecosystem: "npm",
+          registryMetadata: { workspaceMember: true },
+        });
+        continue;
+      }
       try {
         const { exists, meta } = await checkNpmPackage(name);
         let status: DependencyVerdict["status"];
         if (!exists) {
           status = "phantom";
-        } else if (isDeclared && !isImported) {
+        } else if (isDeclared && !isImported && !neverUnused) {
           status = "unused";
         } else {
           const weekly = (meta?.weeklyDownloads as number | null) ?? null;
@@ -92,19 +211,38 @@ export async function checkDependencies(
           const veryNew = ageDays < SUSPICIOUS_AGE_DAYS;
           status = lowDownloads || veryNew ? "suspicious" : "healthy";
         }
+        // Typosquat/slopsquat check. A distance-1 name is escalated to
+        // suspicious unless the package is clearly established (high download
+        // count) — that guard keeps legit near-neighbors like `preact` (≈react)
+        // from being flagged. A distance-2 name only enriches an
+        // already-suspicious verdict.
+        let registryMetadata = meta;
+        if (status !== "phantom") {
+          const weeklyDl = (meta?.weeklyDownloads as number | null) ?? null;
+          const established = weeklyDl !== null && weeklyDl >= 100_000;
+          const squat = checkTyposquat(name, "npm");
+          if (squat && (status === "suspicious" || (squat.distance === 1 && !established))) {
+            status = "suspicious";
+            registryMetadata = {
+              ...(meta ?? {}),
+              typosquatOf: squat.suspectedTarget,
+              typosquatDistance: squat.distance,
+            };
+          }
+        }
         verdicts.push({
           packageName: name,
           declaredVersion,
           status,
           ecosystem: "npm",
-          registryMetadata: meta,
+          registryMetadata,
         });
       } catch (err) {
         // Registry unreachable — record as healthy-unknown rather than failing the scan.
         verdicts.push({
           packageName: name,
           declaredVersion,
-          status: isDeclared && !isImported ? "unused" : "healthy",
+          status: isDeclared && !isImported && !neverUnused ? "unused" : "healthy",
           ecosystem: "npm",
           registryMetadata: { error: "registry_unreachable" },
         });

@@ -14,6 +14,46 @@ related:
 
 # Known Issues
 
+## ~~Fixed-in-`main` Python false positives never reached npm~~ — RESOLVED (2026-07-20)
+
+`a2b9411` ("Fix Python analyzer false positives found by real-world FastAPI
+review") fixes exactly the false-positive classes documented in
+[[roadmap#Python precision fixes from real-world review (2026-07-20)]] —
+decorator-wired route handlers, same-file-only helpers, the `docx`→
+`python-docx` alias gap, and the `NEVER_FLAG_UNUSED` allowlist
+(`uvicorn`/`lxml`/`python-multipart`/etc). Ground-truth suite (16 checks) is
+green for all of it.
+
+**None of that fix is live for anyone running `npx codeaudit-scan scan`.**
+`npm view codeaudit-scan time --json` shows `0.2.0` published
+2026-07-20T14:31:27Z; `a2b9411` was committed 2026-07-20T14:47:32Z (UTC) —
+16 minutes *after* that publish, same version number, never bumped or
+republished since. `npx` always resolves the latest published dist-tag, so
+every real-world run since the fix landed (including a second independent
+review, of an unrelated FastAPI+Pydantic finance app, that rediscovered the
+identical four categories: decorator handlers, Pydantic
+inheritance/type-annotation refs, same-file helper calls, and
+kwarg-value/singleton-instantiation refs) has been auditing stale,
+already-fixed logic and reproducing bugs that don't exist in `main`.
+
+Two of the four categories that second review hit (Pydantic base-class/
+type-annotation references, and identifiers used only as kwarg values or
+singleton-instantiation targets) were never separately broken — the
+Python analyzer is a flat per-line identifier regex, not a call-graph, so
+any textual occurrence of a name already counts as a reference regardless
+of whether it's a call, a type annotation, a base class, or a kwarg value.
+They just needed the same-file-exported-symbol rescue (fixed same commit)
+to stop being miscategorized as "no reference at all."
+
+**Fixed**: `codeaudit-scan@0.2.1` published; re-verified against the scrapper
+repo (score 62(C) → 93.3(A)). The JS/TS analog of the same-file rescue bug
+(never actually broken for Python, only for JS/TS — see
+[[roadmap#Making CodeAudit Actually Useful — Phases 1–4 shipped
+(2026-07-20)]]) and the npm-side `NEVER_FLAG_UNUSED`/workspace-awareness gaps
+were fixed the same session. `cli/package.json`'s `prepublishOnly` now runs
+both ground-truth suites before any publish can proceed, so this specific
+"fix committed but never published" failure mode can't recur silently.
+
 ## GitHub OAuth email permission (active, unresolved)
 
 `POST /api/auth/github/callback` → `exchangeOauthCode()` calls

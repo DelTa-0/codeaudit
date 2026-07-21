@@ -75,13 +75,26 @@ function parseVerdicts(raw: string): LlmVerdict[] {
   }
 }
 
+/** Unfiltered fallback shape used both when no LLM is configured and when a batch's LLM call fails. */
+function unreviewedFallback(candidates: DeadCodeCandidate[], reasoning: string): ReviewedFinding[] {
+  return candidates.map((c) => ({
+    filePath: c.filePath,
+    lineStart: c.lineStart,
+    lineEnd: c.lineEnd,
+    symbolName: c.name,
+    findingType: c.findingType,
+    confidence: 0.5,
+    reasoning,
+  }));
+}
+
 async function reviewFileBatch(
   client: OpenAI,
   model: string,
   filePath: string,
   candidates: DeadCodeCandidate[],
   importExports: string[],
-): Promise<ReviewedFinding[]> {
+): Promise<{ findings: ReviewedFinding[]; failed: boolean }> {
   const candidateBlocks = candidates
     .map(
       (c) =>
@@ -114,7 +127,7 @@ ${candidateBlocks}`;
       const raw = completion.choices[0]?.message?.content ?? "";
       const verdicts = parseVerdicts(raw);
       const byName = new Map(candidates.map((c) => [c.name, c]));
-      return verdicts
+      const findings = verdicts
         .filter((v) => v.verdict === "dead_code" && byName.has(v.symbol_name))
         .map((v) => {
           const c = byName.get(v.symbol_name)!;
@@ -128,6 +141,7 @@ ${candidateBlocks}`;
             reasoning: String(v.reasoning ?? "").slice(0, 2000),
           };
         });
+      return { findings, failed: false };
     } catch (err) {
       lastError = err;
       const status = (err as { status?: number }).status;
@@ -139,31 +153,52 @@ ${candidateBlocks}`;
     }
   }
   console.error(`LLM review failed for ${filePath}:`, lastError);
-  return []; // a failed batch never fails the scan
+  // A failed batch never fails the scan, and must never silently vanish
+  // either — fall back to the unfiltered static candidates for this file,
+  // marked distinctly from both a real "alive" verdict and the
+  // no-API-key-configured skip reason.
+  return {
+    findings: unreviewedFallback(
+      candidates,
+      "LLM review failed for this batch — showing unfiltered static-analysis candidates.",
+    ),
+    failed: true,
+  };
+}
+
+export type ReviewStatus = "full" | "partial" | "skipped";
+
+export interface LlmReviewResult {
+  findings: ReviewedFinding[];
+  /** "full" = every batch got a real LLM verdict; "partial" = at least one
+   * batch's findings are unfiltered static candidates because its LLM call
+   * failed after retries; "skipped" = no LLM configured at all. */
+  reviewStatus: ReviewStatus;
 }
 
 /**
  * Batches candidates per file and reviews them with the LLM.
  * Without an API key configured, falls back to static-only findings
- * (confidence 0.5, reasoning notes the LLM was skipped).
+ * (confidence 0.5, reasoning notes the LLM was skipped) — `reviewStatus:
+ * "skipped"`. If some batches fail after retries, their findings fall back
+ * the same way but `reviewStatus: "partial"` distinguishes "not reviewed"
+ * from "reviewed and judged fine."
  */
 export async function reviewCandidatesWithLlm(
   candidates: DeadCodeCandidate[],
   analysis: Pick<RepoAnalysis, "fileImportExports">,
   llm?: LlmConfig,
-): Promise<ReviewedFinding[]> {
-  if (candidates.length === 0) return [];
+): Promise<LlmReviewResult> {
+  if (candidates.length === 0) return { findings: [], reviewStatus: "full" };
   const client = getClient(llm);
   if (!client) {
-    return candidates.map((c) => ({
-      filePath: c.filePath,
-      lineStart: c.lineStart,
-      lineEnd: c.lineEnd,
-      symbolName: c.name,
-      findingType: c.findingType,
-      confidence: 0.5,
-      reasoning: "Static analysis found no references. LLM review skipped (no API key configured).",
-    }));
+    return {
+      findings: unreviewedFallback(
+        candidates,
+        "Static analysis found no references. LLM review skipped (no API key configured).",
+      ),
+      reviewStatus: "skipped",
+    };
   }
 
   const byFile = new Map<string, DeadCodeCandidate[]>();
@@ -175,22 +210,24 @@ export async function reviewCandidatesWithLlm(
 
   const entries = [...byFile.entries()];
   const results: ReviewedFinding[] = [];
+  let anyFailed = false;
   const queue = [...entries];
 
   async function workerLoop() {
     while (queue.length) {
       const [filePath, fileCandidates] = queue.shift()!;
-      const reviewed = await reviewFileBatch(
+      const { findings, failed } = await reviewFileBatch(
         client!,
         llm!.model,
         filePath,
         fileCandidates,
         analysis.fileImportExports.get(filePath) ?? [],
       );
-      results.push(...reviewed);
+      if (failed) anyFailed = true;
+      results.push(...findings);
     }
   }
 
   await Promise.all(Array.from({ length: LLM_CONCURRENCY }, workerLoop));
-  return results;
+  return { findings: results, reviewStatus: anyFailed ? "partial" : "full" };
 }

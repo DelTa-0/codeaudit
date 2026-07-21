@@ -102,7 +102,15 @@ export function RepoDetail() {
                     {new Date(scan.created_at).toLocaleString()} · {scan.trigger}
                   </span>
                 </div>
-                <span className="font-mono text-sm">
+                <span className="flex items-center gap-2 font-mono text-sm">
+                  {scan.summary?.reviewStatus && scan.summary.reviewStatus !== "full" && (
+                    <span
+                      className="rounded border border-warning/40 px-1.5 py-0.5 font-sans text-[10px] uppercase tracking-wide text-warning"
+                      title="Dead-code findings are unfiltered static candidates — no LLM verdict was run, so this score is noisier than an LLM-verified scan."
+                    >
+                      static-only
+                    </span>
+                  )}
                   {scan.summary ? `${scan.summary.score} (${scan.summary.grade})` : scan.progress ?? ""}
                 </span>
               </Link>

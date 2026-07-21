@@ -27,8 +27,14 @@ import {
   parsePythonManifest,
   analyzePythonRepo,
   checkPythonDependencies,
+  checkVulnerabilities,
+  applyVulnerabilities,
+  collectVulnTargets,
+  resolveNpmTree,
+  resolvePythonTree,
   type DependencyVerdict,
   type DeadCodeCandidate,
+  type ResolvedTree,
 } from "@codeaudit/engine";
 import { reviewCandidatesWithLlm } from "@codeaudit/engine/llm";
 import { config } from "./lib/config.js";
@@ -93,12 +99,21 @@ async function processScanJob(scanJobId: string) {
     const mergedFileImportExports = new Map<string, string[]>();
     let fileCount = 0;
 
+    let npmTree: ResolvedTree | null = null;
+    let pyTree: ResolvedTree | null = null;
+
     if (ecosystems.includes("npm")) {
       const manifest = parseManifest(dir);
       const analysis = analyzeRepo(dir);
+      npmTree = resolveNpmTree(dir);
       fileCount += analysis.fileCount;
       await setStatus(scanJobId, "analyzing", "Verifying dependencies against the npm registry");
-      if (manifest) deps.push(...(await checkDependencies(manifest, analysis.importedPackages)));
+      if (manifest)
+        deps.push(
+          ...(await checkDependencies(dir, manifest, analysis.importedPackages, {
+            transitivelyRequired: npmTree?.transitivelyRequired,
+          })),
+        );
       allCandidates.push(...findDeadCodeCandidates(analysis));
       for (const [k, v] of analysis.fileImportExports) mergedFileImportExports.set(k, v);
     }
@@ -106,11 +121,28 @@ async function processScanJob(scanJobId: string) {
     if (ecosystems.includes("pypi")) {
       const pyManifest = parsePythonManifest(dir);
       const pyAnalysis = analyzePythonRepo(dir);
+      pyTree = resolvePythonTree(dir);
       fileCount += pyAnalysis.fileCount;
       await setStatus(scanJobId, "analyzing", "Verifying dependencies against the PyPI registry");
-      deps.push(...(await checkPythonDependencies(dir, pyManifest, pyAnalysis.importedPackages)));
+      deps.push(
+        ...(await checkPythonDependencies(dir, pyManifest, pyAnalysis.importedPackages, {
+          transitivelyRequired: pyTree?.transitivelyRequired,
+        })),
+      );
       allCandidates.push(...findDeadCodeCandidates(pyAnalysis));
       for (const [k, v] of pyAnalysis.fileImportExports) mergedFileImportExports.set(k, v);
+    }
+
+    // Known-vulnerability lookup (OSV) — exact lockfile versions where we have
+    // them (declared + transitive), coerced declared ranges otherwise. Attaches
+    // CVE advisories and upgrades/adds "vulnerable" verdicts. Never throws.
+    const vulnTargets = collectVulnTargets(deps, [
+      { ecosystem: "npm", tree: npmTree },
+      { ecosystem: "pypi", tree: pyTree },
+    ]);
+    if (vulnTargets.length) {
+      await setStatus(scanJobId, "analyzing", "Checking dependencies against the OSV vulnerability database");
+      applyVulnerabilities(deps, await checkVulnerabilities(vulnTargets));
     }
 
     for (const d of deps) {
@@ -130,7 +162,7 @@ async function processScanJob(scanJobId: string) {
     }
 
     await setStatus(scanJobId, "analyzing", "Reviewing dead-code candidates");
-    const zombies = await reviewCandidatesWithLlm(
+    const { findings: zombies, reviewStatus } = await reviewCandidatesWithLlm(
       allCandidates,
       { fileImportExports: mergedFileImportExports },
       config.llm.apiKey
@@ -159,7 +191,7 @@ async function processScanJob(scanJobId: string) {
     await setStatus(scanJobId, "analyzing", "Attributing AI-assisted code");
     const aiStats = await computeAiAuthorship(dir, zombies);
 
-    const summary = { ...computeSummary(deps, zombies, fileCount), ai: aiStats };
+    const summary = { ...computeSummary(deps, zombies, fileCount, reviewStatus), ai: aiStats };
     await query(
       `UPDATE scan_jobs SET status = 'complete', progress = 'Complete',
          summary = $2, completed_at = now() WHERE id = $1`,

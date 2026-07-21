@@ -14,9 +14,15 @@ import {
   parsePythonManifest,
   analyzePythonRepo,
   checkPythonDependencies,
+  checkVulnerabilities,
+  applyVulnerabilities,
+  collectVulnTargets,
+  resolveNpmTree,
+  resolvePythonTree,
   type DependencyVerdict,
   type DeadCodeCandidate,
   type ReviewedFinding,
+  type ResolvedTree,
 } from "@codeaudit/engine";
 
 const RESET = "\x1b[0m";
@@ -121,6 +127,7 @@ async function uploadResults(
 
 const statusColor: Record<string, string> = {
   phantom: RED,
+  vulnerable: RED,
   suspicious: YELLOW,
   unused: YELLOW,
   healthy: GREEN,
@@ -140,22 +147,44 @@ async function main() {
   const ecosystems = detectEcosystems(dir);
   const deps: DependencyVerdict[] = [];
   const candidates: DeadCodeCandidate[] = [];
+  let npmTree: ResolvedTree | null = null;
+  let pyTree: ResolvedTree | null = null;
   let fileCount = 0;
 
   if (ecosystems.includes("npm")) {
     const manifest = parseManifest(dir);
     const analysis = analyzeRepo(dir);
+    npmTree = resolveNpmTree(dir);
     fileCount += analysis.fileCount;
-    if (manifest) deps.push(...(await checkDependencies(manifest, analysis.importedPackages)));
+    if (manifest)
+      deps.push(
+        ...(await checkDependencies(dir, manifest, analysis.importedPackages, {
+          transitivelyRequired: npmTree?.transitivelyRequired,
+        })),
+      );
     candidates.push(...findDeadCodeCandidates(analysis));
   }
 
   if (ecosystems.includes("pypi")) {
     const pyManifest = parsePythonManifest(dir);
     const pyAnalysis = analyzePythonRepo(dir);
+    pyTree = resolvePythonTree(dir);
     fileCount += pyAnalysis.fileCount;
-    deps.push(...(await checkPythonDependencies(dir, pyManifest, pyAnalysis.importedPackages)));
+    deps.push(
+      ...(await checkPythonDependencies(dir, pyManifest, pyAnalysis.importedPackages, {
+        transitivelyRequired: pyTree?.transitivelyRequired,
+      })),
+    );
     candidates.push(...findDeadCodeCandidates(pyAnalysis));
+  }
+
+  // Known-vulnerability lookup (OSV) — static/HTTP, so the CLI runs it too.
+  const vulnTargets = collectVulnTargets(deps, [
+    { ecosystem: "npm", tree: npmTree },
+    { ecosystem: "pypi", tree: pyTree },
+  ]);
+  if (vulnTargets.length) {
+    applyVulnerabilities(deps, await checkVulnerabilities(vulnTargets));
   }
 
   const polyglot = ecosystems.length > 1;

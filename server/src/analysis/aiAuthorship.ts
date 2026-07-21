@@ -1,5 +1,21 @@
+import fs from "node:fs";
+import path from "node:path";
 import { simpleGit } from "simple-git";
 import type { ReviewedFinding } from "@codeaudit/engine";
+
+export interface HotspotFile {
+  path: string;
+  /** number of commits (within the window) that touched this file — churn */
+  commits: number;
+  /** current size in lines — a cheap complexity proxy */
+  lines: number;
+  /** normalized churn × size, 0-1 — higher = more debt-risky */
+  score: number;
+  /** majority AI-authored */
+  ai: boolean;
+  /** already carries a flagged finding (dead code, etc.) */
+  hasFinding: boolean;
+}
 
 export interface AiAuthorshipStats {
   aiCommits: number;
@@ -11,6 +27,63 @@ export interface AiAuthorshipStats {
   humanFindingDensity: number;
   aiFiles: number;
   humanFiles: number;
+  /** top change-frequency × size files, cross-referenced with AI authorship */
+  hotspots: HotspotFile[];
+}
+
+const HOTSPOT_LIMIT = 8;
+const LOCKFILE_BASENAMES = new Set([
+  "package-lock.json",
+  "yarn.lock",
+  "pnpm-lock.yaml",
+  "poetry.lock",
+  "Cargo.lock",
+  "composer.lock",
+]);
+
+/** Cheap line count for a repo file; 0 for missing/binary/oversized files. */
+function countLines(repoDir: string, file: string): number {
+  try {
+    const full = path.join(repoDir, file);
+    const stat = fs.statSync(full);
+    if (!stat.isFile() || stat.size > 2_000_000) return 0; // skip huge/generated
+    const buf = fs.readFileSync(full);
+    if (buf.includes(0)) return 0; // binary (contains a NUL byte)
+    return buf.toString("utf8").split("\n").length;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Rank files by churn (commit count) × current size — the "hotspot" heuristic:
+ * frequently-changed large files concentrate defect risk. Reuses the per-file
+ * commit counts already gathered for AI-authorship, so the only added cost is
+ * a line count per candidate file. Lockfiles and generated blobs are excluded.
+ */
+function computeHotspots(
+  repoDir: string,
+  fileCommits: Map<string, number>,
+  isAiFile: (path: string) => boolean,
+  findingFiles: Set<string>,
+): HotspotFile[] {
+  const rows: HotspotFile[] = [];
+  for (const [file, commits] of fileCommits) {
+    if (LOCKFILE_BASENAMES.has(path.basename(file))) continue;
+    const lines = countLines(repoDir, file);
+    if (lines === 0) continue; // gone, binary, or generated
+    rows.push({
+      path: file,
+      commits,
+      lines,
+      score: commits * lines, // normalized below
+      ai: isAiFile(file),
+      hasFinding: findingFiles.has(file),
+    });
+  }
+  const maxRaw = rows.reduce((m, r) => Math.max(m, r.score), 0) || 1;
+  for (const r of rows) r.score = Math.round((r.score / maxRaw) * 1000) / 1000;
+  return rows.sort((a, b) => b.score - a.score).slice(0, HOTSPOT_LIMIT);
 }
 
 const AI_TRAILER_GREP =
@@ -81,6 +154,11 @@ export async function computeAiAuthorship(
     const aiFindings = findings.filter((f) => isAiFile(f.filePath)).length;
     const humanFindings = findings.length - aiFindings;
 
+    const fileCommits = new Map<string, number>();
+    for (const [file, entry] of fileStats) fileCommits.set(file, entry.ai + entry.human);
+    const findingFiles = new Set(findings.map((f) => f.filePath));
+    const hotspots = computeHotspots(repoDir, fileCommits, isAiFile, findingFiles);
+
     return {
       aiCommits: aiHashes.size,
       totalCommits,
@@ -91,6 +169,7 @@ export async function computeAiAuthorship(
         : 0,
       aiFiles,
       humanFiles,
+      hotspots,
     };
   } catch (err) {
     console.error("AI authorship analysis failed (non-fatal):", err);
