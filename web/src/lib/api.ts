@@ -84,6 +84,9 @@ export interface AiAuthorshipStats {
   humanFindingDensity: number;
   aiFiles: number;
   humanFiles: number;
+  automationCommits?: number;
+  /** false when either bucket is too small for the comparison to mean anything */
+  comparable?: boolean;
   hotspots?: HotspotFile[];
 }
 

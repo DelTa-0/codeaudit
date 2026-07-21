@@ -27,9 +27,20 @@ export interface AiAuthorshipStats {
   humanFindingDensity: number;
   aiFiles: number;
   humanFiles: number;
+  /** dependency-bump/CI bot commits, excluded from both buckets (transparency) */
+  automationCommits: number;
+  /**
+   * Whether the AI-vs-human density comparison has enough files on both sides
+   * to mean anything. Below this the UI must not present a verdict — small
+   * buckets make the ratio pure noise.
+   */
+  comparable: boolean;
   /** top change-frequency × size files, cross-referenced with AI authorship */
   hotspots: HotspotFile[];
 }
+
+/** Minimum files in BOTH buckets before a density comparison is shown. */
+const MIN_FILES_FOR_COMPARISON = 5;
 
 const HOTSPOT_LIMIT = 8;
 const LOCKFILE_BASENAMES = new Set([
@@ -88,7 +99,17 @@ function computeHotspots(
 
 const AI_TRAILER_GREP =
   "co-authored-by: *(claude|github copilot|copilot|cursor|chatgpt|openai|devin|aider|gemini|windsurf)";
-const AI_AUTHOR = /(\[bot\]|copilot|devin-ai|dependabot|renovate|claude|cursor-agent|aider)/i;
+/**
+ * Authors whose commits are AI-*generated code*. Deliberately excludes
+ * dependency-bump automation (dependabot, renovate, greenkeeper): those are
+ * scripted version bumps, not generated code, and counting them inflated the
+ * "AI-touched" share while dragging manifests/lockfiles into the AI bucket.
+ * The generic `[bot]` catch-all is gone for the same reason — it swept up
+ * every CI/release bot indiscriminately.
+ */
+const AI_AUTHOR = /(copilot|devin-ai|claude|cursor-agent|aider|codex|windsurf)/i;
+/** Pure automation — tracked separately so it never counts as AI authorship. */
+const AUTOMATION_AUTHOR = /(dependabot|renovate|greenkeeper|semantic-release|github-actions)/i;
 const MAX_COMMITS = "500";
 
 /**
@@ -117,10 +138,19 @@ export async function computeAiAuthorship(
       .filter(Boolean)
       .map((line) => line.split("\x02"));
     const aiHashes = new Set(trailerHashes);
+    const automationHashes = new Set<string>();
     for (const [hash, name, email] of authors) {
-      if (AI_AUTHOR.test(`${name} ${email}`)) aiHashes.add(hash);
+      const who = `${name} ${email}`;
+      if (AUTOMATION_AUTHOR.test(who)) {
+        // Scripted dependency bumps etc. — never AI authorship, and excluded
+        // from the human baseline too so they don't skew either bucket.
+        automationHashes.add(hash);
+        aiHashes.delete(hash);
+        continue;
+      }
+      if (AI_AUTHOR.test(who)) aiHashes.add(hash);
     }
-    const totalCommits = authors.length;
+    const totalCommits = authors.length - automationHashes.size;
     if (totalCommits === 0) return null;
 
     // Files touched per commit.
@@ -130,6 +160,7 @@ export async function computeAiAuthorship(
       const lines = chunk.split("\n").map((l) => l.trim()).filter(Boolean);
       if (lines.length < 2) continue;
       const [hash, ...files] = lines;
+      if (automationHashes.has(hash)) continue; // bump bots skew neither bucket
       const isAi = aiHashes.has(hash);
       for (const file of files) {
         const entry = fileStats.get(file) ?? { ai: 0, human: 0 };
@@ -169,6 +200,8 @@ export async function computeAiAuthorship(
         : 0,
       aiFiles,
       humanFiles,
+      automationCommits: automationHashes.size,
+      comparable: aiFiles >= MIN_FILES_FOR_COMPARISON && humanFiles >= MIN_FILES_FOR_COMPARISON,
       hotspots,
     };
   } catch (err) {

@@ -6,6 +6,7 @@ import {
   type Repo,
   type DependencyFinding,
   type CodeFinding,
+  type AiAuthorshipStats,
 } from "../lib/api";
 import { Button, Card, Badge, EmptyState, Spinner, ScoreRing } from "../components/ui";
 
@@ -53,6 +54,140 @@ function ConfidenceBar({ value }: { value: number }) {
       </div>
       <span className="font-mono text-xs text-muted">{Math.round(value * 100)}%</span>
     </div>
+  );
+}
+
+/**
+ * AI-authorship card. Deliberately leads with an interpretation and a concrete
+ * next action rather than four raw numbers — the raw density split is easy to
+ * over-read (see the caveat below), so the numbers are demoted to context and
+ * the verdict is suppressed entirely when the sample is too small to mean
+ * anything.
+ */
+function AiAuthorshipCard({ ai }: { ai: AiAuthorshipStats }) {
+  const pct = Math.round(ai.shareOfFiles * 100);
+  const ratio = ai.humanFindingDensity > 0 ? ai.aiFindingDensity / ai.humanFindingDensity : null;
+
+  // Priority list: AI-touched, frequently changed, AND already flagged.
+  const hotspots = ai.hotspots ?? [];
+  const aiFlagged = hotspots.filter((h) => h.ai && h.hasFinding);
+  const anyFlagged = hotspots.filter((h) => h.hasFinding);
+  const actionable = aiFlagged.length > 0 ? aiFlagged : anyFlagged;
+
+  let verdict: { tone: string; headline: string; detail: string };
+  if (ai.aiCommits === 0) {
+    verdict = {
+      tone: "text-muted",
+      headline: "No AI-assisted commits detected",
+      detail:
+        "Nothing in this history carries an assistant Co-Authored-By trailer. If your team uses tools that don't write trailers (e.g. Copilot autocomplete), this will read zero regardless of actual usage — treat it as “unknown”, not “no AI”.",
+    };
+  } else if (ai.comparable === false) {
+    verdict = {
+      tone: "text-muted",
+      headline: "Too few files to compare",
+      detail: `${ai.aiFiles} AI-touched and ${ai.humanFiles} human-written files — too small a sample for a debt-density comparison to be meaningful. The file list below is still worth a look.`,
+    };
+  } else if (ai.aiFindingDensity === 0 && ai.humanFindingDensity === 0) {
+    verdict = {
+      tone: "text-success",
+      headline: "No dead code in either bucket",
+      detail: "Neither AI-touched nor human-written files carry dead-code findings in this scan.",
+    };
+  } else if (ratio === null) {
+    verdict = {
+      tone: "text-warning",
+      headline: "Only AI-touched files carry dead code",
+      detail:
+        "Human-written files show none. With small samples this flips easily between scans — watch the trend before drawing conclusions.",
+    };
+  } else if (ratio >= 1.5) {
+    verdict = {
+      tone: "text-warning",
+      headline: `AI-touched files carry ${ratio.toFixed(1)}× more dead code`,
+      detail: `${ai.aiFindingDensity} vs ${ai.humanFindingDensity} findings per 100 files. Worth investigating — but see the caveat below before concluding AI is the cause.`,
+    };
+  } else if (ratio === 0) {
+    verdict = {
+      tone: "text-success",
+      headline: "AI-touched files carry no dead code",
+      detail: `Human-written files show ${ai.humanFindingDensity} findings per 100 files; AI-touched files show none.`,
+    };
+  } else if (ratio <= 0.67) {
+    verdict = {
+      tone: "text-success",
+      headline: `AI-touched files carry ${(1 / ratio).toFixed(1)}× less dead code`,
+      detail: `${ai.aiFindingDensity} vs ${ai.humanFindingDensity} findings per 100 files. No debt signal against AI-assisted work here.`,
+    };
+  } else {
+    verdict = {
+      tone: "text-muted",
+      headline: "AI and human code carry comparable debt",
+      detail: `${ai.aiFindingDensity} vs ${ai.humanFindingDensity} findings per 100 files — no meaningful difference.`,
+    };
+  }
+
+  return (
+    <Card>
+      <p className="mb-3 text-sm font-medium text-muted">AI-assisted code</p>
+
+      <p className={`text-base font-semibold ${verdict.tone}`}>{verdict.headline}</p>
+      <p className="mt-1 text-sm text-muted">{verdict.detail}</p>
+
+      {actionable.length > 0 && (
+        <div className="mt-4 rounded-lg bg-surface-2 p-3">
+          <p className="text-xs font-medium">
+            {aiFlagged.length > 0 ? "Start here — AI-touched, high-churn, already flagged" : "Start here — high-churn files already flagged"}
+          </p>
+          <ul className="mt-2 space-y-1">
+            {actionable.slice(0, 5).map((h) => (
+              <li key={h.path} className="flex items-center gap-2 text-xs">
+                <span className="flex-1 truncate font-mono" title={h.path}>
+                  {h.path}
+                </span>
+                <span className="shrink-0 text-muted">
+                  {h.commits} commits · {h.lines} lines
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-muted">
+            These change often, are large, and contain findings — the highest return on a
+            cleanup. Check the findings below for each file before refactoring.
+          </p>
+        </div>
+      )}
+
+      <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 border-t border-border pt-3 text-xs text-muted">
+        <span>
+          <span className="font-mono text-foreground">{pct}%</span> of files AI-touched
+        </span>
+        <span>
+          <span className="font-mono text-foreground">
+            {ai.aiCommits}/{ai.totalCommits}
+          </span>{" "}
+          AI-assisted commits
+        </span>
+        <span>
+          <span className="font-mono text-foreground">{ai.aiFiles}</span> AI ·{" "}
+          <span className="font-mono text-foreground">{ai.humanFiles}</span> human files
+        </span>
+        {(ai.automationCommits ?? 0) > 0 && (
+          <span>
+            <span className="font-mono text-foreground">{ai.automationCommits}</span> bot commits
+            excluded
+          </span>
+        )}
+      </div>
+
+      <p className="mt-3 text-xs text-muted">
+        <span className="font-medium">How to read this:</span> attribution comes from
+        Co-Authored-By trailers and known assistant authors — it reflects commit metadata, not
+        an analysis of the code itself. AI also tends to be pointed at newer code, and newer
+        code naturally has more not-yet-cleaned-up dead code, so a higher AI density may reflect
+        code age rather than authorship. Use it to decide where to look, not to conclude a cause.
+      </p>
+    </Card>
   );
 }
 
@@ -157,39 +292,7 @@ export function ScanDetail() {
       )}
 
       {scan.summary?.ai && scan.summary.ai.totalCommits > 0 && (
-        <Card>
-          <p className="mb-3 text-sm font-medium text-muted">AI-assisted code</p>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div>
-              <p className="font-mono text-xl font-bold text-primary">
-                {Math.round(scan.summary.ai.shareOfFiles * 100)}%
-              </p>
-              <p className="text-xs text-muted">of files AI-touched</p>
-            </div>
-            <div>
-              <p className="font-mono text-xl font-bold">
-                {scan.summary.ai.aiCommits}/{scan.summary.ai.totalCommits}
-              </p>
-              <p className="text-xs text-muted">AI-assisted commits</p>
-            </div>
-            <div>
-              <p className="font-mono text-xl font-bold text-warning">
-                {scan.summary.ai.aiFindingDensity}
-              </p>
-              <p className="text-xs text-muted">findings /100 AI files</p>
-            </div>
-            <div>
-              <p className="font-mono text-xl font-bold text-success">
-                {scan.summary.ai.humanFindingDensity}
-              </p>
-              <p className="text-xs text-muted">findings /100 human files</p>
-            </div>
-          </div>
-          <p className="mt-2 text-xs text-muted">
-            Attribution heuristic: Co-Authored-By trailers and bot authors in the last 100
-            commits. Advisory only.
-          </p>
-        </Card>
+        <AiAuthorshipCard ai={scan.summary.ai} />
       )}
 
       {scan.summary?.ai?.hotspots && scan.summary.ai.hotspots.length > 0 && (

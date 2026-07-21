@@ -56,6 +56,30 @@ free so the CLI still bundles them (they're static/HTTP only).
    server-side (needs git history), best-effort/null-on-failure like the rest of
    that module.
 
+**Follow-up the same session — AI-authorship reworked from metric to decision
+aid.** Challenged (fairly) as "more of a gimmick than a useful feature". The
+critique held up on three counts: the label measured *commit metadata*, not
+code; `dependabot`/`renovate` counted as "AI" (inflating the share and dragging
+lockfiles into the AI bucket); and the AI-vs-human density comparison is
+confounded by **code age** — AI gets pointed at newer code, and newer code
+naturally carries more not-yet-cleaned-up dead code, so the split never
+isolated authorship as a cause. Sample sizes were also unguarded.
+
+Kept the genuinely useful part (the *intersection*: AI-touched **and**
+high-churn **and** already flagged) and fixed the rest:
+- `AI_AUTHOR` no longer matches dependency-bump/CI automation; new
+  `AUTOMATION_AUTHOR` bucket is excluded from **both** sides so it skews
+  neither, and surfaced as "N bot commits excluded". The generic `[bot]`
+  catch-all is gone.
+- New `comparable` flag (needs ≥5 files on both sides) lets the UI refuse to
+  render a verdict on noise.
+- `ScanDetail.tsx`'s card now leads with a plain-language verdict and a
+  "Start here" list of the AI-touched, high-churn, already-flagged files,
+  demotes the raw numbers to a context row, and carries a "How to read this"
+  footnote stating the metadata-not-code basis and the code-age confound
+  explicitly. Zero-AI-commits now reads as *unknown*, not *no AI* (trailer-less
+  tools like Copilot autocomplete are invisible to this heuristic).
+
 Ground-truth suite extended 13 → 27 checks (typosquat, `coerceVersion`,
 lockfile parsing + transitive-required set) — all pass, zero regression on the
 original 13. Web production build + all four workspace typechecks clean; the
