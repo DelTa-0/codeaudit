@@ -60,6 +60,41 @@ const checks: [string, boolean][] = [
   ["renderTag (called cross-file) NOT flagged", !candNames.has("renderTag")],
 ];
 
+// --- tsconfig path aliases are NOT npm packages (offline) ---
+// Real-world false positive: a Vite + shadcn/ui + TanStack repo reported
+// @/components, @/hooks and @/lib as phantom dependencies (-45 score) because
+// every "@…" specifier was treated as a scoped package. "@/" has an empty
+// scope and can never be a real package; custom aliases come from tsconfig.
+const aliasDir = fs.mkdtempSync(path.join(os.tmpdir(), "codeaudit-alias-"));
+fs.mkdirSync(path.join(aliasDir, "src"));
+fs.writeFileSync(
+  path.join(aliasDir, "tsconfig.json"),
+  `{
+  // tsconfig is conventionally JSONC — comments must not break parsing
+  "compilerOptions": { "paths": { "@/*": ["./src/*"], "~utils/*": ["./src/utils/*"] } },
+}`,
+);
+fs.writeFileSync(
+  path.join(aliasDir, "src", "main.tsx"),
+  `import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import helper from "~utils/helper";
+import ReactDOM from "react-dom/client";
+import { zodResolver } from "@hookform/resolvers/zod";
+export function App() { return <Button className={cn("x")} onClick={helper} />; }
+`,
+);
+const aliasAnalysis = analyzeRepo(aliasDir);
+fs.rmSync(aliasDir, { recursive: true, force: true });
+const imported = aliasAnalysis.importedPackages;
+checks.push(
+  ["@/components NOT treated as a package", !imported.has("@/components")],
+  ["@/lib NOT treated as a package", !imported.has("@/lib")],
+  ["custom tsconfig alias ~utils NOT treated as a package", !imported.has("~utils/helper") && !imported.has("~utils")],
+  ["react-dom/client still resolves to react-dom", imported.has("react-dom")],
+  ["@hookform/resolvers/zod still resolves to @hookform/resolvers", imported.has("@hookform/resolvers")],
+);
+
 // --- Typosquat detection (pure, deterministic) ---
 const squatExpress = checkTyposquat("expresss", "npm");
 const squatLodash = checkTyposquat("lodahs", "npm");

@@ -43,13 +43,43 @@ const NEVER_FLAG_UNUSED = new Set([
   "esbuild",
   "pg-hstore",
   "@splinetool/runtime",
+  // Linters/formatters: invoked as CLIs and configured by file, never imported.
+  "eslint",
+  "prettier",
+  // Bundlers/dev servers: referenced from a build config (which is often itself
+  // a thin wrapper package), not from application source. Confirmed against a
+  // real Vite + TanStack Start scaffold where all of these read as "unused"
+  // while removing any of them breaks the build.
+  "vite",
+  "vite-tsconfig-paths",
+  "nitro",
+  "vitest",
+  "rollup",
+  "webpack",
 ]);
 
-/** Prefix families that are config-referenced, not imported, by convention. */
-const NEVER_FLAG_UNUSED_PREFIXES = ["eslint-plugin-", "eslint-config-", "@types/"];
+/**
+ * Prefix families that are config-referenced, not imported, by convention.
+ * The bundler-plugin families matter because a project frequently declares
+ * plugins that only a wrapper config package ever imports.
+ */
+const NEVER_FLAG_UNUSED_PREFIXES = [
+  "eslint-plugin-",
+  "eslint-config-",
+  "@types/",
+  "vite-plugin-",
+  "@vitejs/",
+  "rollup-plugin-",
+  "babel-plugin-",
+  "@tailwindcss/",
+];
 
 function isNeverFlagUnused(name: string): boolean {
   if (NEVER_FLAG_UNUSED.has(name)) return true;
+  // A package named "…-plugin" is a build-tool plugin by near-universal
+  // convention (@tanstack/router-plugin, unplugin-*, etc.) — wired up in a
+  // bundler config, never imported by application source.
+  if (name.endsWith("-plugin")) return true;
   return NEVER_FLAG_UNUSED_PREFIXES.some((prefix) => name.startsWith(prefix));
 }
 
@@ -65,6 +95,25 @@ const SEQUELIZE_DIALECT_DRIVERS = new Set(["pg", "mysql2", "mariadb", "tedious",
 
 function isImplicitOrmDriver(name: string, names: Set<string>): boolean {
   return SEQUELIZE_DIALECT_DRIVERS.has(name) && (names.has("sequelize") || names.has("sequelize-typescript"));
+}
+
+/**
+ * Renderer/runtime peers that meta-frameworks import internally rather than
+ * the application importing them directly — a TanStack Start / Next / Remix
+ * app frequently never writes `import ... from "react-dom"` itself, yet
+ * removing it breaks the build. Conditional like the ORM drivers above rather
+ * than blanket-allowlisted: `react-dom` declared in a project with no React at
+ * all is still a genuine finding. The asymmetry justifies the exemption —
+ * wrongly advising "remove react-dom" breaks an app, while missing one truly
+ * unused copy costs 3 points.
+ */
+const FRAMEWORK_PEERS: Record<string, string[]> = {
+  "react-dom": ["react", "next", "@remix-run/react", "@tanstack/react-start"],
+  "react": ["next", "@tanstack/react-start"],
+};
+
+function isFrameworkPeer(name: string, names: Set<string>): boolean {
+  return (FRAMEWORK_PEERS[name] ?? []).some((required) => names.has(required));
 }
 
 export async function fetchJson(url: string): Promise<{ status: number; data: unknown }> {
@@ -184,7 +233,10 @@ export async function checkDependencies(
       // A declared-but-unimported package that another dependency pulls in
       // transitively isn't dead weight — don't flag it unused.
       const neverUnused =
-        isNeverFlagUnused(name) || isImplicitOrmDriver(name, names) || transitivelyRequired.has(name);
+        isNeverFlagUnused(name) ||
+        isImplicitOrmDriver(name, names) ||
+        isFrameworkPeer(name, names) ||
+        transitivelyRequired.has(name);
       if (workspaceMembers.has(name)) {
         // Internally linked, not on the public registry — never phantom.
         verdicts.push({

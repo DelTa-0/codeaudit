@@ -59,10 +59,62 @@ export function listSourceFiles(repoDir: string): string[] {
   return files;
 }
 
-function packageNameFromSpecifier(spec: string): string | null {
+/**
+ * Path-alias prefixes declared in tsconfig/jsconfig `compilerOptions.paths`
+ * (e.g. `"@/*": ["./src/*"]`). These look exactly like bare package specifiers
+ * but resolve to files inside the repo — treating them as npm packages makes
+ * every aliased import a phantom dependency. Best-effort: comments and
+ * trailing commas are stripped since tsconfig is conventionally JSONC.
+ */
+function readPathAliasPrefixes(repoDir: string): string[] {
+  const prefixes: string[] = [];
+  for (const name of ["tsconfig.json", "jsconfig.json"]) {
+    let raw: string;
+    try {
+      raw = fs.readFileSync(path.join(repoDir, name), "utf8");
+    } catch {
+      continue;
+    }
+    try {
+      const stripped = raw
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/(^|[^:"'\\])\/\/.*$/gm, "$1")
+        .replace(/,(\s*[}\]])/g, "$1");
+      const doc = JSON.parse(stripped) as {
+        compilerOptions?: { paths?: Record<string, unknown> };
+      };
+      for (const key of Object.keys(doc.compilerOptions?.paths ?? {})) {
+        // "@/*" -> "@/", "~/*" -> "~/", "@app/*" -> "@app/", "utils" -> "utils"
+        prefixes.push(key.endsWith("/*") ? key.slice(0, -1) : key);
+      }
+    } catch {
+      // Unparseable config — fall back to the built-in prefixes below.
+    }
+  }
+  return prefixes;
+}
+
+/**
+ * Aliases so conventional they're worth rejecting even when tsconfig can't be
+ * read: `@/…` and `~/…` are the dominant "src root" conventions (Next.js,
+ * Vite, shadcn/ui), and `#…` is Node's own package-internal imports field.
+ * Note `@/` is not a valid scoped package anyway — its scope is empty.
+ */
+const COMMON_ALIAS_PREFIXES = ["@/", "~/", "#"];
+
+function packageNameFromSpecifier(spec: string, aliasPrefixes: string[] = []): string | null {
   if (spec.startsWith(".") || spec.startsWith("/") || spec.startsWith("node:")) return null;
+  for (const prefix of COMMON_ALIAS_PREFIXES) if (spec.startsWith(prefix)) return null;
+  for (const prefix of aliasPrefixes) {
+    if (prefix.endsWith("/") ? spec.startsWith(prefix) : spec === prefix) return null;
+  }
   const parts = spec.split("/");
-  return spec.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0];
+  if (spec.startsWith("@")) {
+    // A real scoped package is @scope/name — both segments must be non-empty.
+    if (parts.length < 2 || !parts[0].slice(1) || !parts[1]) return null;
+    return parts.slice(0, 2).join("/");
+  }
+  return parts[0];
 }
 
 export function analyzeRepo(repoDir: string): RepoAnalysis {
@@ -71,6 +123,7 @@ export function analyzeRepo(repoDir: string): RepoAnalysis {
   const references = new Map<string, Set<string>>();
   const fileImportExports = new Map<string, string[]>();
   const files = listSourceFiles(repoDir);
+  const aliasPrefixes = readPathAliasPrefixes(repoDir);
 
   for (const file of files) {
     const rel = path.relative(repoDir, file).split(path.sep).join("/");
@@ -118,7 +171,7 @@ export function analyzeRepo(repoDir: string): RepoAnalysis {
 
     traverse(ast, {
       ImportDeclaration(p) {
-        const pkg = packageNameFromSpecifier(p.node.source.value);
+        const pkg = packageNameFromSpecifier(p.node.source.value, aliasPrefixes);
         if (pkg) importedPackages.add(pkg);
         importExportLines.push(lines[p.node.loc!.start.line - 1]?.trim() ?? "");
       },
@@ -129,11 +182,11 @@ export function analyzeRepo(repoDir: string): RepoAnalysis {
           callee.name === "require" &&
           p.node.arguments[0]?.type === "StringLiteral"
         ) {
-          const pkg = packageNameFromSpecifier(p.node.arguments[0].value);
+          const pkg = packageNameFromSpecifier(p.node.arguments[0].value, aliasPrefixes);
           if (pkg) importedPackages.add(pkg);
         }
         if (callee.type === "Import" && p.node.arguments[0]?.type === "StringLiteral") {
-          const pkg = packageNameFromSpecifier(p.node.arguments[0].value);
+          const pkg = packageNameFromSpecifier(p.node.arguments[0].value, aliasPrefixes);
           if (pkg) importedPackages.add(pkg);
         }
       },

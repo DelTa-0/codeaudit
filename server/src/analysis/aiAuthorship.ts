@@ -47,10 +47,22 @@ const LOCKFILE_BASENAMES = new Set([
   "package-lock.json",
   "yarn.lock",
   "pnpm-lock.yaml",
+  "bun.lock",
+  "bun.lockb",
   "poetry.lock",
   "Cargo.lock",
   "composer.lock",
+  "Gemfile.lock",
+  "go.sum",
 ]);
+
+/**
+ * Generated/derived files. They can show high churn (codegen reruns on every
+ * route or schema change) and large size, which lands them at the top of a
+ * churn × size ranking — but "refactor this" is meaningless advice for a file
+ * a tool rewrites. Caught in the wild: TanStack Router's `routeTree.gen.ts`.
+ */
+const GENERATED_FILE_PATTERN = /(\.gen\.[jt]sx?$|\.generated\.|\.min\.js$|^dist\/|\/dist\/)/;
 
 /** Cheap line count for a repo file; 0 for missing/binary/oversized files. */
 function countLines(repoDir: string, file: string): number {
@@ -81,6 +93,7 @@ function computeHotspots(
   const rows: HotspotFile[] = [];
   for (const [file, commits] of fileCommits) {
     if (LOCKFILE_BASENAMES.has(path.basename(file))) continue;
+    if (GENERATED_FILE_PATTERN.test(file)) continue;
     const lines = countLines(repoDir, file);
     if (lines === 0) continue; // gone, binary, or generated
     rows.push({
