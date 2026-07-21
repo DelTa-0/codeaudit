@@ -14,6 +14,46 @@ related:
 
 # Known Issues
 
+## ~~Fixed-in-`main` Python false positives never reached npm~~ — RESOLVED (2026-07-20)
+
+`a2b9411` ("Fix Python analyzer false positives found by real-world FastAPI
+review") fixes exactly the false-positive classes documented in
+[[roadmap#Python precision fixes from real-world review (2026-07-20)]] —
+decorator-wired route handlers, same-file-only helpers, the `docx`→
+`python-docx` alias gap, and the `NEVER_FLAG_UNUSED` allowlist
+(`uvicorn`/`lxml`/`python-multipart`/etc). Ground-truth suite (16 checks) is
+green for all of it.
+
+**None of that fix is live for anyone running `npx codeaudit-scan scan`.**
+`npm view codeaudit-scan time --json` shows `0.2.0` published
+2026-07-20T14:31:27Z; `a2b9411` was committed 2026-07-20T14:47:32Z (UTC) —
+16 minutes *after* that publish, same version number, never bumped or
+republished since. `npx` always resolves the latest published dist-tag, so
+every real-world run since the fix landed (including a second independent
+review, of an unrelated FastAPI+Pydantic finance app, that rediscovered the
+identical four categories: decorator handlers, Pydantic
+inheritance/type-annotation refs, same-file helper calls, and
+kwarg-value/singleton-instantiation refs) has been auditing stale,
+already-fixed logic and reproducing bugs that don't exist in `main`.
+
+Two of the four categories that second review hit (Pydantic base-class/
+type-annotation references, and identifiers used only as kwarg values or
+singleton-instantiation targets) were never separately broken — the
+Python analyzer is a flat per-line identifier regex, not a call-graph, so
+any textual occurrence of a name already counts as a reference regardless
+of whether it's a call, a type annotation, a base class, or a kwarg value.
+They just needed the same-file-exported-symbol rescue (fixed same commit)
+to stop being miscategorized as "no reference at all."
+
+**Fixed**: `codeaudit-scan@0.2.1` published; re-verified against the scrapper
+repo (score 62(C) → 93.3(A)). The JS/TS analog of the same-file rescue bug
+(never actually broken for Python, only for JS/TS — see
+[[roadmap#Making CodeAudit Actually Useful — Phases 1–4 shipped
+(2026-07-20)]]) and the npm-side `NEVER_FLAG_UNUSED`/workspace-awareness gaps
+were fixed the same session. `cli/package.json`'s `prepublishOnly` now runs
+both ground-truth suites before any publish can proceed, so this specific
+"fix committed but never published" failure mode can't recur silently.
+
 ## GitHub OAuth email permission (active, unresolved)
 
 `POST /api/auth/github/callback` → `exchangeOauthCode()` calls
@@ -63,6 +103,40 @@ ran end-to-end, and results rendered correctly in the dashboard (score 82,
 UI loop is now confirmed working with real GitHub-originated traffic, not
 just hand-signed fake payloads. Note: free-tier ngrok URLs change on every
 tunnel restart, so the Webhook URL needs re-registering each time.
+
+## ~~Repo connected via URL paste has no linked installation~~ — FIXED
+
+Repos connected through the plain "paste a github.com URL" flow
+(`POST /orgs/:orgId/repos`, [[features/m2-scan-engine]]) get `installation_id
+= NULL` — that flow doesn't go through the GitHub App picker
+(`POST /orgs/:orgId/github-repos`) which is what actually links a
+`github_installations` row. `queue/prComment.ts`'s `processPrCommentJob()`
+checks `if (!repo?.installation_id) return;` and exits silently by design —
+no error, no log line, just nothing happens. This meant the first real PR
+test (`pull_request` webhook → scan completed with `pr_number` set) produced
+no comment, with nothing in the logs to explain why.
+
+**Fixed by manually linking the installation**: looked up the real
+installation ID via the GitHub API (`GET /app/installations` using the App
+JWT, filtered by `account.login`), inserted a `github_installations` row for
+the org, and pointed the `repositories.installation_id` at it directly in
+Postgres. After that, a second PR push correctly produced
+`[pr-comment] posted on DelTa-0/codeaudit#1`.
+
+**Root-caused and fixed**: `routes/repos.ts`'s `POST /orgs/:orgId/repos`
+(URL-paste flow) now calls a new `findInstallationMatch(orgId, fullName)`
+helper before inserting — it lists every `github_installations` row for the
+org, calls `listInstallationRepos()` for each, and if the target repo shows
+up in any of them, links `installation_id` + `github_repo_id` +
+`private`/`default_branch` on insert instead of leaving them null. Degrades
+gracefully to the old unlinked behavior if the org has no installation yet
+(e.g. hasn't installed the GitHub App at all) or a stale/revoked installation
+lookup fails.
+
+Verified: connected `DelTa-0/InfoAi-ARB` via the plain URL-paste endpoint for
+an org that already had installation `147130657` linked — the new
+`repositories` row came back with `installation_id` and `github_repo_id`
+populated automatically, no manual DB patch needed this time.
 
 ## `git push` blocked by auto-mode; remote add succeeded
 

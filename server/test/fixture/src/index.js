@@ -1,9 +1,10 @@
 import { formatMoney } from "react-toolkitz";
 import _ from "lodash";
-import { helper } from "./utils.js";
+import { internalUtil } from "@fixture/internal";
+import { helper, renderTag } from "./utils.js";
 
 export function main() {
-  console.log(_.capitalize(helper()), formatMoney(42));
+  console.log(_.capitalize(helper()), formatMoney(42), internalUtil(), renderTag("x"));
 }
 
 main();

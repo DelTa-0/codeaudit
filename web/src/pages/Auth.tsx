@@ -3,6 +3,8 @@ import { useNavigate, Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { Button, Input, Card } from "../components/ui";
+import { ThemeToggle } from "../components/ThemeToggle";
+import { LogoMark } from "../components/Logo";
 
 export function AuthPage({ mode }: { mode: "login" | "register" }) {
   const [email, setEmail] = useState("");
@@ -18,7 +20,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
     const match = window.location.hash.match(/token=([^&]+)/);
     if (match) {
       window.history.replaceState(null, "", window.location.pathname);
-      void login(match[1]).then(() => navigate("/"));
+      void login(match[1]).then(() => navigate("/dashboard"));
     }
   }, []);
 
@@ -30,7 +32,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
       const body = mode === "register" ? { email, password, name: name || undefined } : { email, password };
       const data = await api<{ token: string }>(`/api/auth/${mode}`, { method: "POST", body });
       await login(data.token);
-      navigate("/");
+      navigate("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -39,11 +41,26 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
+    <div className="relative flex min-h-screen items-center justify-center px-4">
+      <Link
+        to="/"
+        className="absolute left-4 top-4 flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-sm text-muted transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M19 12H5M12 19l-7-7 7-7" />
+        </svg>
+        Back to site
+      </Link>
+      <div className="absolute right-4 top-4">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-sm">
         <div className="mb-6 text-center">
-          <div className="font-mono text-lg font-semibold tracking-tight">
-            <span className="text-primary">◆</span> CodeAudit
+          <div className="flex items-center justify-center gap-2 font-mono text-lg font-semibold tracking-tight">
+            <span className="text-primary">
+              <LogoMark size={22} />
+            </span>
+            CodeAudit
           </div>
           <p className="mt-1 text-sm text-muted">AI technical debt intelligence</p>
         </div>

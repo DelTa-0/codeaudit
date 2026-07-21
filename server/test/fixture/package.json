@@ -1,9 +1,17 @@
 {
   "name": "ground-truth-fixture",
   "version": "1.0.0",
+  "workspaces": ["fixture-pkg"],
   "dependencies": {
     "react-toolkitz": "^2.1.0",
     "lodash": "^4.17.21",
-    "date-fns": "^4.1.0"
+    "date-fns": "^4.1.0",
+    "@fixture/internal": "*",
+    "sequelize": "^6.37.0",
+    "pg": "^8.11.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0",
+    "typescript": "^5.7.0"
   }
 }

@@ -1,42 +1,53 @@
-import { Link, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
+import { ThemeToggle } from "./ThemeToggle";
+import { Avatar } from "./ui";
+import { LogoMark } from "./Logo";
 
 export function Layout() {
   const { user, orgs, logout } = useAuth();
   const navigate = useNavigate();
   const org = orgs[0];
 
+  const navLinkClass = ({ isActive }: { isActive: boolean }) =>
+    `rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+      isActive ? "bg-ink text-ink-foreground" : "text-muted hover:text-foreground"
+    }`;
+
   return (
-    <div className="min-h-screen">
-      <header className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
+    <div className="min-h-screen bg-background">
+      <div className="mx-auto max-w-6xl px-4 pt-4">
+        <header className="flex items-center justify-between rounded-2xl border border-border bg-surface px-4 py-2.5 shadow-soft">
           <div className="flex items-center gap-6">
-            <Link to="/" className="font-mono text-sm font-semibold tracking-tight">
-              <span className="text-primary">◆</span> CodeAudit
+            <Link to="/dashboard" className="flex items-center gap-2 font-mono text-sm font-semibold tracking-tight">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-white">
+                <LogoMark size={18} />
+              </span>
+              CodeAudit
             </Link>
             {org && (
-              <nav className="flex items-center gap-4 text-sm text-muted">
-                <Link className="hover:text-foreground" to="/">
+              <nav className="flex items-center gap-1">
+                <NavLink className={navLinkClass} to="/dashboard" end>
                   Repositories
-                </Link>
-                <Link className="hover:text-foreground" to={`/orgs/${org.id}/members`}>
+                </NavLink>
+                <NavLink className={navLinkClass} to={`/orgs/${org.id}/members`}>
                   Members
-                </Link>
-                <Link className="hover:text-foreground" to={`/orgs/${org.id}/billing`}>
+                </NavLink>
+                <NavLink className={navLinkClass} to={`/orgs/${org.id}/billing`}>
                   Billing
-                </Link>
+                </NavLink>
               </nav>
             )}
           </div>
-          <div className="flex items-center gap-3 text-sm">
+          <div className="flex items-center gap-3">
             {org && (
-              <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted">
+              <span className="hidden rounded-full bg-surface-2 px-3 py-1 text-xs font-medium text-muted sm:inline">
                 {org.name} · {org.plan}
               </span>
             )}
-            <span className="text-muted">{user?.email}</span>
+            <ThemeToggle />
             <button
-              className="text-muted hover:text-foreground"
+              className="cursor-pointer rounded-full border border-border px-3 py-1.5 text-sm text-muted transition-colors hover:bg-surface-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
               onClick={() => {
                 logout();
                 navigate("/login");
@@ -44,9 +55,10 @@ export function Layout() {
             >
               Sign out
             </button>
+            {user && <Avatar label={user.email} size={36} />}
           </div>
-        </div>
-      </header>
+        </header>
+      </div>
       <main className="mx-auto max-w-6xl px-4 py-8">
         <Outlet />
       </main>

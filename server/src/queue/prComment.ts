@@ -1,6 +1,6 @@
 import { queryOne } from "../db/pool.js";
 import { upsertPrComment, githubConfigured } from "../services/github.js";
-import type { ScanSummary } from "../analysis/score.js";
+import type { ScanSummary } from "@codeaudit/engine";
 
 export async function processPrCommentJob(scanJobId: string) {
   if (!githubConfigured()) return;
@@ -31,9 +31,10 @@ export async function processPrCommentJob(scanJobId: string) {
   const s = scan.summary;
   const delta = prev ? (s.score - Number(prev.score)).toFixed(1) : null;
   const deltaText = delta === null ? "" : Number(delta) >= 0 ? ` (+${delta})` : ` (${delta})`;
+  const vulnerable = s.counts.vulnerable ?? 0;
   const recommendation =
-    s.counts.phantom > 0
-      ? "🔴 **Request changes** — phantom dependencies must be removed before merge."
+    s.counts.phantom > 0 || vulnerable > 0
+      ? "🔴 **Request changes** — phantom dependencies and/or known vulnerabilities must be resolved before merge."
       : s.score < 60
         ? "🟡 **Review recommended** — health score below threshold."
         : "🟢 **Looks good** from a debt perspective.";
@@ -45,6 +46,7 @@ export async function processPrCommentJob(scanJobId: string) {
 | Finding | Count |
 | --- | --- |
 | 🚨 Phantom dependencies | ${s.counts.phantom} |
+| 🛡️ Known vulnerabilities | ${vulnerable} |
 | ⚠️ Suspicious packages | ${s.counts.suspicious} |
 | 📦 Unused dependencies | ${s.counts.unused} |
 | 🧟 Zombie code | ${s.counts.zombies} |

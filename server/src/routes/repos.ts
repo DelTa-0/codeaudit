@@ -7,6 +7,32 @@ import { conflict, notFound } from "../lib/errors.js";
 import { parseRepoUrl } from "../lib/repoUrl.js";
 import { assertCanAddRepo } from "../services/plans.js";
 import { logAudit } from "../services/audit.js";
+import { githubConfigured, listInstallationRepos } from "../services/github.js";
+
+/**
+ * Repos can be connected either by pasting a URL (this file) or via the
+ * GitHub App repo picker (routes/github.ts). If the org already has an App
+ * installation that covers this repo, link it here too — otherwise PR
+ * comments and private cloning silently have nothing to work with even
+ * though the org is already set up for it.
+ */
+async function findInstallationMatch(orgId: string, fullName: string) {
+  if (!githubConfigured()) return null;
+  const installations = await query<{ id: string; installation_id: string }>(
+    "SELECT id, installation_id FROM github_installations WHERE org_id = $1",
+    [orgId],
+  );
+  for (const inst of installations) {
+    try {
+      const repos = await listInstallationRepos(Number(inst.installation_id));
+      const match = repos.find((r) => r.fullName.toLowerCase() === fullName.toLowerCase());
+      if (match) return { installationRowId: inst.id, match };
+    } catch (err) {
+      console.error(`installation ${inst.installation_id} lookup failed, skipping`, err);
+    }
+  }
+  return null;
+}
 
 export const reposRouter = Router();
 reposRouter.use(requireAuth);
@@ -42,13 +68,23 @@ reposRouter.post(
         [req.params.orgId, fullName],
       );
       if (existing) throw conflict("Repository is already connected");
+      const linked = await findInstallationMatch(req.params.orgId, fullName);
       const [repo] = await query(
-        `INSERT INTO repositories (org_id, full_name, private)
-         VALUES ($1, $2, false)
+        `INSERT INTO repositories (org_id, installation_id, github_repo_id, full_name, private, default_branch)
+         VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING id, full_name, private, default_branch, webhook_enabled, latest_score, created_at`,
-        [req.params.orgId, fullName],
+        [
+          req.params.orgId,
+          linked?.installationRowId ?? null,
+          linked?.match.githubRepoId ?? null,
+          fullName,
+          linked?.match.private ?? false,
+          linked?.match.defaultBranch ?? "main",
+        ],
       );
-      await logAudit(req.params.orgId, req.user!.id, "repo.connected", fullName);
+      await logAudit(req.params.orgId, req.user!.id, "repo.connected", fullName, {
+        installationLinked: Boolean(linked),
+      });
       res.status(201).json(repo);
     } catch (err) {
       next(err);

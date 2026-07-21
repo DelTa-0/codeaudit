@@ -14,17 +14,127 @@ related:
 
 # Decisions (ADR-style log)
 
-## Plan-limit gate temporarily disabled for testing
+## Report export: browser print for PDF, Word-HTML for .doc — no new dependencies (2026-07-22)
+
+Scan results needed to leave the dashboard as a shareable document (hand to a
+security reviewer, attach to a client report). Both formats ship without adding
+a single package:
+
+- **PDF** — a dedicated `/scans/:scanId/report` route renders the scan as a
+  plain document (registered *outside* `<Layout>` so no nav chrome leaks in),
+  and `window.print()` hands off to the browser's own Save-as-PDF. The
+  `@media print` block in `styles.css` is therefore the entire PDF pipeline:
+  it drops `.no-print` controls, pins light-on-white tokens so a dark-theme
+  viewer doesn't export an unreadable page, repeats table headers across pages
+  (`display: table-header-group`) and avoids splitting rows.
+- **Word** — `lib/report.ts`'s `buildWordHtml()` emits Word-namespaced HTML
+  downloaded as a `.doc` blob. Word, Google Docs and LibreOffice all open it
+  natively and it stays editable.
+
+Rejected the `docx` package (~1MB) and server-side PDF (pdfkit/puppeteer)
+despite `docx` being the more "proper" OOXML answer. Rationale beyond the usual
+dependency-minimalism of this codebase: CodeAudit's entire product thesis is
+flagging unnecessary dependency weight, so shipping a megabyte of document
+tooling for one export would be self-inflicted irony — and it would show up in
+our own self-scan. The tradeoff is that `.doc` is HTML-backed rather than true
+OOXML; if Word-compatibility complaints appear, swapping in `docx` is contained
+to that one file, since nothing else produces the document.
+
+Export runs **client-side from data already on the page**, paginating the
+findings endpoints (`per_page` is capped at 100 server-side) so a large repo's
+report is never silently truncated. No new server route, no auth-in-URL
+problem, and one source of truth for the numbers.
+
+All user-controlled strings — package names, LLM reasoning — are HTML-escaped
+before entering the document; a hostile package name must not be able to inject
+markup into an exported report. Covered by escaping assertions in the
+serializer's verification (17 checks, including `<script>`, `&` and quotes).
+
+## Dev-mode plan switching — remove the *payment* barrier, not the limits (2026-07-21)
+
+While the project is pre-Stripe, owners need to move between tiers to exercise
+each one. The obvious move — relaxing `PLANS` — is exactly what was done on
+2026-07-20 and had to be reverted (see the entry below), because it turned a
+"testing state" into a live billing regression that nothing detected.
+
+Took the opposite approach this time: **`PLANS` is untouched and every tier
+still enforces its real limits.** Only the payment step is bypassed. A new
+`POST /orgs/:orgId/billing/plan` (owner-only) writes `organizations.plan`
+directly, so switching to `free` genuinely enforces 3 repos / 10 scans/day —
+which is the entire point, since the goal is to verify the gating works before
+going live, not to avoid it.
+
+Two properties make this safe to leave in the codebase:
+
+1. **It self-disables.** The gate is `!stripeConfigured()`, so the route starts
+   returning `409` the moment `STRIPE_SECRET_KEY` is set. There is no flag to
+   remember to flip, and no way for it to silently survive into production.
+   `GET /billing/config` exposes the same signal so the UI follows automatically.
+2. **The existing regression test still applies.** `test/plan-limits.ts` guards
+   the `PLANS` table, and because this change doesn't touch `PLANS`, that guard
+   remains meaningful — unlike the 2026-07-20 change, which the test was written
+   in response to.
+
+The Billing page shows an explicit "Development mode — no payment required"
+banner stating that limits still apply, so the bypass is never invisible.
+Every switch is audit-logged as `billing.plan_switched_devmode`.
+
+Verified end-to-end against a throwaway local account (since removed): config
+reports `selfServePlans: true`, upgrade to `team` and downgrade back to `free`
+both persist, an invalid tier is rejected by zod, and a second server booted
+with `STRIPE_SECRET_KEY` set returns `409` and `selfServePlans: false`.
+
+## OSV.dev for CVE scanning; client-computed scores stay trusted (2026-07-21)
+
+When adding known-vulnerability scanning ([[roadmap#Supply-chain + tech-debt
+expansion — CVE / typosquat / lockfile / hotspots]]), chose **OSV.dev** over
+Snyk/GitHub Advisory API: it's free, needs no API key, covers npm + PyPI (+
+more) in one batch endpoint, and its two-step query (batch → hydrate by id)
+maps cleanly onto the existing `registry.ts` concurrency/timeout pattern. Kept
+CVE lookup in the shared engine (not the server) so the CLI runs it too —
+it's static/HTTP, unlike LLM review which stays server-only.
+
+Deliberately did **not** add a DB migration for vulnerabilities: advisory
+lists ride in the existing `dependency_findings.registry_metadata` JSONB, and
+the new `vulnerable` status reuses the un-constrained `status TEXT` column —
+zero schema change. The score penalty is per-package by *max* severity (not
+per-advisory) so a package with ten advisories doesn't tank the score ten
+times over.
+
+Typosquat detection is intentionally **annotate-not-invent**: it refines the
+existing `suspicious` status (adds `registryMetadata.typosquatOf`) rather than
+introducing a new status, and gates escalation behind a download-count
+"established package" check so popular real neighbors (`preact`≈`react`) never
+fire. Popular-package lists are a committed TS module, not a fetched list —
+offline, deterministic, and bundle-safe for the esbuild CLI.
+
+CLI-uploaded scores remain **trusted as-computed** (`routes/cliScans.ts`
+still stores `score`/`grade`/`counts` verbatim, no server recompute). The CVE
+and typosquat additions run identically in the CLI and the worker, so a CLI
+upload's numbers stay comparable to a hosted scan's for those categories; only
+LLM-verified dead-code still differs (already flagged via `reviewStatus`).
+
+## ~~Plan-limit gate temporarily disabled for testing~~ — REVERTED (2026-07-20)
 
 The user asked to "remove the strip[e] barrier for now" to exercise the
 product without hitting `402 Payment Required` walls. Rather than ripping out
 the plan/billing code, `services/plans.ts`'s `PLANS` table was changed so
 **every tier** (`free`/`pro`/`team`) gets team-level limits (unlimited repos,
-unlimited scans/day, webhook scans enabled) — the production limits are kept
+unlimited scans/day, webhook scans enabled) — the production limits were kept
 as a commented-out block in the same file for a one-line revert. Orgs still
-display their real plan name in the billing UI; only enforcement changed.
-Verified: toggling webhook auto-scan on a `free`-plan org, previously a
-402, now succeeds. See [[known-issues]] for when this should be reverted.
+displayed their real plan name in the billing UI; only enforcement changed.
+
+**Reverted** as Phase 4 of [[roadmap#Making CodeAudit Actually Useful]]: this
+had become a live regression rather than a deliberate testing state — real
+per-tier limits (`free`: 1 private/3 total repos, no webhook scans, 10
+scans/day; `pro`: 10/25, webhook scans on, 200/day; `team`: unlimited, 2000/day)
+are restored as the real exported `PLANS`. A regression test
+(`server/test/plan-limits.ts`, `npm run test:plan-limits`) now asserts the
+free tier is strictly more restrictive than pro/team, so this can't silently
+recur without a failing test. Verifying Stripe checkout/webhook flows against
+a real test-mode account (see [[known-issues#Stripe billing untested against
+real Stripe]]) is only meaningful now that there's a real gate to verify
+against.
 
 ## Scope expanded from MVP to full SaaS mid-plan
 

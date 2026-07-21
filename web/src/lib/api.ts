@@ -56,10 +56,38 @@ export interface Repo {
   private: boolean;
   default_branch: string;
   webhook_enabled: boolean;
+  gate_enabled?: boolean;
+  min_score?: string | null;
+  autofix_enabled?: boolean;
+  badge_token?: string | null;
+  installation_id?: string | null;
   latest_score: string | null;
   last_scan_status?: string | null;
   last_scan_at?: string | null;
   trend?: { id: string; created_at: string; score: string | null }[];
+}
+
+export interface HotspotFile {
+  path: string;
+  commits: number;
+  lines: number;
+  score: number;
+  ai: boolean;
+  hasFinding: boolean;
+}
+
+export interface AiAuthorshipStats {
+  aiCommits: number;
+  totalCommits: number;
+  shareOfFiles: number;
+  aiFindingDensity: number;
+  humanFindingDensity: number;
+  aiFiles: number;
+  humanFiles: number;
+  automationCommits?: number;
+  /** false when either bucket is too small for the comparison to mean anything */
+  comparable?: boolean;
+  hotspots?: HotspotFile[];
 }
 
 export interface ScanSummary {
@@ -70,13 +98,18 @@ export interface ScanSummary {
     suspicious: number;
     unused: number;
     healthy: number;
+    vulnerable?: number;
     zombies: number;
     filesAnalyzed: number;
   };
+  /** "skipped" means zombie findings are unfiltered static candidates (no LLM verdict) — score is noisier. */
+  reviewStatus?: "full" | "partial" | "skipped";
+  ai?: AiAuthorshipStats | null;
 }
 
 export interface Scan {
   id: string;
+  repo_id?: string;
   trigger: string;
   branch: string | null;
   commit_sha: string | null;
@@ -88,13 +121,30 @@ export interface Scan {
   completed_at: string | null;
 }
 
+export interface VulnAdvisory {
+  id: string;
+  aliases: string[];
+  summary: string | null;
+  severity: "low" | "medium" | "high" | "critical" | "unknown";
+  url: string;
+}
+
 export interface DependencyFinding {
   id: string;
   package_name: string;
   ecosystem: string;
   declared_version: string | null;
-  status: "phantom" | "suspicious" | "unused" | "healthy";
-  registry_metadata: { weeklyDownloads?: number | null; created?: string | null; latest?: string | null } | null;
+  status: "phantom" | "suspicious" | "unused" | "healthy" | "vulnerable";
+  registry_metadata: {
+    weeklyDownloads?: number | null;
+    created?: string | null;
+    latest?: string | null;
+    vulnerabilities?: VulnAdvisory[];
+    maxSeverity?: string;
+    typosquatOf?: string;
+    typosquatDistance?: number;
+    transitive?: boolean;
+  } | null;
 }
 
 export interface CodeFinding {

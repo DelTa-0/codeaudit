@@ -93,6 +93,120 @@ export async function upsertPrComment(
   }
 }
 
+/**
+ * Posts a GitHub Check Run for the merge gate. Requires the App's
+ * "Checks: read & write" permission. Whether this blocks merges is the
+ * repo owner's decision via branch protection — we only report.
+ */
+export async function createCheckRun(
+  installationId: number,
+  fullName: string,
+  headSha: string,
+  opts: {
+    conclusion: "success" | "failure" | "neutral";
+    title: string;
+    summary: string;
+  },
+) {
+  const token = await getInstallationToken(installationId);
+  await githubFetch(`/repos/${fullName}/check-runs`, token, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      name: "CodeAudit",
+      head_sha: headSha,
+      status: "completed",
+      conclusion: opts.conclusion,
+      output: { title: opts.title, summary: opts.summary },
+    }),
+  });
+}
+
+// ---- Content/branch/PR helpers (used by the opt-in autofix job) ----
+
+export async function getDefaultBranchSha(
+  installationId: number,
+  fullName: string,
+  branch: string,
+): Promise<string> {
+  const token = await getInstallationToken(installationId);
+  const data = (await githubFetch(`/repos/${fullName}/git/ref/heads/${branch}`, token)) as {
+    object: { sha: string };
+  };
+  return data.object.sha;
+}
+
+export async function createBranch(
+  installationId: number,
+  fullName: string,
+  branchName: string,
+  fromSha: string,
+) {
+  const token = await getInstallationToken(installationId);
+  await githubFetch(`/repos/${fullName}/git/refs`, token, {
+    method: "POST",
+    body: JSON.stringify({ ref: `refs/heads/${branchName}`, sha: fromSha }),
+  });
+}
+
+export async function getFileContents(
+  installationId: number,
+  fullName: string,
+  path: string,
+  ref: string,
+): Promise<{ content: string; sha: string }> {
+  const token = await getInstallationToken(installationId);
+  const data = (await githubFetch(
+    `/repos/${fullName}/contents/${path}?ref=${encodeURIComponent(ref)}`,
+    token,
+  )) as { content: string; sha: string };
+  return { content: Buffer.from(data.content, "base64").toString("utf8"), sha: data.sha };
+}
+
+export async function updateFile(
+  installationId: number,
+  fullName: string,
+  path: string,
+  opts: { branch: string; message: string; content: string; sha: string },
+) {
+  const token = await getInstallationToken(installationId);
+  await githubFetch(`/repos/${fullName}/contents/${path}`, token, {
+    method: "PUT",
+    body: JSON.stringify({
+      message: opts.message,
+      content: Buffer.from(opts.content, "utf8").toString("base64"),
+      branch: opts.branch,
+      sha: opts.sha,
+    }),
+  });
+}
+
+export async function createPullRequest(
+  installationId: number,
+  fullName: string,
+  opts: { title: string; head: string; base: string; body: string },
+): Promise<{ number: number; htmlUrl: string }> {
+  const token = await getInstallationToken(installationId);
+  const data = (await githubFetch(`/repos/${fullName}/pulls`, token, {
+    method: "POST",
+    body: JSON.stringify(opts),
+  })) as { number: number; html_url: string };
+  return { number: data.number, htmlUrl: data.html_url };
+}
+
+export async function listOpenPullsByHeadPrefix(
+  installationId: number,
+  fullName: string,
+  headPrefix: string,
+): Promise<number[]> {
+  const token = await getInstallationToken(installationId);
+  const data = (await githubFetch(`/repos/${fullName}/pulls?state=open&per_page=100`, token)) as {
+    number: number;
+    head: { ref: string };
+  }[];
+  return data.filter((p) => p.head.ref.startsWith(headPrefix)).map((p) => p.number);
+}
+
 /** Constant-time HMAC verification of X-Hub-Signature-256. */
 export function verifyWebhookSignature(rawBody: Buffer, signatureHeader: string | undefined): boolean {
   if (!config.github.webhookSecret || !signatureHeader?.startsWith("sha256=")) return false;

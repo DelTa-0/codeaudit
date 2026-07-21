@@ -13,6 +13,12 @@ related:
 
 # Setup
 
+> **The root [`README.md`](../README.md) is now the canonical, fully
+> up-to-date setup + configuration reference** (quick start, every env var
+> including the F2–F6 feature-pack additions, GitHub App walkthrough, all
+> feature toggles). This page stays as a short vault-side pointer plus the
+> things worth knowing that aren't just "how to run it."
+
 ## Prerequisites
 
 - Node.js (v24 used in dev)
@@ -20,29 +26,17 @@ related:
 
 ## First-time setup
 
-```bash
-cd C:\Users\ASUS\Desktop\vibe\codeaudit
-docker compose up -d          # Postgres :5433, Redis :6380
-cp .env.example .env
-cp .env server/.env           # server/ reads its own .env via dotenv/config
-npm install                   # installs both workspaces (server + web)
-npm run migrate               # applies server/migrations/*.sql
-```
+See [README.md § Quick start](../README.md#quick-start) and
+[§ Configuration reference](../README.md#configuration-reference) for the
+full command sequence and every env var (core, LLM, GitHub App, Stripe).
 
-Then fill in `server/.env` (this file is gitignored, never committed):
+Workspaces as of the feature pack: `packages/engine` (`@codeaudit/engine`,
+shared analysis core), `server`, `web`, `cli` (`npx codeaudit-scan`) — `npm
+install` at the repo root installs all four.
 
-| Var | Required for | Notes |
-|---|---|---|
-| `JWT_SECRET` | everything | any random string |
-| `XAI_API_KEY` | LLM zombie-code review | actually a **Groq** key, see [[decisions#LLM provider]] — get one free at console.groq.com |
-| `XAI_BASE_URL` | ^ | `https://api.groq.com/openai/v1` |
-| `XAI_MODEL` | ^ | `llama-3.3-70b-versatile` (or check `GET /v1/models` for what your key can access) |
-| `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY_PATH`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_WEBHOOK_SECRET` | GitHub App integration | see [[features/m4-github-app#Getting GitHub App credentials]] |
-| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_TEAM` | billing | test-mode keys from dashboard.stripe.com |
-
-Without the AI/GitHub/Stripe vars, the app still runs fully — those features
-degrade gracefully (LLM review falls back to static-only findings; GitHub/
-Stripe endpoints return `501 Not configured`).
+Migrations now number three files: `001_core.sql` (initial schema),
+`002_repo_settings.sql` (gate/autofix/badge columns), `003_cli_token.sql`
+(CLI upload token). `npm run migrate` applies whichever are pending.
 
 ## Running
 

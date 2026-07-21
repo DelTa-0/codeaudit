@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
 import { api, type Member } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { Button, Card, Input, Badge, Spinner } from "../components/ui";
+import { Button, Card, Input, Badge, Spinner, Avatar } from "../components/ui";
 
 export function Members() {
   const { orgId } = useParams();
@@ -45,7 +45,7 @@ export function Members() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-semibold">Members</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Members</h1>
 
       {(myRole === "owner" || myRole === "admin") && (
         <Card>
@@ -58,7 +58,7 @@ export function Members() {
               onChange={(e) => setEmail(e.target.value)}
             />
             <select
-              className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
+              className="cursor-pointer rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
               value={role}
               onChange={(e) => setRole(e.target.value as "developer" | "admin")}
             >
@@ -76,9 +76,12 @@ export function Members() {
         <div className="divide-y divide-border">
           {members.map((m) => (
             <div key={m.id} className="flex items-center justify-between py-3">
-              <div>
-                <p className="text-sm font-medium">{m.name ?? m.email}</p>
-                <p className="text-xs text-muted">{m.email}</p>
+              <div className="flex items-center gap-3">
+                <Avatar label={m.name ?? m.email} />
+                <div>
+                  <p className="text-sm font-medium">{m.name ?? m.email}</p>
+                  <p className="text-xs text-muted">{m.email}</p>
+                </div>
               </div>
               <Badge label={m.role} />
             </div>

@@ -2,9 +2,9 @@ import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { query, queryOne } from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
-import { forbidden, notFound } from "../lib/errors.js";
+import { badRequest, forbidden, notFound } from "../lib/errors.js";
 import { assertCanScan } from "../services/plans.js";
-import { scanQueue } from "../queue/index.js";
+import { scanQueue, autofixQueue } from "../queue/index.js";
 import { logAudit } from "../services/audit.js";
 
 export const scansRouter = Router();
@@ -118,6 +118,35 @@ scansRouter.get("/scans/:scanId/code-findings", async (req, res, next) => {
       [scan.id, perPage, (page - 1) * perPage],
     );
     res.json(rows);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Explicit human trigger for an autofix PR. Two consent layers:
+ * the repo's autofix_enabled toggle must be on (403 otherwise), and this
+ * endpoint only fires on a deliberate admin+ click — never automatically.
+ */
+scansRouter.post("/scans/:scanId/autofix", async (req, res, next) => {
+  try {
+    const scan = await getScanForUser(req.params.scanId, req.user!.id);
+    if (!scan) throw notFound("Scan not found");
+    if (scan.role === "developer") throw forbidden("Requires admin role");
+    if (scan.status !== "complete") throw badRequest("Scan has not completed");
+
+    const repo = await queryOne<{ autofix_enabled: boolean; installation_id: string | null }>(
+      "SELECT autofix_enabled, installation_id FROM repositories WHERE id = $1",
+      [scan.repo_id],
+    );
+    if (!repo?.autofix_enabled)
+      throw forbidden("Auto-fix is disabled for this repository. Enable it in repo settings first.");
+    if (!repo.installation_id)
+      throw badRequest("Auto-fix needs a linked GitHub App installation for this repository.");
+
+    await autofixQueue.add("autofix", { scanJobId: scan.id, requestedBy: req.user!.id });
+    await logAudit(scan.org_id, req.user!.id, "autofix.requested", scan.id);
+    res.status(202).json({ ok: true, message: "Auto-fix PR queued — check the repository on GitHub shortly." });
   } catch (err) {
     next(err);
   }

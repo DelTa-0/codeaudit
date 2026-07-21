@@ -28,8 +28,10 @@ export function findDeadCodeCandidates(analysis: RepoAnalysis): DeadCodeCandidat
     const refs = analysis.references.get(sym.name);
     const externalRefs = refs ? [...refs].filter((f) => f !== sym.filePath) : [];
     if (externalRefs.length > 0) continue;
-    // Un-exported symbols referenced within their own file are alive.
-    if (!sym.exported && refs && refs.has(sym.filePath)) continue;
+    // Any symbol referenced within its own file is alive, exported or not —
+    // an exported helper called only by other code in the same file (no
+    // external import, no re-export) is not dead code.
+    if (refs && refs.has(sym.filePath)) continue;
 
     candidates.push({
       ...sym,

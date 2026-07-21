@@ -50,34 +50,17 @@ export function RepoDetail() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-mono text-xl font-semibold">{repo.full_name}</h1>
+          <h1 className="font-mono text-2xl font-semibold tracking-tight">{repo.full_name}</h1>
           <p className="mt-1 text-sm text-muted">Default branch: {repo.default_branch}</p>
         </div>
         <div className="flex items-center gap-4">
           <ScoreRing score={repo.latest_score !== null ? Number(repo.latest_score) : null} size={72} />
-          <div className="flex flex-col gap-2">
-            <Button onClick={startScan}>Scan now</Button>
-            <Button
-              variant="ghost"
-              onClick={async () => {
-                setError(null);
-                try {
-                  await api(`/api/repos/${repoId}/webhook`, {
-                    method: "PATCH",
-                    body: { enabled: !repo.webhook_enabled },
-                  });
-                  await load();
-                } catch (err) {
-                  setError(err instanceof Error ? err.message : "Failed to toggle webhook");
-                }
-              }}
-            >
-              {repo.webhook_enabled ? "Disable auto-scan" : "Enable auto-scan"}
-            </Button>
-          </div>
+          <Button onClick={startScan}>Scan now</Button>
         </div>
       </div>
       {error && <p className="text-sm text-danger">{error}</p>}
+
+      <RepoSettings repo={repo} onChanged={load} onError={setError} />
 
       {trendData.length >= 2 && (
         <Card>
@@ -111,7 +94,7 @@ export function RepoDetail() {
               <Link
                 key={scan.id}
                 to={`/scans/${scan.id}`}
-                className="flex items-center justify-between py-3 hover:bg-surface-2/50"
+                className="flex items-center justify-between rounded-md px-2 py-3 transition-colors hover:bg-surface-2/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
               >
                 <div className="flex items-center gap-3">
                   <Badge label={scan.status} />
@@ -119,7 +102,15 @@ export function RepoDetail() {
                     {new Date(scan.created_at).toLocaleString()} · {scan.trigger}
                   </span>
                 </div>
-                <span className="font-mono text-sm">
+                <span className="flex items-center gap-2 font-mono text-sm">
+                  {scan.summary?.reviewStatus && scan.summary.reviewStatus !== "full" && (
+                    <span
+                      className="rounded border border-warning/40 px-1.5 py-0.5 font-sans text-[10px] uppercase tracking-wide text-warning"
+                      title="Dead-code findings are unfiltered static candidates — no LLM verdict was run, so this score is noisier than an LLM-verified scan."
+                    >
+                      static-only
+                    </span>
+                  )}
                   {scan.summary ? `${scan.summary.score} (${scan.summary.grade})` : scan.progress ?? ""}
                 </span>
               </Link>
@@ -128,5 +119,201 @@ export function RepoDetail() {
         )}
       </Card>
     </div>
+  );
+}
+
+function SettingRow({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-3">
+      <div>
+        <p className="text-sm font-medium">{title}</p>
+        <p className="text-xs text-muted">{description}</p>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * Every automated behavior is opt-in and clearly described — nothing acts on
+ * the repo unless its owner turned it on here.
+ */
+function RepoSettings({
+  repo,
+  onChanged,
+  onError,
+}: {
+  repo: Repo;
+  onChanged: () => Promise<void>;
+  onError: (msg: string | null) => void;
+}) {
+  const [minScore, setMinScore] = useState(repo.min_score ? String(Number(repo.min_score)) : "");
+  const [badgeMarkdown, setBadgeMarkdown] = useState<string | null>(null);
+  const [cliUsage, setCliUsage] = useState<string | null>(null);
+
+  const call = async (fn: () => Promise<unknown>) => {
+    onError(null);
+    try {
+      await fn();
+      await onChanged();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Request failed");
+    }
+  };
+
+  return (
+    <Card>
+      <p className="mb-1 text-sm font-medium text-muted">Repository settings</p>
+      <p className="mb-2 text-xs text-muted">
+        All automations are off by default and only report or propose — merging and blocking
+        decisions always stay with you.
+      </p>
+      <div className="divide-y divide-border">
+        <SettingRow
+          title="Auto-scan on push & PR"
+          description="GitHub webhooks trigger a scan on every push and pull request."
+        >
+          <Button
+            variant="ghost"
+            onClick={() =>
+              call(() =>
+                api(`/api/repos/${repo.id}/webhook`, {
+                  method: "PATCH",
+                  body: { enabled: !repo.webhook_enabled },
+                }),
+              )
+            }
+          >
+            {repo.webhook_enabled ? "On — turn off" : "Off — turn on"}
+          </Button>
+        </SettingRow>
+
+        <SettingRow
+          title="Merge gate check"
+          description="Posts a pass/fail GitHub check against your score threshold. Whether it blocks merges is up to your branch-protection rules."
+        >
+          {repo.gate_enabled && (
+            <input
+              className="w-16 rounded-lg border border-border bg-surface-2 px-2 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+              type="number"
+              min={0}
+              max={100}
+              placeholder="min"
+              value={minScore}
+              onChange={(e) => setMinScore(e.target.value)}
+              onBlur={() =>
+                call(() =>
+                  api(`/api/repos/${repo.id}/gate`, {
+                    method: "PATCH",
+                    body: { enabled: true, minScore: minScore === "" ? null : Number(minScore) },
+                  }),
+                )
+              }
+            />
+          )}
+          <Button
+            variant="ghost"
+            onClick={() =>
+              call(() =>
+                api(`/api/repos/${repo.id}/gate`, {
+                  method: "PATCH",
+                  body: {
+                    enabled: !repo.gate_enabled,
+                    minScore: minScore === "" ? null : Number(minScore),
+                  },
+                }),
+              )
+            }
+          >
+            {repo.gate_enabled ? "On — turn off" : "Off — turn on"}
+          </Button>
+        </SettingRow>
+
+        <SettingRow
+          title="Auto-fix PRs"
+          description="Allows admins to request a PR removing unused dependencies from a scan report. PRs are only ever proposed — you review and merge."
+        >
+          <Button
+            variant="ghost"
+            onClick={() =>
+              call(() =>
+                api(`/api/repos/${repo.id}/autofix`, {
+                  method: "PATCH",
+                  body: { enabled: !repo.autofix_enabled },
+                }),
+              )
+            }
+          >
+            {repo.autofix_enabled ? "On — turn off" : "Off — turn on"}
+          </Button>
+        </SettingRow>
+
+        <SettingRow
+          title="CLI / CI uploads"
+          description="Per-repo token letting `npx codeaudit-scan scan --upload` report results into this dashboard from any machine or CI."
+        >
+          <Button
+            variant="ghost"
+            onClick={async () => {
+              onError(null);
+              try {
+                const data = await api<{ usage: string }>(`/api/repos/${repo.id}/cli-token`, {
+                  method: "POST",
+                });
+                setCliUsage(data.usage);
+              } catch (err) {
+                onError(err instanceof Error ? err.message : "Request failed");
+              }
+            }}
+          >
+            Get token
+          </Button>
+        </SettingRow>
+
+        <SettingRow
+          title="README badge"
+          description="Public SVG badge showing the latest score — safe to embed anywhere."
+        >
+          <Button
+            variant="ghost"
+            onClick={async () => {
+              onError(null);
+              try {
+                const data = await api<{ markdown: string }>(`/api/repos/${repo.id}/badge`, {
+                  method: "POST",
+                });
+                setBadgeMarkdown(data.markdown);
+              } catch (err) {
+                onError(err instanceof Error ? err.message : "Request failed");
+              }
+            }}
+          >
+            Get badge
+          </Button>
+        </SettingRow>
+      </div>
+      {badgeMarkdown && (
+        <div className="mt-2 rounded-lg bg-surface-2 p-3">
+          <p className="mb-1 text-xs text-muted">Paste into your README:</p>
+          <code className="block break-all font-mono text-xs">{badgeMarkdown}</code>
+        </div>
+      )}
+      {cliUsage && (
+        <div className="mt-2 rounded-lg bg-surface-2 p-3">
+          <p className="mb-1 text-xs text-muted">
+            Run locally or add to CI (keep the token secret — treat it like a password):
+          </p>
+          <code className="block break-all font-mono text-xs">{cliUsage}</code>
+        </div>
+      )}
+    </Card>
   );
 }

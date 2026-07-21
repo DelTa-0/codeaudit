@@ -1,0 +1,6 @@
+# Ground-truth fixture: real+used, fake, real-but-unused, alias-mapped, allowlisted
+requests>=2.31
+totally-fake-pypi-pkg-xyz==1.0.0
+rich>=13.0  # declared but never imported
+python-docx>=1.1  # used via lazy `import docx` — alias table must connect them
+uvicorn>=0.30  # CLI-invoked server, never imported — must not be flagged unused
