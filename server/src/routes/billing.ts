@@ -33,6 +33,61 @@ async function stripeRequest(path: string, params: Record<string, string>) {
   return data;
 }
 
+/**
+ * Tells the frontend which billing mode this server is in. When Stripe isn't
+ * configured the UI offers direct plan switching instead of checkout.
+ */
+billingRouter.get("/billing/config", requireAuth, (_req, res) => {
+  res.json({ stripeConfigured: stripeConfigured(), selfServePlans: !stripeConfigured() });
+});
+
+const planSwitchSchema = z.object({ plan: z.enum(["free", "pro", "team"]) });
+
+/**
+ * Development-mode plan switching — lets an owner move between tiers without a
+ * Stripe subscription so each tier's behavior can actually be exercised
+ * end-to-end before billing is wired up.
+ *
+ * Deliberately NOT a limit bypass. `PLANS` keeps its real per-tier limits
+ * (services/plans.ts, guarded by test/plan-limits.ts); only the *payment*
+ * barrier is removed, so switching to `free` really does enforce free-tier
+ * limits. This is the distinction from the 2026-07-20 change that gave every
+ * tier team-level limits and had to be reverted — see docs/decisions.md.
+ *
+ * The gate is `!stripeConfigured()`, so this route disables itself the moment
+ * STRIPE_SECRET_KEY is set. There is no flag to forget to flip.
+ */
+billingRouter.post(
+  "/orgs/:orgId/billing/plan",
+  requireAuth,
+  requireOrgRole("owner"),
+  validateBody(planSwitchSchema),
+  async (req, res, next) => {
+    try {
+      if (stripeConfigured())
+        return res.status(409).json({
+          error: "Billing is configured on this server — use checkout to change plans.",
+        });
+      const { plan } = req.body as z.infer<typeof planSwitchSchema>;
+      const org = await queryOne<{ id: string }>(
+        "SELECT id FROM organizations WHERE id = $1",
+        [req.params.orgId],
+      );
+      if (!org) throw notFound();
+
+      await query(
+        `UPDATE organizations SET plan = $2, plan_status = 'active',
+           stripe_subscription_id = NULL WHERE id = $1`,
+        [org.id, plan],
+      );
+      await logAudit(org.id, req.user!.id, "billing.plan_switched_devmode", plan);
+      res.json({ plan });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 const checkoutSchema = z.object({ plan: z.enum(["pro", "team"]) });
 
 billingRouter.post(
