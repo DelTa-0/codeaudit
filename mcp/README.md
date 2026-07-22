@@ -13,9 +13,25 @@ simple typo of anything popular (e.g. `fastimagepro` → Pillow/imageio).
 
 ## Setup
 
-Add to your agent's MCP config, pointing at `npx codeaudit-mcp`:
+**Claude Code** — one command, no file editing:
 
-**Claude Code** (`.claude/mcp.json` or via `claude mcp add`):
+```bash
+claude mcp add codeaudit -- npx -y codeaudit-mcp
+```
+
+(Add `-e CODEAUDIT_TOKEN=your-token` before `--` if you have one. Use
+`claude mcp add --scope project ...` instead to check the config into the
+repo for your whole team rather than just your own machine.)
+
+**Cursor** — click to install:
+
+[![Add codeaudit-mcp to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](cursor://anysphere.cursor-deeplink/mcp/install?name=codeaudit&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImNvZGVhdWRpdC1tY3AiXX0=)
+
+Or manually via **Settings → MCP → Add new MCP server**, pointing the
+command at `npx -y codeaudit-mcp`.
+
+**Any other MCP-compatible client** (Cline, Windsurf, etc.) — add this to
+whatever JSON config the client reads (e.g. Cline's `cline_mcp_settings.json`):
 
 ```json
 {
@@ -28,11 +44,6 @@ Add to your agent's MCP config, pointing at `npx codeaudit-mcp`:
   }
 }
 ```
-
-**Cursor** (`.cursor/mcp.json`): identical shape to the above.
-
-**Any other MCP-compatible client**: use the same `command`/`args` —
-`npx -y codeaudit-mcp` — with `CODEAUDIT_TOKEN` as an optional env var.
 
 Then add one line to your agent's instructions file (e.g. `CLAUDE.md`) so
 the agent actually calls it — an MCP tool's description alone doesn't force
