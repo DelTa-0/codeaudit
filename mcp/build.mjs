@@ -20,8 +20,17 @@ await build({
   format: "esm",
   minify: false,
   sourcemap: false,
+  // Alias straight to verify.js (not the package's barrel index.js) so this
+  // bundle only pulls in the small dependency-checking modules it actually
+  // uses. The barrel also re-exports analyzeRepo/findDeadCodeCandidates,
+  // which transitively import @babel/parser + @babel/traverse (CJS
+  // packages) — esbuild's ESM output can't safely tree-shake those out
+  // (CJS requires are treated as having side effects), and bundling them
+  // in breaks at runtime ("Dynamic require of \"tty\" is not supported",
+  // from @babel/traverse's "debug" dependency). The MCP server never does
+  // import-graph analysis, so it never needs that code path.
   alias: {
-    "@codeaudit/engine": path.resolve(here, "../packages/engine/dist/index.js"),
+    "@codeaudit/engine": path.resolve(here, "../packages/engine/dist/verify.js"),
   },
 });
 
