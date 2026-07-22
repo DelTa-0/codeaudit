@@ -4,6 +4,7 @@
   "workspaces": ["fixture-pkg"],
   "dependencies": {
     "react-toolkitz": "^2.1.0",
+    "tyepscript": "^1.0.0",
     "lodash": "^4.17.21",
     "date-fns": "^4.1.0",
     "@fixture/internal": "*",

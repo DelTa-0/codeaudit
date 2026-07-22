@@ -239,7 +239,11 @@ async function main() {
     for (const d of interesting) {
       const color = statusColor[d.status] ?? "";
       const eco = polyglot ? `${DIM}${d.ecosystem.padEnd(5)}${RESET} ` : "";
-      console.log(`  ${color}${d.status.padEnd(10)}${RESET} ${eco}${d.packageName}`);
+      const alternatives = (d.registryMetadata as { alternatives?: { name: string }[] } | null)?.alternatives;
+      const suggestion = alternatives?.length
+        ? ` ${DIM}(did you mean ${alternatives.map((a) => a.name).join(", ")}?)${RESET}`
+        : "";
+      console.log(`  ${color}${d.status.padEnd(10)}${RESET} ${eco}${d.packageName}${suggestion}`);
     }
     console.log(`  ${DIM}${summary.counts.healthy} healthy packages not shown${RESET}\n`);
   } else {

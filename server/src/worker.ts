@@ -36,7 +36,7 @@ import {
   type DeadCodeCandidate,
   type ResolvedTree,
 } from "@codeaudit/engine";
-import { reviewCandidatesWithLlm } from "@codeaudit/engine/llm";
+import { reviewCandidatesWithLlm, suggestAlternatives } from "@codeaudit/engine/llm";
 import { config } from "./lib/config.js";
 
 async function setStatus(scanJobId: string, status: string, progress: string) {
@@ -143,6 +143,25 @@ async function processScanJob(scanJobId: string) {
     if (vulnTargets.length) {
       await setStatus(scanJobId, "analyzing", "Checking dependencies against the OSV vulnerability database");
       applyVulnerabilities(deps, await checkVulnerabilities(vulnTargets));
+    }
+
+    // "Did you mean X?" for phantom packages the offline fuzzy match (in
+    // registry.ts/python/registry.ts) couldn't pair with a spelling neighbor
+    // — ask the LLM to infer intent from the name instead (e.g. "fastimagepro"
+    // -> Pillow). Best-effort: skipped entirely when no LLM is configured.
+    const phantomsNeedingAiSuggestion = deps.filter(
+      (d) => d.status === "phantom" && !(d.registryMetadata as { alternatives?: unknown } | null)?.alternatives,
+    );
+    if (phantomsNeedingAiSuggestion.length && config.llm.apiKey) {
+      await setStatus(scanJobId, "analyzing", "Looking for alternatives to non-existent packages");
+      const aiSuggestions = await suggestAlternatives(
+        phantomsNeedingAiSuggestion.map((d) => ({ packageName: d.packageName, ecosystem: d.ecosystem })),
+        { apiKey: config.llm.apiKey, baseUrl: config.llm.baseUrl, model: config.llm.model },
+      );
+      for (const d of phantomsNeedingAiSuggestion) {
+        const alternatives = aiSuggestions.get(d.packageName);
+        if (alternatives?.length) d.registryMetadata = { ...(d.registryMetadata ?? {}), alternatives };
+      }
     }
 
     for (const d of deps) {

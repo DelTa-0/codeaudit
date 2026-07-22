@@ -106,6 +106,8 @@ ${dependencies
     const notes: string[] = [];
     if (d.registry_metadata?.typosquatOf)
       notes.push(`looks like ${d.registry_metadata.typosquatOf} — possible slopsquat`);
+    if (d.registry_metadata?.alternatives?.length)
+      notes.push(`did you mean ${d.registry_metadata.alternatives.map((a) => a.name).join(", ")}?`);
     if (d.registry_metadata?.transitive) notes.push("transitive");
     if (typeof d.registry_metadata?.weeklyDownloads === "number")
       notes.push(`${d.registry_metadata.weeklyDownloads.toLocaleString()} downloads`);

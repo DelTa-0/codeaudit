@@ -273,8 +273,8 @@ export function ScanDetail() {
                 Static-only score — dead-code findings weren't verified by the LLM, so this score
                 is noisier than an LLM-verified scan.
                 {scan.summary.reviewStatus === "skipped"
-                  ? " Typical of CLI uploads run without a hosted scan."
-                  : " Some findings' LLM batch failed and fell back to unfiltered candidates."}
+                  ? " No LLM is configured for this scan (expected for CLI uploads, or when the server has no model API key set)."
+                  : " Some batches could not be reviewed — most often the model provider's rate limit or daily token quota. Expand a finding below to see the exact reason, and re-run the scan once the quota resets."}
               </p>
             )}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
@@ -449,6 +449,20 @@ export function ScanDetail() {
                           {d.registry_metadata?.typosquatOf && (
                             <span className="ml-2 font-sans text-xs text-warning">
                               looks like <span className="font-mono">{d.registry_metadata.typosquatOf}</span> — possible slopsquat
+                            </span>
+                          )}
+                          {!!d.registry_metadata?.alternatives?.length && (
+                            <span className="ml-2 font-sans text-xs text-muted">
+                              did you mean{" "}
+                              {d.registry_metadata.alternatives.map((a, i) => (
+                                <span key={a.name}>
+                                  {i > 0 && ", "}
+                                  <span className="font-mono" title={a.reason}>
+                                    {a.name}
+                                  </span>
+                                </span>
+                              ))}
+                              ?
                             </span>
                           )}
                           {d.registry_metadata?.transitive && (

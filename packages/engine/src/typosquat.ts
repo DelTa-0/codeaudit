@@ -4,7 +4,7 @@
 // dependency name against a curated popular-package list using Damerau-
 // Levenshtein (optimal string alignment) distance. Offline and dependency-free
 // so it runs in both the hosted worker and the CLI.
-import type { Ecosystem } from "./registry.js";
+import type { AlternativeSuggestion, Ecosystem } from "./registry.js";
 import { POPULAR_NPM, POPULAR_PYPI } from "./data/popular.js";
 
 const POPULAR: Record<Ecosystem, Set<string>> = {
@@ -79,4 +79,22 @@ export function checkTyposquat(name: string, ecosystem: Ecosystem): TyposquatHit
     }
   }
   return best;
+}
+
+/**
+ * "Did you mean X?" for a PHANTOM (non-existent) package name — offline,
+ * same edit-distance match as checkTyposquat, but framed as a suggestion
+ * rather than a squat warning since there's no real package being
+ * impersonated, just a likely typo of one. Distance 1 is a strong signal
+ * (single-edit typo); distance 2 is weaker but still worth surfacing.
+ */
+export function fuzzyAlternative(name: string, ecosystem: Ecosystem): AlternativeSuggestion | null {
+  const hit = checkTyposquat(name, ecosystem);
+  if (!hit) return null;
+  return {
+    name: hit.suspectedTarget,
+    reason: `"${name}" doesn't exist on the registry — likely a typo of the popular package "${hit.suspectedTarget}" (edit distance ${hit.distance}).`,
+    confidence: hit.distance === 1 ? 0.9 : 0.6,
+    source: "fuzzy",
+  };
 }
