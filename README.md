@@ -28,6 +28,7 @@ Every automated action (auto-scan on push, merge gate, auto-fix PRs) is **opt-in
   - [README badge](#readme-badge)
   - [AI-authorship metrics](#ai-authorship-metrics)
   - [CLI (`npx codeaudit-scan`)](#cli-npx-codeaudit-scan)
+  - [Guardrails for AI coding agents (`codeaudit-mcp`)](#guardrails-for-ai-coding-agents-codeaudit-mcp)
   - [CLI/CI upload tracking](#clici-upload-tracking)
   - [Billing (Stripe test mode)](#billing-stripe-test-mode)
 - [Testing](#testing)
@@ -285,6 +286,15 @@ npx codeaudit-scan scan . --min-score 80   # exit 1 if score is below 80
 
 Exit codes: `0` clean, `1` phantom dependencies found or below
 `--min-score`, `2` usage/runtime error.
+
+### Guardrails for AI coding agents (`codeaudit-mcp`)
+
+An MCP server your AI coding agent can call *before* installing a package,
+to check whether it's real, well-maintained, and free of known CVEs —
+catching hallucinated packages and typosquats at the moment an agent is
+about to install them, rather than in a scan after the fact. See
+[`mcp/README.md`](mcp/README.md) for setup (Claude Code, Cursor, and any
+other MCP-compatible agent).
 
 ### CLI/CI upload tracking
 
