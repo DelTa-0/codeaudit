@@ -20,10 +20,10 @@ interface JsonRpcResponse {
   error?: { code: number; message: string };
 }
 
-function startServer() {
+function startServer(envOverrides: Record<string, string> = {}) {
   const child = spawn(process.execPath, [serverPath], {
     stdio: ["pipe", "pipe", "inherit"],
-    env: { ...process.env, CODEAUDIT_TOKEN: "" },
+    env: { ...process.env, CODEAUDIT_TOKEN: "", ...envOverrides },
   });
   const rl = readline.createInterface({ input: child.stdout });
   const pending = new Map<number, (res: JsonRpcResponse) => void>();
@@ -106,6 +106,26 @@ checks.push([
   "verify_package with ecosystem omitted resolves 'djangorestframework' via pypi guess",
   guessed.ecosystem === "pypi" && guessed.status !== "phantom",
 ]);
+
+// Degrade-path: hosted-alternative lookups must never block the offline
+// verification result. Point CODEAUDIT_API_URL at an address that fails fast
+// (connection refused) and set a dummy token so enrichWithHostedAlternatives
+// actually attempts the hosted call, then confirm verify_package on a known
+// phantom-with-no-fuzzy-match name still comes back correctly and promptly —
+// a hung promise simply never producing this output is itself the failure.
+const degraded = startServer({ CODEAUDIT_TOKEN: "dummy-token-for-degrade-path-test", CODEAUDIT_API_URL: "http://127.0.0.1:1" });
+await degraded.send("initialize", {
+  protocolVersion: "2024-11-05",
+  capabilities: {},
+  clientInfo: { name: "ground-truth-test", version: "0.0.1" },
+});
+degraded.notify("notifications/initialized");
+const degradedResult = await callTool(degraded.send, "verify_package", { name: "react-toolkitz", ecosystem: "npm" });
+checks.push([
+  "verify_package still returns phantom when hosted-alternatives call fails (degrade path)",
+  degradedResult?.status === "phantom",
+]);
+degraded.child.kill();
 
 console.log("--- checks ---");
 let failed = 0;

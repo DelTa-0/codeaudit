@@ -20,8 +20,10 @@ export async function fetchHostedAlternatives(
     });
     if (!res.ok) return result;
     const data = (await res.json()) as { alternatives?: Record<string, AlternativeSuggestion[]> };
-    for (const [name, alts] of Object.entries(data.alternatives ?? {})) {
-      if (Array.isArray(alts) && alts.length) result.set(name, alts);
+    // Keyed by "<ecosystem>:<name>" — same literal package name can exist in
+    // both npm and PyPI within one batch, and a bare-name key would collide.
+    for (const [key, alts] of Object.entries(data.alternatives ?? {})) {
+      if (Array.isArray(alts) && alts.length) result.set(key, alts);
     }
   } catch {
     // best-effort — hosted enrichment never blocks the local result

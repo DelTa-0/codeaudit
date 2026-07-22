@@ -38,11 +38,12 @@ async function mapConcurrent<T, R>(items: T[], limit: number, fn: (item: T) => P
 async function verifyWithGuessedEcosystem(
   name: string,
   ecosystem?: "npm" | "pypi",
+  version?: string,
 ): Promise<PackageVerifyResult> {
-  if (ecosystem) return verifyPackage(name, ecosystem);
-  const npmResult = await verifyPackage(name, "npm");
+  if (ecosystem) return verifyPackage(name, ecosystem, version);
+  const npmResult = await verifyPackage(name, "npm", version);
   if (npmResult.exists) return npmResult;
-  const pypiResult = await verifyPackage(name, "pypi");
+  const pypiResult = await verifyPackage(name, "pypi", version);
   if (pypiResult.exists) return pypiResult;
   return npmResult;
 }
@@ -58,7 +59,7 @@ async function enrichWithHostedAlternatives(results: PackageVerifyResult[]): Pro
     apiUrl,
   );
   for (const r of needing) {
-    const alts = hosted.get(r.name);
+    const alts = hosted.get(`${r.ecosystem}:${r.name}`);
     if (alts?.length) r.alternatives = alts;
   }
 }
@@ -81,10 +82,16 @@ server.registerTool(
         .enum(["npm", "pypi"])
         .optional()
         .describe("The registry to check. Omit to auto-detect (tries npm, then PyPI)."),
+      version: z
+        .string()
+        .min(1)
+        .max(100)
+        .optional()
+        .describe("The specific version being installed. Omit to check the latest version's known CVEs."),
     },
   },
-  async ({ name, ecosystem }) => {
-    const result = await verifyWithGuessedEcosystem(name, ecosystem);
+  async ({ name, ecosystem, version }) => {
+    const result = await verifyWithGuessedEcosystem(name, ecosystem, version);
     await enrichWithHostedAlternatives([result]);
     return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
   },

@@ -57,8 +57,16 @@ mcpAlternativesRouter.post(
         baseUrl: config.llm.baseUrl,
         model: config.llm.model,
       });
+      // suggestAlternatives()'s Map is keyed by bare package name (it has no
+      // ecosystem concept of its own). Re-key the response by
+      // "<ecosystem>:<name>" here so a batch with the same literal name in
+      // both npm and PyPI doesn't collide on the wire — mcp/src/hosted.ts
+      // reads back this same composite key.
       const alternatives: Record<string, unknown> = {};
-      for (const [name, alts] of suggestions) alternatives[name] = alts;
+      for (const pkg of body.packages) {
+        const alts = suggestions.get(pkg.packageName);
+        if (alts?.length) alternatives[`${pkg.ecosystem}:${pkg.packageName}`] = alts;
+      }
       res.json({ alternatives });
     } catch (err) {
       next(err);
