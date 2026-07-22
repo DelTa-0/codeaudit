@@ -1,0 +1,47 @@
+{
+  "name": "codeaudit-mcp",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "MCP server for AI coding agents (Claude Code, Cursor, Cline, etc.) to verify a package is real and trustworthy before installing it.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ai-agent",
+    "guardrails",
+    "slopsquatting",
+    "supply-chain-security",
+    "hallucination"
+  ],
+  "author": "CodeAudit",
+  "license": "MIT",
+  "homepage": "https://github.com/DelTa-0/codeaudit",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DelTa-0/codeaudit.git",
+    "directory": "mcp"
+  },
+  "bugs": "https://github.com/DelTa-0/codeaudit/issues",
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "codeaudit-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --noEmit -p tsconfig.json && node build.mjs",
+    "test:ground-truth": "tsx test/ground-truth.ts",
+    "prepublishOnly": "npm run build && npm run test:ground-truth"
+  },
+  "devDependencies": {
+    "@codeaudit/engine": "*",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@types/node": "^22.10.0",
+    "esbuild": "^0.28.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "zod": "^3.23.8"
+  }
+}
