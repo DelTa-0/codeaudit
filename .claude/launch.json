@@ -5,7 +5,7 @@
       "name": "codeaudit-web",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev:web"],
-      "port": 5173
+      "port": 5174
     },
     {
       "name": "codeaudit-api",

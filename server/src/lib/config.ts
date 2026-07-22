@@ -8,7 +8,7 @@ function required(name: string): string {
 
 export const config = {
   port: Number(process.env.PORT ?? 4000),
-  appUrl: process.env.APP_URL ?? "http://localhost:5173",
+  appUrl: process.env.APP_URL ?? "http://localhost:5174",
   apiUrl: process.env.API_URL ?? "http://localhost:4000",
   databaseUrl: required("DATABASE_URL"),
   redisUrl: process.env.REDIS_URL ?? "redis://localhost:6380",
