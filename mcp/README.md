@@ -52,9 +52,30 @@ an agent to invoke it:
 > Before installing any new package, call the CodeAudit `verify_package`
 > tool.
 
+### Windows: if `npx` fails to connect
+
+Some Windows machines have an `npx` that fails to execute a resolved
+package's bin shim even though the shim itself is correct (`claude mcp
+list` reports "Failed to connect", and the server's log shows `'<bin-name>'
+is not recognized as an internal or external command`). If you hit this,
+skip `npx` entirely — install globally once and point the command straight
+at the installed binary:
+
+```bash
+npm install -g codeaudit-mcp
+claude mcp add codeaudit -- codeaudit-mcp
+```
+
+(For other clients, set `"command": "codeaudit-mcp", "args": []` instead of
+`npx`/`-y`/`codeaudit-mcp`.) This bypasses the broken `npx` resolution step
+entirely, at the cost of needing `npm update -g codeaudit-mcp` manually for
+future versions instead of `npx` always fetching latest.
+
 ## Tools
 
-- `verify_package({ name, ecosystem? })` — checks one package.
+- `verify_package({ name, ecosystem?, version? })` — checks one package.
+  `version` is optional — when given, known-vulnerability checks run
+  against that version instead of the registry's latest.
 - `verify_packages({ packages: [{ name, ecosystem? }] })` — checks several
   at once (e.g. every new line in a manifest diff).
 
