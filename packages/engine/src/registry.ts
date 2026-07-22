@@ -1,9 +1,23 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Manifest } from "./manifest.js";
-import { checkTyposquat } from "./typosquat.js";
+import { checkTyposquat, fuzzyAlternative } from "./typosquat.js";
 
 export type Ecosystem = "npm" | "pypi";
+
+/**
+ * A real, currently-published package suggested in place of a phantom
+ * (non-existent) dependency. "fuzzy" comes from offline edit-distance
+ * matching against the popular-package list (typosquat.ts); "ai" comes from
+ * an LLM inferring intent from the package name (llm.ts) — used when no
+ * close spelling match exists (e.g. "fastimagepro" -> Pillow).
+ */
+export interface AlternativeSuggestion {
+  name: string;
+  reason: string;
+  confidence: number;
+  source: "fuzzy" | "ai";
+}
 
 export interface DependencyVerdict {
   packageName: string;
@@ -126,7 +140,7 @@ export async function fetchJson(url: string): Promise<{ status: number; data: un
   return { status: res.status, data: await res.json() };
 }
 
-async function checkNpmPackage(name: string) {
+export async function checkNpmPackage(name: string) {
   const cached = cache.get(name);
   if (cached) return cached;
 
@@ -251,8 +265,11 @@ export async function checkDependencies(
       try {
         const { exists, meta } = await checkNpmPackage(name);
         let status: DependencyVerdict["status"];
+        let registryMetadata = meta;
         if (!exists) {
           status = "phantom";
+          const alternative = fuzzyAlternative(name, "npm");
+          if (alternative) registryMetadata = { alternatives: [alternative] };
         } else if (isDeclared && !isImported && !neverUnused) {
           status = "unused";
         } else {
@@ -268,7 +285,6 @@ export async function checkDependencies(
         // count) — that guard keeps legit near-neighbors like `preact` (≈react)
         // from being flagged. A distance-2 name only enriches an
         // already-suspicious verdict.
-        let registryMetadata = meta;
         if (status !== "phantom") {
           const weeklyDl = (meta?.weeklyDownloads as number | null) ?? null;
           const established = weeklyDl !== null && weeklyDl >= 100_000;

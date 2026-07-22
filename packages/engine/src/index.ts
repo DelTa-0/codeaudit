@@ -4,7 +4,12 @@
 // need it (the CLI) never touch that import graph.
 export { parseManifest, type Manifest } from "./manifest.js";
 export { analyzeRepo, listSourceFiles, type RepoAnalysis, type SymbolInfo } from "./imports.js";
-export { checkDependencies, type DependencyVerdict, type Ecosystem } from "./registry.js";
+export {
+  checkDependencies,
+  type DependencyVerdict,
+  type Ecosystem,
+  type AlternativeSuggestion,
+} from "./registry.js";
 export {
   checkVulnerabilities,
   applyVulnerabilities,
@@ -22,6 +27,7 @@ export {
   type ResolvedPackage,
 } from "./lockfile.js";
 export { checkTyposquat, type TyposquatHit } from "./typosquat.js";
+export { verifyPackage, type PackageVerifyResult } from "./verify.js";
 export { findDeadCodeCandidates, type DeadCodeCandidate } from "./deadcode.js";
 export type { ReviewedFinding } from "./llm.js";
 export { computeSummary, type ScanSummary } from "./score.js";

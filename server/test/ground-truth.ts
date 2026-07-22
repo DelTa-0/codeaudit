@@ -22,6 +22,7 @@ import {
   checkTyposquat,
   coerceVersion,
   resolveNpmTree,
+  verifyPackage,
 } from "@codeaudit/engine";
 
 const fixtureDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixture");
@@ -43,6 +44,19 @@ const verdict = (name: string) => deps.find((d) => d.packageName === name)?.stat
 const candNames = new Set(candidates.map((c) => c.name));
 const checks: [string, boolean][] = [
   ["react-toolkitz is phantom", verdict("react-toolkitz") === "phantom"],
+  ["tyepscript is phantom", verdict("tyepscript") === "phantom"],
+  [
+    "tyepscript phantom finding suggests typescript (fuzzy)",
+    (deps.find((d) => d.packageName === "tyepscript")?.registryMetadata as { alternatives?: { name: string; source: string }[] } | null)
+      ?.alternatives?.[0]?.name === "typescript" &&
+      (deps.find((d) => d.packageName === "tyepscript")?.registryMetadata as { alternatives?: { name: string; source: string }[] } | null)
+        ?.alternatives?.[0]?.source === "fuzzy",
+  ],
+  [
+    "react-toolkitz phantom finding has NO fuzzy alternative (not a spelling neighbor)",
+    !(deps.find((d) => d.packageName === "react-toolkitz")?.registryMetadata as { alternatives?: unknown } | null)
+      ?.alternatives,
+  ],
   ["date-fns is unused", verdict("date-fns") === "unused"],
   ["lodash is healthy", verdict("lodash") === "healthy"],
   ["calculateLegacyDiscount flagged", candNames.has("calculateLegacyDiscount")],
@@ -59,6 +73,32 @@ const checks: [string, boolean][] = [
   ["formatTag (exported, same-file-only call) NOT flagged", !candNames.has("formatTag")],
   ["renderTag (called cross-file) NOT flagged", !candNames.has("renderTag")],
 ];
+
+// --- generated code is never a dead-code candidate (offline) ---
+// Real-world false positive: a Django project produced 17 candidates entirely
+// from accounts/migrations/. Migration modules are discovered by path, never
+// referenced by name, so "no references" is true by construction — and
+// reviewing them burned the LLM token budget on generated code.
+const genAnalysis = {
+  symbols: [
+    { name: "Migration", filePath: "accounts/migrations/0008_alter_field.py", lineStart: 1, lineEnd: 9, exported: true, kind: "component" as const, body: "class Migration: pass" },
+    { name: "fix_categories", filePath: "accounts/migrations/0007_fix.py", lineStart: 1, lineEnd: 5, exported: true, kind: "function" as const, body: "def fix_categories(): pass" },
+    { name: "routeTree", filePath: "src/routeTree.gen.ts", lineStart: 1, lineEnd: 3, exported: true, kind: "function" as const, body: "export const routeTree = {}" },
+    { name: "genuinelyDead", filePath: "src/utils.ts", lineStart: 1, lineEnd: 3, exported: true, kind: "function" as const, body: "export function genuinelyDead() {}" },
+  ],
+  references: new Map<string, Set<string>>(),
+  importedPackages: new Set<string>(),
+  fileCount: 4,
+  fileImportExports: new Map<string, string[]>(),
+};
+const genCandidates = findDeadCodeCandidates(genAnalysis);
+const genNames = new Set(genCandidates.map((c) => c.name));
+checks.push(
+  ["Django migration class NOT a dead-code candidate", !genNames.has("Migration")],
+  ["Django migration function NOT a dead-code candidate", !genNames.has("fix_categories")],
+  ["codegen .gen.ts symbol NOT a dead-code candidate", !genNames.has("routeTree")],
+  ["genuinely unreferenced symbol IS still flagged", genNames.has("genuinelyDead")],
+);
 
 // --- tsconfig path aliases are NOT npm packages (offline) ---
 // Real-world false positive: a Vite + shadcn/ui + TanStack repo reported
@@ -137,6 +177,18 @@ checks.push(
   ["resolveNpmTree reads transitive deep-transitive@2.1.0", tree?.packages.get("deep-transitive")?.version === "2.1.0"],
   ["resolveNpmTree marks deep-transitive NOT direct", tree?.packages.get("deep-transitive")?.direct === false],
   ["deep-transitive recorded as transitively required (unused-guard input)", tree?.transitivelyRequired.has("deep-transitive") === true],
+);
+
+// --- Single-package verification primitive (offline path, for codeaudit-mcp) ---
+const verifyPhantomTypo = await verifyPackage("tyepscript", "npm");
+const verifyHealthy = await verifyPackage("lodash", "npm");
+const verifyMadeUp = await verifyPackage("react-toolkitz", "npm");
+checks.push(
+  ["verifyPackage(tyepscript) is phantom", verifyPhantomTypo.status === "phantom"],
+  ["verifyPackage(tyepscript) suggests typescript", verifyPhantomTypo.alternatives?.[0]?.name === "typescript"],
+  ["verifyPackage(lodash) is not phantom", verifyHealthy.status !== "phantom"],
+  ["verifyPackage(lodash) reports a latestVersion", typeof verifyHealthy.latestVersion === "string"],
+  ["verifyPackage(react-toolkitz) is phantom with NO alternative", verifyMadeUp.status === "phantom" && !verifyMadeUp.alternatives],
 );
 console.log("--- checks ---");
 let failed = 0;

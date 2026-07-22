@@ -13,6 +13,7 @@ import {
   checkPythonDependencies,
   findDeadCodeCandidates,
   detectEcosystems,
+  verifyPackage,
 } from "@codeaudit/engine";
 
 const fixtureDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixture-python");
@@ -38,6 +39,14 @@ const depNames = new Set(deps.map((d) => d.packageName));
 const checks: [string, boolean][] = [
   ["pypi ecosystem detected", ecosystems.includes("pypi")],
   ["fake package is phantom", verdict("totally-fake-pypi-pkg-xyz") === "phantom"],
+  ["reqeusts (typo) is phantom", verdict("reqeusts") === "phantom"],
+  [
+    "reqeusts phantom finding suggests requests (fuzzy)",
+    (deps.find((d) => d.packageName === "reqeusts")?.registryMetadata as { alternatives?: { name: string; source: string }[] } | null)
+      ?.alternatives?.[0]?.name === "requests" &&
+      (deps.find((d) => d.packageName === "reqeusts")?.registryMetadata as { alternatives?: { name: string; source: string }[] } | null)
+        ?.alternatives?.[0]?.source === "fuzzy",
+  ],
   ["rich is unused", verdict("rich") === "unused"],
   ["requests is not phantom/unused", ["healthy", "suspicious"].includes(verdict("requests") ?? "")],
   ["flask (from pyproject.toml) is present and not phantom", ["healthy", "suspicious", "unused"].includes(verdict("flask") ?? "")],
@@ -54,6 +63,15 @@ const checks: [string, boolean][] = [
   ["same-file-called `internal_helper` NOT flagged", !candNames.has("internal_helper")],
   ["genuinely-uncalled `lazy_docx_load` still flagged", candNames.has("lazy_docx_load")],
 ];
+
+// --- Single-package verification primitive (offline path, for codeaudit-mcp) ---
+const verifyPhantomTypoPy = await verifyPackage("reqeusts", "pypi");
+const verifyHealthyPy = await verifyPackage("requests", "pypi");
+checks.push(
+  ["verifyPackage(reqeusts, pypi) is phantom", verifyPhantomTypoPy.status === "phantom"],
+  ["verifyPackage(reqeusts, pypi) suggests requests", verifyPhantomTypoPy.alternatives?.[0]?.name === "requests"],
+  ["verifyPackage(requests, pypi) is not phantom", verifyHealthyPy.status !== "phantom"],
+);
 console.log("--- checks ---");
 let failed = 0;
 for (const [label, ok] of checks) {

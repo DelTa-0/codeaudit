@@ -1,6 +1,6 @@
 import path from "node:path";
 import { fetchJson, type DependencyVerdict } from "../registry.js";
-import { checkTyposquat } from "../typosquat.js";
+import { checkTyposquat, fuzzyAlternative } from "../typosquat.js";
 import type { PythonManifest } from "./manifest.js";
 import { PYTHON_STDLIB } from "./stdlib.js";
 import { importNameToDistribution, normalizePyPiName } from "./aliases.js";
@@ -29,7 +29,7 @@ const NEVER_FLAG_UNUSED = new Set([
   "pip",
 ]);
 
-async function checkPyPiPackage(name: string) {
+export async function checkPyPiPackage(name: string) {
   const cached = cache.get(name);
   if (cached) return cached;
 
@@ -130,8 +130,11 @@ export async function checkPythonDependencies(
       try {
         const { exists, meta } = await checkPyPiPackage(normalized);
         let status: DependencyVerdict["status"];
+        let registryMetadata = meta;
         if (!exists) {
           status = "phantom";
+          const alternative = fuzzyAlternative(normalized, "pypi");
+          if (alternative) registryMetadata = { alternatives: [alternative] };
         } else if (
           isDeclared &&
           !isImported &&
@@ -149,7 +152,6 @@ export async function checkPythonDependencies(
         }
         // Typosquat/slopsquat check — see registry.ts for the distance/
         // established-package policy. Downloads here are monthly (PyPI).
-        let registryMetadata = meta;
         if (status !== "phantom") {
           const monthlyDl = (meta?.weeklyDownloads as number | null) ?? null;
           const established = monthlyDl !== null && monthlyDl >= 100_000;
