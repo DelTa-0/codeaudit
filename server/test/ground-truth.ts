@@ -24,6 +24,7 @@ import {
   resolveNpmTree,
   verifyPackage,
   findDuplicateLibraries,
+  checkNpmPackage,
 } from "@codeaudit/engine";
 
 const fixtureDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixture");
@@ -211,6 +212,16 @@ checks.push(
     !dupGroups.some((g) => g.category === "utility"),
   ],
   ["duplicate detection returns no group for a single library", findDuplicateLibraries([dupDeps[0]] as unknown as Parameters<typeof findDuplicateLibraries>[0]).length === 0],
+);
+
+// --- Registry metadata enrichment (live npm; `request` is famously deprecated) ---
+const enriched = await checkNpmPackage("request");
+const lodashMeta = await checkNpmPackage("lodash");
+checks.push(
+  ["checkNpmPackage surfaces a deprecation message for request", typeof enriched.meta?.deprecated === "string"],
+  ["checkNpmPackage surfaces a license for lodash", typeof lodashMeta.meta?.license === "string"],
+  ["checkNpmPackage surfaces unpackedSize for lodash", typeof lodashMeta.meta?.unpackedSize === "number"],
+  ["lodash is NOT marked deprecated", lodashMeta.meta?.deprecated === null],
 );
 
 console.log("--- checks ---");

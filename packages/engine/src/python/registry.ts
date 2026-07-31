@@ -41,7 +41,7 @@ export async function checkPyPiPackage(name: string) {
   if (status !== 404 && data) {
     result.exists = true;
     const doc = data as {
-      info?: { version?: string };
+      info?: { version?: string; license?: string; yanked?: boolean };
       releases?: Record<string, { upload_time_iso_8601?: string }[]>;
     };
     // First release date = earliest upload across all versions (best-effort).
@@ -66,6 +66,8 @@ export async function checkPyPiPackage(name: string) {
       // stored under the same key the dashboard's downloads column reads
       weeklyDownloads: monthlyDownloads,
       downloadsPeriod: "month",
+      license: doc.info?.license || null,
+      deprecated: doc.info?.yanked ? "This release has been yanked from PyPI." : null,
     };
   }
   cache.set(name, result);

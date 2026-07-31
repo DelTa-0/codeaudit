@@ -156,8 +156,17 @@ export async function checkNpmPackage(name: string) {
     const doc = data as {
       time?: Record<string, string>;
       "dist-tags"?: Record<string, string>;
+      versions?: Record<
+        string,
+        { deprecated?: string; license?: string | { type?: string }; dist?: { unpackedSize?: number } }
+      >;
     };
     const created = doc.time?.created ?? null;
+    const latest = doc["dist-tags"]?.latest ?? null;
+    // The full packument is already downloaded above — deprecation, licence and
+    // package weight are read from it directly, costing zero extra requests.
+    const latestDoc = latest ? doc.versions?.[latest] : undefined;
+    const rawLicense = latestDoc?.license;
     let weeklyDownloads: number | null = null;
     try {
       const dl = await fetchJson(
@@ -169,8 +178,11 @@ export async function checkNpmPackage(name: string) {
     }
     result.meta = {
       created,
-      latest: doc["dist-tags"]?.latest ?? null,
+      latest,
       weeklyDownloads,
+      deprecated: typeof latestDoc?.deprecated === "string" ? latestDoc.deprecated : null,
+      license: typeof rawLicense === "string" ? rawLicense : (rawLicense?.type ?? null),
+      unpackedSize: latestDoc?.dist?.unpackedSize ?? null,
     };
   }
   cache.set(name, result);

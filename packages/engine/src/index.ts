@@ -6,6 +6,7 @@ export { parseManifest, type Manifest } from "./manifest.js";
 export { analyzeRepo, listSourceFiles, type RepoAnalysis, type SymbolInfo } from "./imports.js";
 export {
   checkDependencies,
+  checkNpmPackage,
   type DependencyVerdict,
   type Ecosystem,
   type AlternativeSuggestion,
