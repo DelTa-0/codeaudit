@@ -23,6 +23,7 @@ import {
   coerceVersion,
   resolveNpmTree,
   verifyPackage,
+  findDuplicateLibraries,
 } from "@codeaudit/engine";
 
 const fixtureDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixture");
@@ -190,6 +191,28 @@ checks.push(
   ["verifyPackage(lodash) reports a latestVersion", typeof verifyHealthy.latestVersion === "string"],
   ["verifyPackage(react-toolkitz) is phantom with NO alternative", verifyMadeUp.status === "phantom" && !verifyMadeUp.alternatives],
 );
+
+// --- Duplicate-library detection (offline, pure) ---
+const dupDeps = [
+  { packageName: "moment", declaredVersion: "^2.30.0", status: "healthy", ecosystem: "npm", registryMetadata: null },
+  { packageName: "dayjs", declaredVersion: "^1.11.0", status: "healthy", ecosystem: "npm", registryMetadata: null },
+  { packageName: "lodash", declaredVersion: "^4.17.21", status: "healthy", ecosystem: "npm", registryMetadata: null },
+  { packageName: "underscore", declaredVersion: "^1.13.0", status: "unused", ecosystem: "npm", registryMetadata: null },
+] as const;
+const dupGroups = findDuplicateLibraries(dupDeps as unknown as Parameters<typeof findDuplicateLibraries>[0]);
+checks.push(
+  ["duplicate detection finds the date group", dupGroups.some((g) => g.category === "date")],
+  [
+    "duplicate date group contains both moment and dayjs",
+    dupGroups.find((g) => g.category === "date")?.packages.slice().sort().join(",") === "dayjs,moment",
+  ],
+  [
+    "duplicate detection does NOT fire on lodash+underscore when underscore is unused",
+    !dupGroups.some((g) => g.category === "utility"),
+  ],
+  ["duplicate detection returns no group for a single library", findDuplicateLibraries([dupDeps[0]] as unknown as Parameters<typeof findDuplicateLibraries>[0]).length === 0],
+);
+
 console.log("--- checks ---");
 let failed = 0;
 for (const [label, ok] of checks) {

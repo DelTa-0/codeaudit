@@ -27,6 +27,8 @@ export {
   type ResolvedPackage,
 } from "./lockfile.js";
 export { checkTyposquat, type TyposquatHit } from "./typosquat.js";
+export { findDuplicateLibraries, type DuplicateGroup } from "./duplicates.js";
+export { EQUIVALENT_GROUPS, type EquivalentGroup } from "./data/equivalents.js";
 export { verifyPackage, type PackageVerifyResult } from "./verify.js";
 export { findDeadCodeCandidates, type DeadCodeCandidate } from "./deadcode.js";
 export type { ReviewedFinding } from "./llm.js";
