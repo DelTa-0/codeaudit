@@ -25,6 +25,8 @@ import {
   verifyPackage,
   findDuplicateLibraries,
   checkNpmPackage,
+  checkLicenseConflicts,
+  readProjectLicense,
 } from "@codeaudit/engine";
 
 const fixtureDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixture");
@@ -222,6 +224,27 @@ checks.push(
   ["checkNpmPackage surfaces a license for lodash", typeof lodashMeta.meta?.license === "string"],
   ["checkNpmPackage surfaces unpackedSize for lodash", typeof lodashMeta.meta?.unpackedSize === "number"],
   ["lodash is NOT marked deprecated", lodashMeta.meta?.deprecated === null],
+);
+
+// --- Licence conflict detection (offline, pure) ---
+const licDeps = [
+  { packageName: "copyleft-lib", declaredVersion: "^1.0.0", status: "healthy", ecosystem: "npm", registryMetadata: { license: "AGPL-3.0" } },
+  { packageName: "weak-copyleft-lib", declaredVersion: "^1.0.0", status: "healthy", ecosystem: "npm", registryMetadata: { license: "LGPL-3.0" } },
+  { packageName: "permissive-lib", declaredVersion: "^1.0.0", status: "healthy", ecosystem: "npm", registryMetadata: { license: "MIT" } },
+  { packageName: "unlicensed-lib", declaredVersion: "^1.0.0", status: "healthy", ecosystem: "npm", registryMetadata: { license: null } },
+  { packageName: "unused-copyleft", declaredVersion: "^1.0.0", status: "unused", ecosystem: "npm", registryMetadata: { license: "GPL-3.0" } },
+] as unknown as Parameters<typeof checkLicenseConflicts>[0];
+const mitConflicts = checkLicenseConflicts(licDeps, "MIT");
+const gplConflicts = checkLicenseConflicts(licDeps, "AGPL-3.0");
+const conflictNames = new Set(mitConflicts.map((c) => c.packageName));
+checks.push(
+  ["AGPL dep in an MIT project is a high-severity conflict", mitConflicts.find((c) => c.packageName === "copyleft-lib")?.severity === "high"],
+  ["LGPL dep in an MIT project is medium severity", mitConflicts.find((c) => c.packageName === "weak-copyleft-lib")?.severity === "medium"],
+  ["MIT dep in an MIT project is NOT a conflict", !conflictNames.has("permissive-lib")],
+  ["a dependency with no declared licence is flagged", conflictNames.has("unlicensed-lib")],
+  ["an unused copyleft dep is NOT flagged as a licence conflict", !conflictNames.has("unused-copyleft")],
+  ["copyleft deps are NOT conflicts when the project is itself AGPL", !gplConflicts.some((c) => c.packageName === "copyleft-lib")],
+  ["readProjectLicense returns null when package.json declares no license", readProjectLicense(fixtureDir) === null],
 );
 
 console.log("--- checks ---");
