@@ -21,6 +21,25 @@ export interface RankedFinding {
 
 const BAND_ORDER: Record<PriorityBand, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 const EFFORT_ORDER: Record<Effort, number> = { S: 0, M: 1, L: 2 };
+/**
+ * Ordering between finding kinds inside the same band. Needed because
+ * `confidence` is not comparable across kinds — an LLM's 0.95 "this looks
+ * dead" and a static analyzer's hardcoded 0.9 "this dependency is never
+ * imported" are different scales, so comparing them directly ranks by
+ * coincidence rather than by judgement. Kinds are ordered by how confidently
+ * actionable they are: a dependency you can delete from a manifest outranks
+ * source code an LLM believes is unreachable.
+ */
+const KIND_ORDER: Record<string, number> = {
+  phantom_dependency: 0,
+  vulnerable_dependency: 1,
+  license_conflict: 2,
+  suspicious_dependency: 3,
+  deprecated_dependency: 4,
+  unused_dependency: 5,
+  duplicate_library: 6,
+  dead_code: 7,
+};
 const DEFAULT_LIMIT = 20;
 
 export interface RankInput {
@@ -34,12 +53,15 @@ export interface RankInput {
 /**
  * Orders findings so the top of the list is what to fix first.
  *
- * Ordering is lexicographic — band, then confidence descending, then effort
- * ascending — deliberately not a weighted sum. A weighted score needs magic
- * coefficients nobody can justify, which is the same fake-precision problem
- * that got hour/currency debt costing rejected. Lexicographic ordering states
- * itself: worst class first, most certain first within a class, cheapest first
- * among equals.
+ * Ordering is lexicographic — band, then kind, then confidence descending,
+ * then effort ascending — deliberately not a weighted sum. A weighted score
+ * needs magic coefficients nobody can justify, which is the same
+ * fake-precision problem that got hour/currency debt costing rejected. The
+ * kind ordering exists because confidence isn't comparable across kinds: an
+ * LLM's 0.95 "looks dead" and a static analyzer's hardcoded 0.9 "never
+ * imported" are different scales. Lexicographic ordering states itself:
+ * worst class first, most actionable kind first, most certain first within
+ * a kind, cheapest first among equals.
  */
 export function rankFindings(input: RankInput): RankedFinding[] {
   const items: Omit<RankedFinding, "rank">[] = [];
@@ -150,6 +172,7 @@ export function rankFindings(input: RankInput): RankedFinding[] {
   items.sort(
     (a, b) =>
       BAND_ORDER[a.band] - BAND_ORDER[b.band] ||
+      (KIND_ORDER[a.kind] ?? 99) - (KIND_ORDER[b.kind] ?? 99) ||
       b.confidence - a.confidence ||
       EFFORT_ORDER[a.effort] - EFFORT_ORDER[b.effort] ||
       a.title.localeCompare(b.title),

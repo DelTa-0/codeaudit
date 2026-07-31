@@ -266,7 +266,8 @@ const ranked = rankFindings({
 const kinds = ranked.map((r) => r.kind);
 checks.push(
   ["ranking puts a phantom dependency in the critical band", ranked.find((r) => r.title.includes("react-toolkitz"))?.band === "critical"],
-  ["ranking places phantom+critical-CVE above unused", kinds.indexOf("unused_dependency") > kinds.indexOf("phantom_dependency")],
+  ["ranking places a phantom dependency above an unused one", kinds.indexOf("unused_dependency") > kinds.indexOf("phantom_dependency")],
+  ["ranking places a critical CVE above an unused dependency", kinds.indexOf("unused_dependency") > kinds.indexOf("vulnerable_dependency")],
   ["ranking places unused dependency above dead code", kinds.indexOf("dead_code") > kinds.indexOf("unused_dependency")],
   ["deprecated dependency is ranked medium", ranked.find((r) => r.kind === "deprecated_dependency")?.band === "medium"],
   ["every ranked finding carries a non-empty why", ranked.every((r) => r.why.trim().length > 0)],
