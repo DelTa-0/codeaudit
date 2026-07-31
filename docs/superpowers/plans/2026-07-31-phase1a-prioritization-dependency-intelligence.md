@@ -203,7 +203,7 @@ git commit -m "Add duplicate-library detection over equivalent-package groups"
 - Test: `server/test/ground-truth.ts`
 
 **Interfaces:**
-- Produces: `registryMetadata` gains `deprecated: string | null`, `license: string | null`, `unpackedSize: number | null` (npm) and `license: string | null`, `yanked: boolean` (pypi). No signature change.
+- Produces: `registryMetadata` gains `deprecated: string | null`, `license: string | null`, `unpackedSize: number | null` (npm) and `license: string | null`, `deprecated: string | null` (pypi — derived from `info.yanked`, so both ecosystems expose the same `deprecated` key and downstream tasks need no per-ecosystem branch). No signature change.
 
 - [ ] **Step 1: Write the failing test**
 
