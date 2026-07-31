@@ -19,6 +19,10 @@ import {
   collectVulnTargets,
   resolveNpmTree,
   resolvePythonTree,
+  findDuplicateLibraries,
+  readProjectLicense,
+  checkLicenseConflicts,
+  rankFindings,
   type DependencyVerdict,
   type DeadCodeCandidate,
   type ReviewedFinding,
@@ -201,6 +205,15 @@ async function main() {
   }));
 
   const summary = computeSummary(deps, staticFindings, fileCount);
+  const duplicates = findDuplicateLibraries(deps);
+  const licenseConflicts = checkLicenseConflicts(deps, readProjectLicense(dir));
+  const priorities = rankFindings({
+    deps,
+    codeFindings: staticFindings,
+    duplicates,
+    licenseConflicts,
+    limit: 5,
+  });
   const phantomCount = summary.counts.phantom;
   const belowMin = minScore !== null && summary.score < minScore;
   const exitCode = phantomCount > 0 || belowMin ? 1 : 0;
@@ -219,6 +232,8 @@ async function main() {
           counts: summary.counts,
           dependencies: deps,
           deadCodeCandidates: staticFindings,
+          priorities,
+          advisories: { duplicates, licenseConflicts },
           upload: uploadResult,
           exitCode,
         },
@@ -230,6 +245,18 @@ async function main() {
   }
 
   console.log(`\n${BOLD}CodeAudit${RESET} ${DIM}· static scan of ${dir}${RESET}\n`);
+
+  const BAND_COLOR: Record<string, string> = { critical: RED, high: RED, medium: YELLOW, low: DIM };
+  if (priorities.length) {
+    console.log(`${BOLD}Fix first${RESET}`);
+    for (const p of priorities) {
+      const color = BAND_COLOR[p.band] ?? "";
+      console.log(`  ${color}${String(p.rank).padStart(2)}. ${p.band.toUpperCase().padEnd(8)}${RESET} ${p.title} ${DIM}[${p.effort}]${RESET}`);
+      console.log(`      ${DIM}${p.why}${RESET}`);
+      if (p.location) console.log(`      ${DIM}${p.location}${RESET}`);
+    }
+    console.log();
+  }
 
   const interesting = deps
     .filter((d) => d.status !== "healthy")
