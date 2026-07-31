@@ -27,6 +27,7 @@ import {
   checkNpmPackage,
   checkLicenseConflicts,
   readProjectLicense,
+  rankFindings,
 } from "@codeaudit/engine";
 
 const fixtureDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixture");
@@ -245,6 +246,33 @@ checks.push(
   ["an unused copyleft dep is NOT flagged as a licence conflict", !conflictNames.has("unused-copyleft")],
   ["copyleft deps are NOT conflicts when the project is itself AGPL", !gplConflicts.some((c) => c.packageName === "copyleft-lib")],
   ["readProjectLicense returns null when package.json declares no license", readProjectLicense(fixtureDir) === null],
+);
+
+// --- Prioritization (offline, pure) ---
+const rankDeps = [
+  { packageName: "date-fns", declaredVersion: "^4.1.0", status: "unused", ecosystem: "npm", registryMetadata: null },
+  { packageName: "react-toolkitz", declaredVersion: "^2.1.0", status: "phantom", ecosystem: "npm", registryMetadata: null },
+  { packageName: "old-lib", declaredVersion: "^1.0.0", status: "vulnerable", ecosystem: "npm", registryMetadata: { maxSeverity: "critical" } },
+  { packageName: "stale-lib", declaredVersion: "^1.0.0", status: "healthy", ecosystem: "npm", registryMetadata: { deprecated: "use new-lib instead" } },
+] as unknown as Parameters<typeof rankFindings>[0]["deps"];
+const ranked = rankFindings({
+  deps: rankDeps,
+  codeFindings: [
+    { filePath: "src/x.ts", lineStart: 1, lineEnd: 4, symbolName: "deadFn", findingType: "dead_export", confidence: 0.9, reasoning: "unreferenced" },
+  ],
+  duplicates: [],
+  licenseConflicts: [],
+});
+const kinds = ranked.map((r) => r.kind);
+checks.push(
+  ["ranking puts a phantom dependency in the critical band", ranked.find((r) => r.title.includes("react-toolkitz"))?.band === "critical"],
+  ["ranking places phantom+critical-CVE above unused", kinds.indexOf("unused_dependency") > kinds.indexOf("phantom_dependency")],
+  ["ranking places unused dependency above dead code", kinds.indexOf("dead_code") > kinds.indexOf("unused_dependency")],
+  ["deprecated dependency is ranked medium", ranked.find((r) => r.kind === "deprecated_dependency")?.band === "medium"],
+  ["every ranked finding carries a non-empty why", ranked.every((r) => r.why.trim().length > 0)],
+  ["removing an unused dependency is S effort", ranked.find((r) => r.kind === "unused_dependency")?.effort === "S"],
+  ["ranks are 1-based and contiguous", ranked.every((r, i) => r.rank === i + 1)],
+  ["ranking respects the limit option", rankFindings({ deps: rankDeps, codeFindings: [], limit: 2 }).length === 2],
 );
 
 console.log("--- checks ---");

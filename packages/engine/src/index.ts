@@ -39,3 +39,10 @@ export { parsePythonManifest, type PythonManifest } from "./python/manifest.js";
 export { analyzePythonRepo, listPythonFiles } from "./python/imports.js";
 export { checkPythonDependencies } from "./python/registry.js";
 export { readProjectLicense, checkLicenseConflicts, type LicenseConflict } from "./license.js";
+export {
+  rankFindings,
+  type RankedFinding,
+  type RankInput,
+  type Effort,
+  type PriorityBand,
+} from "./priority.js";
