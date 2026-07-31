@@ -356,7 +356,7 @@ checks.push(
   ["a dependency with no declared licence is flagged", conflictNames.has("unlicensed-lib")],
   ["an unused copyleft dep is NOT flagged as a licence conflict", !conflictNames.has("unused-copyleft")],
   ["copyleft deps are NOT conflicts when the project is itself AGPL", !gplConflicts.some((c) => c.packageName === "copyleft-lib")],
-  ["readProjectLicense reads the fixture package.json", readProjectLicense(fixtureDir) === null],
+  ["readProjectLicense returns null when package.json declares no license", readProjectLicense(fixtureDir) === null],
 );
 ```
 
