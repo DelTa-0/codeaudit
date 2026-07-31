@@ -32,6 +32,10 @@ import {
   collectVulnTargets,
   resolveNpmTree,
   resolvePythonTree,
+  findDuplicateLibraries,
+  readProjectLicense,
+  checkLicenseConflicts,
+  rankFindings,
   type DependencyVerdict,
   type DeadCodeCandidate,
   type ResolvedTree,
@@ -210,7 +214,20 @@ async function processScanJob(scanJobId: string) {
     await setStatus(scanJobId, "analyzing", "Attributing AI-assisted code");
     const aiStats = await computeAiAuthorship(dir, zombies);
 
-    const summary = { ...computeSummary(deps, zombies, fileCount, reviewStatus), ai: aiStats };
+    // Advisory-only in this release: these inform the prioritized list and the
+    // dashboard, but deliberately do not feed computeSummary's score yet — see
+    // docs/superpowers/specs/2026-07-31-phase1-signal-design.md ("Scoring
+    // changes"). Landing detection and scoring in one step would silently move
+    // every repo's score and could break merge gates on unchanged code.
+    const duplicates = findDuplicateLibraries(deps);
+    const licenseConflicts = checkLicenseConflicts(deps, readProjectLicense(dir));
+    const priorities = rankFindings({ deps, codeFindings: zombies, duplicates, licenseConflicts });
+    const summary = {
+      ...computeSummary(deps, zombies, fileCount, reviewStatus),
+      ai: aiStats,
+      priorities,
+      advisories: { duplicates, licenseConflicts },
+    };
     await query(
       `UPDATE scan_jobs SET status = 'complete', progress = 'Complete',
          summary = $2, completed_at = now() WHERE id = $1`,
