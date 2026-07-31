@@ -219,9 +219,22 @@ async function processScanJob(scanJobId: string) {
     // docs/superpowers/specs/2026-07-31-phase1-signal-design.md ("Scoring
     // changes"). Landing detection and scoring in one step would silently move
     // every repo's score and could break merge gates on unchanged code.
-    const duplicates = findDuplicateLibraries(deps);
-    const licenseConflicts = checkLicenseConflicts(deps, readProjectLicense(dir));
-    const priorities = rankFindings({ deps, codeFindings: zombies, duplicates, licenseConflicts });
+    // Best-effort, matching analysis/aiAuthorship.ts: advisory extras must
+    // never be able to fail a scan that would otherwise have succeeded. A
+    // failure here means the advisory data is absent, not that the scan broke.
+    let duplicates: ReturnType<typeof findDuplicateLibraries> = [];
+    let licenseConflicts: ReturnType<typeof checkLicenseConflicts> = [];
+    let priorities: ReturnType<typeof rankFindings> = [];
+    try {
+      duplicates = findDuplicateLibraries(deps);
+      licenseConflicts = checkLicenseConflicts(deps, readProjectLicense(dir));
+      priorities = rankFindings({ deps, codeFindings: zombies, duplicates, licenseConflicts });
+    } catch (err) {
+      console.error(
+        `[scan ${scanJobId}] advisory analysis failed (continuing without it):`,
+        err instanceof Error ? err.message : err,
+      );
+    }
     const summary = {
       ...computeSummary(deps, zombies, fileCount, reviewStatus),
       ai: aiStats,
