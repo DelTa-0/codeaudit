@@ -57,6 +57,16 @@ const ENV_REFERENCE = /process\.env|os\.environ|import\.meta\.env|ENV\[|getenv\(
 const PLACEHOLDER =
   /^(?:x{3,}|\.{3,}|\*{3,}|<[^>]*>|\$\{[^}]*\}|your[-_ ]|my[-_ ]|changeme|placeholder|dummy|example|sample|redacted|insert|todo|fixme|abc123|test[-_]?(?:key|token|secret)?$)/i;
 
+/**
+ * Documentation sample credentials. Vendors embed a marker word in the values
+ * they publish in tutorials — Amazon's canonical `AKIAIOSFODNN7EXAMPLE` is the
+ * most-copied string of its kind — so any README, ADR or onboarding doc that
+ * quotes one would otherwise be reported as a live leak. A randomly generated
+ * credential effectively never contains these markers, so the recall cost is
+ * negligible against a large precision win.
+ */
+const DOCUMENTATION_SAMPLE = /EXAMPLE|SAMPLE_?KEY|YOUR_?(?:API_?)?KEY|XXXXXXXX/i;
+
 function shannonEntropy(value: string): number {
   const counts = new Map<string, number>();
   for (const ch of value) counts.set(ch, (counts.get(ch) ?? 0) + 1);
@@ -90,14 +100,6 @@ const SCANNABLE_EXTENSIONS = new Set([
 
 const EXCLUDED_PATH =
   /(^|\/)(node_modules|dist|build|out|coverage|vendor|\.git|__pycache__|\.venv|venv)\//;
-/**
- * This tool's own planning/spec docs quote its test-fixture literals verbatim
- * (e.g. the canonical AWS example key) to specify exactly what a future
- * implementer must type. Those are illustrative, not live credentials, and
- * excluding them here cannot mask a real secret in a target repository since
- * this directory naming is specific to this project's own tooling.
- */
-const EXCLUDED_SPEC_DOCS = /(^|\/)(\.superpowers|docs\/superpowers)\//;
 const EXCLUDED_FIXTURE = /(^|\/)(tests?|__tests__|__mocks__|fixtures?|test-fixtures?)\//i;
 /** Integrity hashes are maximally high-entropy and would fire on every line. */
 const LOCKFILE =
@@ -110,7 +112,6 @@ export function isSecretScannablePath(relPath: string): boolean {
   const normalized = relPath.split(path.sep).join("/");
   if (EXCLUDED_PATH.test(normalized)) return false;
   if (EXCLUDED_FIXTURE.test(normalized)) return false;
-  if (EXCLUDED_SPEC_DOCS.test(normalized)) return false;
   if (LOCKFILE.test(normalized)) return false;
   if (TEMPLATE_FILE.test(normalized)) return false;
   if (MINIFIED.test(normalized)) return false;
@@ -130,6 +131,9 @@ export function scanTextForSecrets(text: string, filePath: string): SecretFindin
   const lines = text.split("\n");
 
   const push = (value: string, provider: string, line: number, tier: 1 | 2) => {
+    // A vendor-marked documentation sample (e.g. Amazon's AKIA...EXAMPLE) —
+    // never a live credential, regardless of which tier matched it.
+    if (DOCUMENTATION_SAMPLE.test(value)) return;
     const fingerprint = fingerprintSecret(value);
     if (seen.has(fingerprint)) return;
     seen.add(fingerprint);

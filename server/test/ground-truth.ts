@@ -422,7 +422,7 @@ checks.push(
 );
 
 // --- Secret detection: tiers, exclusions, redaction ---
-const AWS = "AKIA" + "IOSFODNN7EXAMPLE";
+const AWS = "AKIA" + "3RTQ7ZK2WPLM5XDN";
 const GROQ = "gsk_" + "a".repeat(52);
 const fire = (text: string, file = "src/config.ts") => scanTextForSecrets(text, file);
 checks.push(
@@ -469,6 +469,14 @@ checks.push(
   [
     "no finding object contains the raw secret anywhere in its serialization",
     !JSON.stringify(fire(`const k = "${AWS}";`)).includes(AWS),
+  ],
+  [
+    "does NOT fire on Amazon's documentation example key",
+    scanTextForSecrets(`const k = "${"AKIA" + "IOSFODNN7EXAMPLE"}";`, "README.md").length === 0,
+  ],
+  [
+    "DOES scan a markdown file (docs are a real leak vector)",
+    isSecretScannablePath("README.md"),
   ],
 );
 
