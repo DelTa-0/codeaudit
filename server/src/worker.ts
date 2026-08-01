@@ -18,6 +18,7 @@ import { query, queryOne } from "./db/pool.js";
 import { cloneRepoSandboxed, cleanupScanDir } from "./analysis/clone.js";
 import { computeAiAuthorship } from "./analysis/aiAuthorship.js";
 import { listTrackedFiles } from "./analysis/trackedFiles.js";
+import { scanHistorySecrets } from "./analysis/historySecrets.js";
 import {
   parseManifest,
   analyzeRepo,
@@ -41,6 +42,7 @@ import {
   type DependencyVerdict,
   type DeadCodeCandidate,
   type ResolvedTree,
+  type SecretFinding,
 } from "@codeaudit/engine";
 import { reviewCandidatesWithLlm, suggestAlternatives } from "@codeaudit/engine/llm";
 import { config } from "./lib/config.js";
@@ -246,6 +248,43 @@ async function processScanJob(scanJobId: string) {
             redacted: s.redacted,
             fingerprint: s.fingerprint,
             tier: s.tier,
+          }),
+        ],
+      );
+    }
+
+    // Secrets that are gone from HEAD but still recoverable from git objects.
+    // The recommendation differs fundamentally: you cannot fix these by
+    // editing a file, only by rotating the credential.
+    let historySecrets: SecretFinding[] = [];
+    try {
+      historySecrets = await scanHistorySecrets(dir, new Set(secrets.map((s) => s.fingerprint)));
+    } catch (err) {
+      console.error(
+        `[scan ${scanJobId}] history secret scan failed (continuing without it):`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+    for (const s of historySecrets) {
+      await query(
+        `INSERT INTO code_findings
+           (scan_job_id, file_path, line_start, line_end, symbol_name, finding_type,
+            confidence_score, llm_reasoning, detail)
+         VALUES ($1, $2, $3, $3, $4, 'hardcoded_secret_history', 1.0, $5, $6)`,
+        [
+          scanJobId,
+          s.filePath,
+          s.line,
+          s.provider,
+          `A ${s.provider} was committed here and later removed. It is still recoverable from git history — rotate the credential; deleting the file does not revoke it.`,
+          JSON.stringify({
+            provider: s.provider,
+            redacted: s.redacted,
+            fingerprint: s.fingerprint,
+            tier: s.tier,
+            removedFromHead: true,
+            firstSeenCommit: s.firstSeenCommit,
+            lastSeenCommit: s.lastSeenCommit,
           }),
         ],
       );
