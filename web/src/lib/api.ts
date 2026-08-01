@@ -191,6 +191,14 @@ export interface CodeFinding {
   finding_type: string;
   confidence_score: string | null;
   llm_reasoning: string | null;
+  detail?: {
+    provider: string;
+    redacted: string;
+    tier?: number;
+    removedFromHead?: boolean;
+    firstSeenCommit?: string;
+    lastSeenCommit?: string;
+  } | null;
 }
 
 export interface Member {

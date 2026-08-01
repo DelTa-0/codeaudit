@@ -111,7 +111,7 @@ scansRouter.get("/scans/:scanId/code-findings", async (req, res, next) => {
     const perPage = Math.min(100, Number(req.query.per_page) || 50);
     const rows = await query(
       `SELECT id, file_path, line_start, line_end, symbol_name, finding_type,
-              confidence_score, llm_reasoning
+              confidence_score, llm_reasoning, detail
        FROM code_findings WHERE scan_job_id = $1
        ORDER BY confidence_score DESC NULLS LAST, file_path
        LIMIT $2 OFFSET $3`,

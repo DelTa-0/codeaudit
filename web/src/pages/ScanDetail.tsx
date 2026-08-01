@@ -298,6 +298,41 @@ export function ScanDetail() {
         </Card>
       )}
 
+      {codeFindings && (() => {
+        const secretFindings = codeFindings.filter((f) => f.finding_type.startsWith("hardcoded_secret"));
+        if (secretFindings.length === 0) return null;
+        return (
+          <Card className="border-danger/30 bg-danger/10">
+            <p className="mb-3 text-sm font-medium text-danger">
+              Hardcoded secrets ({secretFindings.length})
+            </p>
+            <div className="divide-y divide-danger/20">
+              {secretFindings.map((f) => {
+                const removedFromHead = f.detail?.removedFromHead;
+                const guidance = removedFromHead
+                  ? "Still recoverable from git history — rotate this credential. Deleting the file does not revoke it."
+                  : "Remove this from source, then rotate the credential.";
+                return (
+                  <div key={f.id} className="py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-sm">{f.detail?.provider ?? "Unknown provider"}</span>
+                      <span className="text-xs text-muted">
+                        {f.file_path}
+                        {f.line_start ? `:${f.line_start}` : ""}
+                      </span>
+                    </div>
+                    {f.detail?.redacted && (
+                      <p className="mt-1 font-mono text-xs text-muted">{f.detail.redacted}</p>
+                    )}
+                    <p className="mt-1 text-sm text-danger">{guidance}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        );
+      })()}
+
       {scan.summary?.priorities && scan.summary.priorities.length > 0 && (
         <Card>
           <p className="mb-1 text-sm font-medium text-muted">Fix first</p>
@@ -558,16 +593,18 @@ export function ScanDetail() {
           </Card>
         )}
 
-      {codeFindings && (
+      {codeFindings && (() => {
+        const zombieFindings = codeFindings.filter((f) => !f.finding_type.startsWith("hardcoded_secret"));
+        return (
         <Card>
           <p className="mb-3 text-sm font-medium text-muted">
-            Zombie code findings ({codeFindings.length})
+            Zombie code findings ({zombieFindings.length})
           </p>
-          {codeFindings.length === 0 ? (
+          {zombieFindings.length === 0 ? (
             <EmptyState title="No zombie code detected" />
           ) : (
             <div className="divide-y divide-border">
-              {codeFindings.map((f) => (
+              {zombieFindings.map((f) => (
                 <div key={f.id} className="py-1">
                   <button
                     className="flex w-full cursor-pointer items-center justify-between rounded-md px-2 py-2 text-left transition-colors hover:bg-surface-2/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
@@ -597,7 +634,8 @@ export function ScanDetail() {
             </div>
           )}
         </Card>
-      )}
+        );
+      })()}
     </div>
   );
 }
