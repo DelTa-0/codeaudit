@@ -1,6 +1,6 @@
 import { queryOne } from "../db/pool.js";
 import { upsertPrComment, githubConfigured } from "../services/github.js";
-import type { ScanSummary } from "@codeaudit/engine";
+import type { ScanSummary, RankedFinding } from "@codeaudit/engine";
 
 export async function processPrCommentJob(scanJobId: string) {
   if (!githubConfigured()) return;
@@ -9,7 +9,7 @@ export async function processPrCommentJob(scanJobId: string) {
     id: string;
     repo_id: string;
     pr_number: number | null;
-    summary: ScanSummary | null;
+    summary: (ScanSummary & { priorities?: RankedFinding[] }) | null;
   }>("SELECT id, repo_id, pr_number, summary FROM scan_jobs WHERE id = $1", [scanJobId]);
   if (!scan?.pr_number || !scan.summary) return;
 
@@ -39,10 +39,22 @@ export async function processPrCommentJob(scanJobId: string) {
         ? "🟡 **Review recommended** — health score below threshold."
         : "🟢 **Looks good** from a debt perspective.";
 
+  // Lead with the ranked top three rather than a bare tally — a reviewer
+  // should see what to act on first, not just how many findings exist.
+  const topPriorities = (s.priorities ?? []).slice(0, 3);
+  const fixFirst = topPriorities.length
+    ? `\n**Fix first**\n\n${topPriorities
+        .map(
+          (p) =>
+            `${p.rank}. **${p.title}** \`${p.band}\` · effort ${p.effort}${p.location ? ` · \`${p.location}\`` : ""}\n   ${p.why}`,
+        )
+        .join("\n")}\n`
+    : "";
+
   const body = `## CodeAudit report
 
 **Health score: ${s.score} (${s.grade})${deltaText}**
-
+${fixFirst}
 | Finding | Count |
 | --- | --- |
 | 🚨 Phantom dependencies | ${s.counts.phantom} |
