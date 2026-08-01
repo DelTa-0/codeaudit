@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { DependencyVerdict, Ecosystem } from "./registry.js";
+import { classifyLicenseExpression } from "./licenseClass.js";
 
 export interface LicenseConflict {
   packageName: string;
@@ -11,18 +12,10 @@ export interface LicenseConflict {
   reason: string;
 }
 
-/**
- * Strong copyleft: linking these into a distributed work generally obliges you
- * to release your own source under the same terms. In a permissively-licensed
- * project that is a genuine legal conflict, not a style preference.
- */
-const STRONG_COPYLEFT = /^(AGPL|GPL)-?/i;
-/** Weak copyleft: obligations usually attach to the library, not the whole work. */
-const WEAK_COPYLEFT = /^(LGPL|MPL|EPL|CDDL)-?/i;
-const PERMISSIVE = /^(MIT|ISC|Apache|BSD|Unlicense|CC0|0BSD|Zlib|Python-2)/i;
-
 function isCopyleftProject(license: string | null): boolean {
-  return license !== null && (STRONG_COPYLEFT.test(license) || WEAK_COPYLEFT.test(license));
+  if (license === null) return false;
+  const cls = classifyLicenseExpression(license);
+  return cls === "strong-copyleft" || cls === "weak-copyleft";
 }
 
 /**
@@ -79,9 +72,21 @@ export function checkLicenseConflicts(
     // (and worse, "all rights reserved") from missing data is a false legal
     // claim; saying nothing is strictly safer than saying something wrong.
     if (dep.registryMetadata?.error) continue;
+    // A lockfile-only, transitive-CVE verdict (applyVulnerabilities in
+    // vulns.ts) is pushed with `{ vulnerabilities, maxSeverity, transitive:
+    // true }` and no `license` key at all — the licence was never looked up
+    // for it. Treating the missing key as "declares no licence" would flag
+    // every transitive vulnerable package as unlicensed, which is false.
+    if (dep.registryMetadata?.transitive === true) continue;
     const license = (dep.registryMetadata?.license as string | null | undefined) ?? null;
+    const hasLicenseText = dep.registryMetadata?.hasLicenseText === true;
 
     if (license === null) {
+      // Licence text exists but could not be parsed into an identifier —
+      // unknown is not the same as absent, and asserting "all rights
+      // reserved" about software that shipped a licence is a false legal
+      // claim.
+      if (hasLicenseText) continue;
       conflicts.push({
         packageName: dep.packageName,
         ecosystem: dep.ecosystem,
@@ -93,9 +98,9 @@ export function checkLicenseConflicts(
       continue;
     }
     if (projectIsCopyleft) continue;
-    if (PERMISSIVE.test(license)) continue;
 
-    if (STRONG_COPYLEFT.test(license)) {
+    const cls = classifyLicenseExpression(license);
+    if (cls === "strong-copyleft") {
       conflicts.push({
         packageName: dep.packageName,
         ecosystem: dep.ecosystem,
@@ -104,7 +109,7 @@ export function checkLicenseConflicts(
         severity: "high",
         reason: `${dep.packageName} is ${license}, a strong copyleft licence, in a project licensed ${projectLicense ?? "permissively or not at all"}. Distributing this may oblige you to release your own source under the same terms.`,
       });
-    } else if (WEAK_COPYLEFT.test(license)) {
+    } else if (cls === "weak-copyleft") {
       conflicts.push({
         packageName: dep.packageName,
         ecosystem: dep.ecosystem,

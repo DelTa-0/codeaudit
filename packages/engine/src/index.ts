@@ -40,6 +40,11 @@ export { analyzePythonRepo, listPythonFiles } from "./python/imports.js";
 export { checkPythonDependencies, checkPyPiPackage, licenseFromClassifiers } from "./python/registry.js";
 export { readProjectLicense, checkLicenseConflicts, type LicenseConflict } from "./license.js";
 export {
+  classifyLicenseTerm,
+  classifyLicenseExpression,
+  type LicenseClass,
+} from "./licenseClass.js";
+export {
   rankFindings,
   type RankedFinding,
   type RankInput,

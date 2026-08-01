@@ -28,6 +28,7 @@ import {
   checkLicenseConflicts,
   readProjectLicense,
   rankFindings,
+  classifyLicenseTerm,
 } from "@codeaudit/engine";
 
 const fixtureDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixture");
@@ -248,6 +249,35 @@ checks.push(
   ["a workspace member with no declared licence is NOT flagged", !conflictNames.has("@fixture/internal")],
   ["copyleft deps are NOT conflicts when the project is itself AGPL", !gplConflicts.some((c) => c.packageName === "copyleft-lib")],
   ["readProjectLicense returns null when package.json declares no license", readProjectLicense(fixtureDir) === null],
+);
+
+// --- Compound SPDX expression classification (offline, pure) ---
+// A prior version prefix-matched the whole expression string, so it only ever
+// inspected the FIRST term — "MIT AND GPL-3.0-only" read as permissive and the
+// GPL obligation silently disappeared. That is a false negative on a legal
+// risk, worse than a false positive.
+const compoundDeps = [
+  { packageName: "compound-and", declaredVersion: "^1.0.0", status: "healthy", ecosystem: "npm", registryMetadata: { license: "MIT AND GPL-3.0-only" } },
+  { packageName: "compound-or", declaredVersion: "^1.0.0", status: "healthy", ecosystem: "npm", registryMetadata: { license: "(MIT OR GPL-2.0)" } },
+  { packageName: "compound-with", declaredVersion: "^1.0.0", status: "healthy", ecosystem: "npm", registryMetadata: { license: "Apache-2.0 WITH LLVM-exception" } },
+  { packageName: "compound-numpy", declaredVersion: "^1.0.0", status: "healthy", ecosystem: "npm", registryMetadata: { license: "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0" } },
+  { packageName: "compound-transitive", declaredVersion: "^1.0.0", status: "vulnerable", ecosystem: "npm", registryMetadata: { transitive: true } },
+  { packageName: "compound-license-text", declaredVersion: "^1.0.0", status: "healthy", ecosystem: "npm", registryMetadata: { hasLicenseText: true, license: null } },
+] as unknown as Parameters<typeof checkLicenseConflicts>[0];
+const compoundConflicts = checkLicenseConflicts(compoundDeps, "MIT");
+const compoundConflictByName = new Map(compoundConflicts.map((c) => [c.packageName, c]));
+checks.push(
+  [
+    "MIT AND GPL-3.0-only is a high-severity conflict (headline regression guard)",
+    compoundConflictByName.get("compound-and")?.severity === "high",
+  ],
+  ["(MIT OR GPL-2.0) is NOT a conflict (OR means you may choose MIT)", !compoundConflictByName.has("compound-or")],
+  ["Apache-2.0 WITH LLVM-exception is NOT a conflict", !compoundConflictByName.has("compound-with")],
+  ["numpy's real compound BSD/MIT/Zlib/CC0 expression is NOT a conflict", !compoundConflictByName.has("compound-numpy")],
+  ["classifyLicenseTerm(LGPL-3.0) is weak-copyleft, not strong (ordering trap)", classifyLicenseTerm("LGPL-3.0") === "weak-copyleft"],
+  ["classifyLicenseTerm(AGPL-3.0) is strong-copyleft", classifyLicenseTerm("AGPL-3.0") === "strong-copyleft"],
+  ["a dep with registryMetadata.transitive=true produces NO licence conflict", !compoundConflictByName.has("compound-transitive")],
+  ["a dep with hasLicenseText=true and license=null produces NO licence conflict", !compoundConflictByName.has("compound-license-text")],
 );
 
 // --- Unreachable registry is "unknown", not "unlicensed"/"in use" (offline, pure) ---
