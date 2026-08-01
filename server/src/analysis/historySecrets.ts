@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { scanTextForSecrets, type SecretFinding } from "@codeaudit/engine";
+import { scanTextForSecrets, isSecretScannablePath, type SecretFinding } from "@codeaudit/engine";
 
 const run = promisify(execFile);
 
@@ -71,6 +71,14 @@ export async function scanHistorySecrets(
     // Added lines only: every secret ever introduced appears as one at some
     // point, so this is complete without walking whole trees.
     if (!line.startsWith("+")) continue;
+    // Same file-level exclusions as the working-tree scan (.env.example,
+    // lockfiles, fixtures, …). Without this, a syntactically-realistic
+    // placeholder key that has always lived in .env.example — never
+    // git-tracked-and-removed, still sitting there unchanged — has its
+    // fingerprint absent from `headFingerprints` (the working-tree scan
+    // correctly skipped that file), so it would be misreported as
+    // "committed and later removed, rotate the credential" every time.
+    if (!isSecretScannablePath(file)) continue;
 
     for (const found of scanTextForSecrets(line.slice(1), file)) {
       const finding = { ...found, line: addedLineNumber || found.line };

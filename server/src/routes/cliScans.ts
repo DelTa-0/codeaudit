@@ -62,6 +62,11 @@ const uploadSchema = z.object({
     vulnerable: z.number().int().min(0).default(0),
     zombies: z.number().int().min(0),
     filesAnalyzed: z.number().int().min(0),
+    // Optional: older published CLIs don't send this. Zod strips unknown
+    // keys by default, so without this field a --upload with real secrets
+    // silently stored a summary claiming zero while `priorities` (below)
+    // still listed them — a real gap found in the pre-1.0.0 release review.
+    secrets: z.number().int().min(0).default(0),
   }),
   branch: z.string().max(200).optional(),
   commitSha: z.string().max(64).optional(),

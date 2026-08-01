@@ -336,7 +336,7 @@ async function processScanJob(scanJobId: string) {
       summary.score,
     ]);
     console.log(
-      `[scan ${scanJobId}] ${repo.full_name} complete — score ${summary.score} (${summary.counts.phantom} phantom, ${summary.counts.unused} unused, ${zombies.length} zombies)`,
+      `[scan ${scanJobId}] ${repo.full_name} complete — score ${summary.score} (${summary.counts.secrets ?? 0} secrets, ${summary.counts.phantom} phantom, ${summary.counts.unused} unused, ${zombies.length} zombies)`,
     );
 
     const scanRow = await queryOne<{ pr_number: number | null }>(
@@ -359,7 +359,7 @@ async function processScanJob(scanJobId: string) {
         await createCheckRun(Number(repo.installation_id), repo.full_name, scan.commit_sha, {
           conclusion: passed ? "success" : "failure",
           title: `Score ${summary.score} (${summary.grade}) — threshold ${threshold}`,
-          summary: `| Finding | Count |\n| --- | --- |\n| Phantom dependencies | ${summary.counts.phantom} |\n| Suspicious packages | ${summary.counts.suspicious} |\n| Unused dependencies | ${summary.counts.unused} |\n| Zombie code | ${summary.counts.zombies} |\n\nAutomated analysis — verify before acting. Configure or disable this check in CodeAudit repo settings.`,
+          summary: `| Finding | Count |\n| --- | --- |\n| 🔑 Hardcoded secrets | ${summary.counts.secrets ?? 0} |\n| Phantom dependencies | ${summary.counts.phantom} |\n| Suspicious packages | ${summary.counts.suspicious} |\n| Unused dependencies | ${summary.counts.unused} |\n| Zombie code | ${summary.counts.zombies} |\n\nAutomated analysis — verify before acting. Configure or disable this check in CodeAudit repo settings.`,
         });
         console.log(`[gate] check run posted for ${repo.full_name}@${scan.commit_sha.slice(0, 7)}: ${passed ? "success" : "failure"}`);
       } catch (err) {
