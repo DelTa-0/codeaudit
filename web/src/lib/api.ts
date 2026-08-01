@@ -101,6 +101,8 @@ export interface ScanSummary {
     vulnerable?: number;
     zombies: number;
     filesAnalyzed: number;
+    /** Absent on scans from before secret detection shipped. */
+    secrets?: number;
   };
   /** "skipped" means zombie findings are unfiltered static candidates (no LLM verdict) — score is noisier. */
   reviewStatus?: "full" | "partial" | "skipped";

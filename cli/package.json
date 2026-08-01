@@ -1,6 +1,6 @@
 {
   "name": "codematrix",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "description": "Static scan for AI-generated technical debt — hallucinated (phantom) npm dependencies and dead-code candidates. Runs locally, no account needed.",
   "keywords": [
     "cli",

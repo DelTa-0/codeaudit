@@ -39,6 +39,13 @@ export function ScanReport() {
   const vulnerable = dependencies.filter(
     (d) => (d.registry_metadata?.vulnerabilities?.length ?? 0) > 0,
   );
+  // Secrets are persisted as code_findings rows too (confidence 1.0), so an
+  // unfiltered dump would render them under "Dead-code findings" with the
+  // credential provider standing in for a symbol name. Split into their own
+  // section, matching ScanDetail.tsx's Secrets card and lib/report.ts's
+  // Word-export equivalent.
+  const secretFindings = codeFindings.filter((f) => f.finding_type.startsWith("hardcoded_secret"));
+  const deadCodeFindings = codeFindings.filter((f) => !f.finding_type.startsWith("hardcoded_secret"));
 
   return (
     <div className="report-page mx-auto max-w-4xl px-6 py-8">
@@ -85,6 +92,7 @@ export function ScanReport() {
               {(
                 [
                   ["Health score", `${s.score} (${s.grade})`],
+                  ["Hardcoded secrets", s.counts.secrets ?? 0],
                   ["Phantom dependencies", s.counts.phantom],
                   ["Known vulnerabilities", s.counts.vulnerable ?? 0],
                   ["Suspicious packages", s.counts.suspicious],
@@ -159,8 +167,38 @@ export function ScanReport() {
         </table>
       </Section>
 
-      <Section title={`Dead-code findings (${codeFindings.length})`}>
-        {codeFindings.length === 0 ? (
+      {secretFindings.length > 0 && (
+        <Section title={`Hardcoded secrets (${secretFindings.length})`}>
+          <table className="report-table w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-xs text-muted">
+                <th className="pb-1 font-medium">Provider</th>
+                <th className="pb-1 font-medium">Location</th>
+                <th className="pb-1 font-medium">Guidance</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {secretFindings.map((f) => (
+                <tr key={f.id}>
+                  <td className="py-1 font-mono">{f.detail?.provider ?? "Unknown provider"}</td>
+                  <td className="py-1 font-mono text-xs text-muted">
+                    {f.file_path}
+                    {f.line_start ? `:${f.line_start}` : ""}
+                  </td>
+                  <td className="py-1 text-xs text-muted">
+                    {f.detail?.removedFromHead
+                      ? "Still recoverable from git history — rotate this credential. Deleting the file does not revoke it."
+                      : "Remove this from source, then rotate the credential."}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Section>
+      )}
+
+      <Section title={`Dead-code findings (${deadCodeFindings.length})`}>
+        {deadCodeFindings.length === 0 ? (
           <p className="text-sm text-muted">None detected.</p>
         ) : (
           <table className="report-table w-full text-sm">
@@ -173,7 +211,7 @@ export function ScanReport() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {codeFindings.map((f) => (
+              {deadCodeFindings.map((f) => (
                 <tr key={f.id}>
                   <td className="py-1 font-mono">{f.symbol_name ?? "(anonymous)"}</td>
                   <td className="py-1 font-mono text-xs text-muted">
