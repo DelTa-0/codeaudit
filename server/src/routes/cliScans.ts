@@ -89,6 +89,50 @@ const uploadSchema = z.object({
       }),
     )
     .max(200),
+  // Optional: older published CLIs don't send these. Capped independently of
+  // the CLI's own slice so a hostile client can't store unbounded data.
+  priorities: z
+    .array(
+      z.object({
+        rank: z.number().int().min(1),
+        band: z.enum(["critical", "high", "medium", "low"]),
+        kind: z.string().max(60),
+        title: z.string().max(500),
+        location: z.string().max(500).nullable(),
+        why: z.string().max(2000),
+        effort: z.enum(["S", "M", "L"]),
+        confidence: z.number().min(0).max(1),
+      }),
+    )
+    .max(20)
+    .optional(),
+  advisories: z
+    .object({
+      duplicates: z
+        .array(
+          z.object({
+            category: z.string().max(100),
+            ecosystem: z.enum(["npm", "pypi"]),
+            packages: z.array(z.string().max(214)).max(50),
+            prefer: z.string().max(214).nullable(),
+            recommendation: z.string().max(2000),
+          }),
+        )
+        .max(50),
+      licenseConflicts: z
+        .array(
+          z.object({
+            packageName: z.string().max(214),
+            ecosystem: z.enum(["npm", "pypi"]),
+            packageLicense: z.string().max(200).nullable(),
+            projectLicense: z.string().max(200).nullable(),
+            severity: z.enum(["high", "medium"]),
+            reason: z.string().max(2000),
+          }),
+        )
+        .max(50),
+    })
+    .optional(),
 });
 
 cliUploadRouter.post("/cli-scans", uploadLimiter, validateBody(uploadSchema), async (req, res, next) => {
@@ -106,6 +150,17 @@ cliUploadRouter.post("/cli-scans", uploadLimiter, validateBody(uploadSchema), as
       counts: body.counts,
       source: "cli",
       reviewStatus: "skipped",
+      // Optional — older published CLIs don't send these, and the schema
+      // caps each array independently of whatever the CLI itself sliced to.
+      ...(body.priorities ? { priorities: body.priorities.slice(0, 20) } : {}),
+      ...(body.advisories
+        ? {
+            advisories: {
+              duplicates: body.advisories.duplicates.slice(0, 50),
+              licenseConflicts: body.advisories.licenseConflicts.slice(0, 50),
+            },
+          }
+        : {}),
     };
     const [scan] = await query<{ id: string }>(
       `INSERT INTO scan_jobs (repo_id, org_id, trigger, branch, commit_sha, status, progress, summary, completed_at)

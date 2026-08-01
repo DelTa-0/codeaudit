@@ -27,6 +27,9 @@ import {
   type DeadCodeCandidate,
   type ReviewedFinding,
   type ResolvedTree,
+  type RankedFinding,
+  type DuplicateGroup,
+  type LicenseConflict,
 } from "@codeaudit/engine";
 
 const RESET = "\x1b[0m";
@@ -93,6 +96,8 @@ async function uploadResults(
   summary: { score: number; grade: string; counts: Record<string, number> },
   deps: unknown[],
   candidates: ReviewedFinding[],
+  priorities: RankedFinding[],
+  advisories: { duplicates: DuplicateGroup[]; licenseConflicts: LicenseConflict[] },
 ): Promise<{ ok: boolean; url?: string; error?: string }> {
   try {
     const res = await fetch(`${apiUrl.replace(/\/$/, "")}/api/cli-scans`, {
@@ -118,6 +123,11 @@ async function uploadResults(
           confidence: c.confidence,
           reasoning: c.reasoning,
         })),
+        priorities: priorities.slice(0, 20),
+        advisories: {
+          duplicates: advisories.duplicates.slice(0, 50),
+          licenseConflicts: advisories.licenseConflicts.slice(0, 50),
+        },
       }),
       signal: AbortSignal.timeout(15_000),
     });
@@ -220,7 +230,10 @@ async function main() {
 
   let uploadResult: { ok: boolean; url?: string; error?: string } | null = null;
   if (upload && token) {
-    uploadResult = await uploadResults(apiUrl, token, summary, deps, staticFindings);
+    uploadResult = await uploadResults(apiUrl, token, summary, deps, staticFindings, priorities, {
+      duplicates,
+      licenseConflicts,
+    });
   }
 
   if (json) {
