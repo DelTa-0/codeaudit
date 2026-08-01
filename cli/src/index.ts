@@ -23,6 +23,7 @@ import {
   readProjectLicense,
   checkLicenseConflicts,
   rankFindings,
+  findSecrets,
   type DependencyVerdict,
   type DeadCodeCandidate,
   type ReviewedFinding,
@@ -30,6 +31,7 @@ import {
   type RankedFinding,
   type DuplicateGroup,
   type LicenseConflict,
+  type SecretFinding,
 } from "@codeaudit/engine";
 
 const RESET = "\x1b[0m";
@@ -214,7 +216,6 @@ async function main() {
     reasoning: "candidate — LLM verification available on codeaudit.dev",
   }));
 
-  const summary = computeSummary(deps, staticFindings, fileCount);
   // Advisory-only, matching the worker's guarding (server/src/worker.ts): an
   // unexpected throw here must not change the CLI's documented exit-code
   // contract (0/1/2). A failure means the advisory data is absent, not that
@@ -222,14 +223,17 @@ async function main() {
   let duplicates: ReturnType<typeof findDuplicateLibraries> = [];
   let licenseConflicts: ReturnType<typeof checkLicenseConflicts> = [];
   let priorities: ReturnType<typeof rankFindings> = [];
+  let secrets: ReturnType<typeof findSecrets> = [];
   try {
     duplicates = findDuplicateLibraries(deps);
     licenseConflicts = checkLicenseConflicts(deps, readProjectLicense(dir));
+    secrets = findSecrets(dir);
     priorities = rankFindings({
       deps,
       codeFindings: staticFindings,
       duplicates,
       licenseConflicts,
+      secrets,
       limit: 5,
     });
   } catch (err) {
@@ -238,6 +242,7 @@ async function main() {
       err instanceof Error ? err.message : err,
     );
   }
+  const summary = computeSummary(deps, staticFindings, fileCount, "skipped", secrets.length);
   const phantomCount = summary.counts.phantom;
   const belowMin = minScore !== null && summary.score < minScore;
   const exitCode = phantomCount > 0 || belowMin ? 1 : 0;
@@ -261,6 +266,7 @@ async function main() {
           deadCodeCandidates: staticFindings,
           priorities,
           advisories: { duplicates, licenseConflicts },
+          secrets,
           upload: uploadResult,
           exitCode,
         },
@@ -272,6 +278,14 @@ async function main() {
   }
 
   console.log(`\n${BOLD}CodeAudit${RESET} ${DIM}· static scan of ${dir}${RESET}\n`);
+
+  if (secrets.length) {
+    console.log(`${BOLD}${RED}Secrets${RESET}`);
+    for (const s of secrets as SecretFinding[]) {
+      console.log(`  ${RED}${s.provider}${RESET}  ${DIM}${s.filePath}:${s.line}${RESET}  ${s.redacted}`);
+    }
+    console.log();
+  }
 
   const BAND_COLOR: Record<string, string> = { critical: RED, high: RED, medium: YELLOW, low: DIM };
   if (priorities.length) {
