@@ -2,6 +2,7 @@ import type { DependencyVerdict } from "./registry.js";
 import type { ReviewedFinding } from "./llm.js";
 import type { DuplicateGroup } from "./duplicates.js";
 import type { LicenseConflict } from "./license.js";
+import type { SecretFinding } from "./secrets.js";
 
 export type Effort = "S" | "M" | "L";
 export type PriorityBand = "critical" | "high" | "medium" | "low";
@@ -31,6 +32,7 @@ const EFFORT_ORDER: Record<Effort, number> = { S: 0, M: 1, L: 2 };
  * source code an LLM believes is unreachable.
  */
 const KIND_ORDER: Record<string, number> = {
+  hardcoded_secret: -1,
   phantom_dependency: 0,
   vulnerable_dependency: 1,
   suspicious_dependency: 2,
@@ -47,6 +49,7 @@ export interface RankInput {
   codeFindings: ReviewedFinding[];
   duplicates?: DuplicateGroup[];
   licenseConflicts?: LicenseConflict[];
+  secrets?: SecretFinding[];
   limit?: number;
 }
 
@@ -65,6 +68,21 @@ export interface RankInput {
  */
 export function rankFindings(input: RankInput): RankedFinding[] {
   const items: Omit<RankedFinding, "rank">[] = [];
+
+  for (const secret of input.secrets ?? []) {
+    const removed = secret.removedFromHead === true;
+    items.push({
+      band: "critical",
+      kind: "hardcoded_secret",
+      title: `${secret.provider} hardcoded in ${secret.filePath}`,
+      location: `${secret.filePath}:${secret.line}`,
+      why: removed
+        ? `This credential was committed and later removed, but it is still recoverable from git history. Deleting the file does not revoke it — rotate the credential.`
+        : `A live credential in source can be used by anyone who can read the repository. Rotate it, then load it from an environment variable.`,
+      effort: removed ? "M" : "S",
+      confidence: 1,
+    });
+  }
 
   for (const dep of input.deps) {
     const meta = dep.registryMetadata ?? {};

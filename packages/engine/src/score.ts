@@ -12,6 +12,7 @@ export interface ScanSummary {
     vulnerable: number;
     zombies: number;
     filesAnalyzed: number;
+    secrets: number;
   };
   /** Whether zombie/dead-code findings got a real LLM verdict. "skipped" is
    * expected for the static-only CLI edition; "partial" on a hosted scan
@@ -25,6 +26,7 @@ export function computeSummary(
   zombies: ReviewedFinding[],
   filesAnalyzed: number,
   reviewStatus: ReviewStatus = "skipped",
+  secretCount = 0,
 ): ScanSummary {
   const vulnerable = deps.filter((d) => d.status === "vulnerable");
   const counts = {
@@ -35,6 +37,7 @@ export function computeSummary(
     vulnerable: vulnerable.length,
     zombies: zombies.length,
     filesAnalyzed,
+    secrets: secretCount,
   };
 
   // Vulnerability penalty is per-package by its highest-severity advisory —
@@ -58,6 +61,10 @@ export function computeSummary(
   score -= counts.unused * 3;
   score -= vulnPenalty;
   score -= Math.min(20, zombies.reduce((acc, z) => acc + z.confidence * 1.5, 0));
+  // A committed live credential is the most urgent thing a scan can find, and
+  // unlike the advisory detectors it is unambiguous — so unlike deprecated /
+  // licence / duplicate findings, it moves the score immediately.
+  score -= Math.min(40, secretCount * 20);
   score = Math.max(0, Math.min(100, Math.round(score * 10) / 10));
 
   const grade =

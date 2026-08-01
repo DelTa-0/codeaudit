@@ -28,6 +28,7 @@ import {
   checkLicenseConflicts,
   readProjectLicense,
   rankFindings,
+  computeSummary,
   classifyLicenseTerm,
   scanTextForSecrets,
   isSecretScannablePath,
@@ -528,6 +529,32 @@ checks.push(
     "isTracked excludes src/config.ts: does NOT report it",
     !trackedExceptConfigFindings.some((f) => f.filePath === "src/config.ts"),
   ],
+);
+
+// --- Secrets scoring and ranking ---
+const secretSummary = computeSummary([], [], 10, "skipped", 1);
+const twoSecrets = computeSummary([], [], 10, "skipped", 2);
+const manySecrets = computeSummary([], [], 10, "skipped", 9);
+checks.push(
+  ["one hardcoded secret costs 20 points", secretSummary.score === 80],
+  ["two hardcoded secrets cost 40 points", twoSecrets.score === 60],
+  ["the secret penalty is capped at 40", manySecrets.score === 60],
+  ["secrets appear in the summary counts", secretSummary.counts.secrets === 1],
+);
+
+const secretRanked = rankFindings({
+  deps: [
+    { packageName: "fake-pkg", declaredVersion: "^1.0.0", status: "phantom", ecosystem: "npm", registryMetadata: null },
+  ] as unknown as Parameters<typeof rankFindings>[0]["deps"],
+  codeFindings: [],
+  secrets: [
+    { filePath: "src/config.ts", line: 4, provider: "AWS access key", redacted: "AKIA…(20 chars)", fingerprint: "abc", tier: 1 },
+  ] as unknown as Parameters<typeof rankFindings>[0]["secrets"],
+});
+checks.push(
+  ["a hardcoded secret outranks a phantom dependency", secretRanked[0]?.kind === "hardcoded_secret"],
+  ["a hardcoded secret is critical", secretRanked[0]?.band === "critical"],
+  ["the ranked secret carries no raw value", !JSON.stringify(secretRanked).includes("AKIAIOSFODNN7EXAMPLE")],
 );
 
 console.log("--- checks ---");
