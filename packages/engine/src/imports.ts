@@ -15,23 +15,35 @@ const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".git", ".next", "co
 // bare-name set above.
 const SKIP_DIR_PATTERN = /^(dist|build|out)(-|$)/;
 /**
- * Test fixtures are deliberately fake. `server/test/fixture/` here contains a
- * non-existent package and a workspace member that exists only to exercise the
- * analyzer, and a whole-repo scan was reporting both as CRITICAL phantom
- * dependencies. `deadcode.ts` already filters these paths when judging symbols;
- * the import graph needs the same filter or the fake names reach dependency
- * verdicts.
+ * Unambiguous convention directories — these names mean the same thing at any
+ * depth, so a bare-name match is safe.
  */
 const SKIP_DIR_NAMES_EXTRA = new Set(["__tests__", "__mocks__", "__fixtures__"]);
-const FIXTURE_DIR_PATTERN = /^(fixtures?|test-fixtures?)$/i;
+
+/**
+ * A fixture directory INSIDE a test tree. Deliberately not a bare-name match:
+ * "fixtures" is a first-class production concept (Playwright), and `src/fixtures/`
+ * or a monorepo `packages/fixtures/` routinely holds real runtime code. Skipping
+ * those would make production code invisible to the analyzer — a silent false
+ * negative, worse than the false positive this rule exists to prevent.
+ *
+ * Requiring a test-directory ancestor keeps `server/test/fixture/` (whose fake
+ * packages were being reported as CRITICAL phantom dependencies in a whole-repo
+ * scan) out, while leaving genuine fixture code in.
+ *
+ * Note the import graph does NOT skip `test/` itself, unlike deadcode.ts: a
+ * devDependency imported only from tests must still count as used, or it gets
+ * misreported as unused.
+ */
+const TEST_FIXTURE_PATH = /(^|\/)(tests?|__tests__)\/([^/]*\/)*?(fixtures?|test-fixtures?)$/i;
 const MAX_FILE_BYTES = 1024 * 1024;
 
-function shouldSkipDir(name: string): boolean {
+function shouldSkipDir(name: string, relPath: string): boolean {
   return (
     SKIP_DIRS.has(name) ||
     SKIP_DIR_PATTERN.test(name) ||
     SKIP_DIR_NAMES_EXTRA.has(name) ||
-    FIXTURE_DIR_PATTERN.test(name)
+    TEST_FIXTURE_PATH.test(relPath)
   );
 }
 
@@ -64,7 +76,9 @@ export function listSourceFiles(repoDir: string): string[] {
     const current = stack.pop()!;
     for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
       if (entry.isDirectory()) {
-        if (!shouldSkipDir(entry.name)) stack.push(path.join(current, entry.name));
+        const full = path.join(current, entry.name);
+        const rel = path.relative(repoDir, full).split(path.sep).join("/");
+        if (!shouldSkipDir(entry.name, rel)) stack.push(full);
       } else if (entry.isFile() && SOURCE_EXTENSIONS.has(path.extname(entry.name))) {
         const full = path.join(current, entry.name);
         if (fs.statSync(full).size <= MAX_FILE_BYTES) files.push(full);
