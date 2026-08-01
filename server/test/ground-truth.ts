@@ -376,6 +376,47 @@ checks.push([
   squatVsLicenseKinds.indexOf("suspicious_dependency") < squatVsLicenseKinds.indexOf("license_conflict"),
 ]);
 
+// --- Fixture directories must not leak into the import graph ---
+const repoRoot = path.join(fixtureDir, "..", "..", "..");
+const selfAnalysis = analyzeRepo(repoRoot);
+checks.push(
+  [
+    "whole-repo scan does NOT treat the test fixture's fake package as imported",
+    !selfAnalysis.importedPackages.has("react-toolkitz"),
+  ],
+  [
+    "whole-repo scan does NOT treat the fixture workspace member as imported",
+    !selfAnalysis.importedPackages.has("@fixture/internal"),
+  ],
+  [
+    "whole-repo scan still sees a genuinely imported production package",
+    selfAnalysis.importedPackages.has("express"),
+  ],
+);
+
+// --- Transitive vulnerabilities must not be described as direct dependencies ---
+const transitiveRanked = rankFindings({
+  deps: [
+    {
+      packageName: "deep-dep",
+      declaredVersion: null,
+      status: "vulnerable",
+      ecosystem: "npm",
+      registryMetadata: { maxSeverity: "high", transitive: true },
+    },
+  ] as unknown as Parameters<typeof rankFindings>[0]["deps"],
+  codeFindings: [],
+});
+const transitiveItem = transitiveRanked[0];
+checks.push(
+  ["a transitive CVE is not located at package.json", transitiveItem?.location !== "package.json"],
+  ["a transitive CVE is not rated S effort", transitiveItem?.effort !== "S"],
+  [
+    "a transitive CVE's why does not claim a direct version bump",
+    !/usually a version bump/i.test(transitiveItem?.why ?? ""),
+  ],
+);
+
 console.log("--- checks ---");
 let failed = 0;
 for (const [label, ok] of checks) {

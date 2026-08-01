@@ -84,13 +84,19 @@ export function rankFindings(input: RankInput): RankedFinding[] {
     } else if (dep.status === "vulnerable") {
       const severity = (meta.maxSeverity as string | undefined) ?? "unknown";
       const critical = severity === "critical" || severity === "high";
+      // A transitive package is not in any manifest, so "bump the version" is
+      // not advice the reader can act on — they have to upgrade whatever pulls
+      // it in, if a fixed release even exists yet.
+      const transitive = meta.transitive === true;
       items.push({
         band: critical ? "critical" : "medium",
         kind: "vulnerable_dependency",
         title: `${dep.packageName} has known vulnerabilities (${severity})`,
-        location: dep.ecosystem === "npm" ? "package.json" : "requirements",
-        why: `A published advisory affects the version currently resolved. Upgrading is usually a version bump, which makes this a high-value, low-effort fix.`,
-        effort: "S",
+        location: transitive ? "transitive dependency" : dep.ecosystem === "npm" ? "package.json" : "requirements",
+        why: transitive
+          ? `A published advisory affects a package pulled in indirectly, so it is not in your manifest. Fixing it means upgrading whichever dependency requires it — check your lockfile for the parent.`
+          : `A published advisory affects the version currently resolved. Upgrading is usually a version bump, which makes this a high-value, low-effort fix.`,
+        effort: transitive ? "L" : "S",
         confidence: 1,
       });
     } else if (dep.status === "suspicious") {

@@ -14,10 +14,25 @@ const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".git", ".next", "co
 // "build-client", etc.) — match the common prefix pattern too, not just the
 // bare-name set above.
 const SKIP_DIR_PATTERN = /^(dist|build|out)(-|$)/;
+/**
+ * Test fixtures are deliberately fake. `server/test/fixture/` here contains a
+ * non-existent package and a workspace member that exists only to exercise the
+ * analyzer, and a whole-repo scan was reporting both as CRITICAL phantom
+ * dependencies. `deadcode.ts` already filters these paths when judging symbols;
+ * the import graph needs the same filter or the fake names reach dependency
+ * verdicts.
+ */
+const SKIP_DIR_NAMES_EXTRA = new Set(["__tests__", "__mocks__", "__fixtures__"]);
+const FIXTURE_DIR_PATTERN = /^(fixtures?|test-fixtures?)$/i;
 const MAX_FILE_BYTES = 1024 * 1024;
 
 function shouldSkipDir(name: string): boolean {
-  return SKIP_DIRS.has(name) || SKIP_DIR_PATTERN.test(name);
+  return (
+    SKIP_DIRS.has(name) ||
+    SKIP_DIR_PATTERN.test(name) ||
+    SKIP_DIR_NAMES_EXTRA.has(name) ||
+    FIXTURE_DIR_PATTERN.test(name)
+  );
 }
 
 export interface SymbolInfo {
