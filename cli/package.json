@@ -1,6 +1,6 @@
 {
   "name": "codeaudit-scan",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "description": "Static scan for AI-generated technical debt — hallucinated (phantom) npm dependencies and dead-code candidates. Runs locally, no account needed.",
   "keywords": [
     "cli",
