@@ -29,6 +29,38 @@ const NEVER_FLAG_UNUSED = new Set([
   "pip",
 ]);
 
+/**
+ * PyPI "License ::" trove classifiers mapped to SPDX-style identifiers.
+ *
+ * Needed because a large share of packages publish no `license_expression`
+ * and put the entire licence TEXT in `license` — 61 KB of it for pandas.
+ * The classifier is the only machine-readable licence signal those packages
+ * carry, and without it they read as "declares no licence", which is a false
+ * legal claim about well-licensed software.
+ *
+ * Order matters: "GNU Affero General Public License" and "GNU Lesser General
+ * Public License" both contain "General Public", so the more specific
+ * families must be tested first.
+ */
+export function licenseFromClassifiers(classifiers: string[]): string | null {
+  for (const classifier of classifiers) {
+    if (!classifier.startsWith("License ::")) continue;
+    const leaf = classifier.split("::").pop()?.trim() ?? "";
+    if (/GNU Affero/i.test(leaf)) return "AGPL-3.0";
+    if (/GNU Lesser|LGPL/i.test(leaf)) return "LGPL-3.0";
+    if (/GNU General Public|GPL/i.test(leaf)) return "GPL-3.0";
+    if (/Mozilla/i.test(leaf)) return "MPL-2.0";
+    if (/Eclipse/i.test(leaf)) return "EPL-2.0";
+    if (/Apache/i.test(leaf)) return "Apache-2.0";
+    if (/BSD/i.test(leaf)) return "BSD-3-Clause";
+    if (/\bMIT\b/i.test(leaf)) return "MIT";
+    if (/\bISC\b/i.test(leaf)) return "ISC";
+    if (/Python Software Foundation/i.test(leaf)) return "PSF-2.0";
+    if (/Public Domain|Unlicense|CC0/i.test(leaf)) return "CC0-1.0";
+  }
+  return null;
+}
+
 export async function checkPyPiPackage(name: string) {
   const cached = cache.get(name);
   if (cached) return cached;
@@ -41,7 +73,13 @@ export async function checkPyPiPackage(name: string) {
   if (status !== 404 && data) {
     result.exists = true;
     const doc = data as {
-      info?: { version?: string; license?: string; license_expression?: string; yanked?: boolean };
+      info?: {
+        version?: string;
+        license?: string;
+        license_expression?: string;
+        classifiers?: string[];
+        yanked?: boolean;
+      };
       releases?: Record<string, { upload_time_iso_8601?: string }[]>;
     };
     // First release date = earliest upload across all versions (best-effort).
@@ -64,9 +102,15 @@ export async function checkPyPiPackage(name: string) {
     // `license_expression` and leaves the legacy `license` field null.
     // Older packages do the reverse, so consult both. A `license` value long
     // enough to be the full licence text is not an identifier — treat it as
-    // unknown rather than prefix-matching against a blob.
+    // unknown rather than prefix-matching against a blob. A large share of
+    // packages (pandas among them) publish neither a usable expression nor a
+    // short `license` string — they dump the full licence TEXT into
+    // `license` instead. Those packages still carry a reliable signal in
+    // their trove classifiers, so fall back to that before giving up.
     const rawLicense = doc.info?.license_expression || doc.info?.license || null;
-    const license = rawLicense && rawLicense.length <= 60 ? rawLicense : null;
+    const license =
+      (rawLicense && rawLicense.length <= 60 ? rawLicense : null) ??
+      licenseFromClassifiers(doc.info?.classifiers ?? []);
     result.meta = {
       created,
       latest: doc.info?.version ?? null,

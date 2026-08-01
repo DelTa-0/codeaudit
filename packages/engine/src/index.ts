@@ -37,7 +37,7 @@ export { computeSummary, type ScanSummary } from "./score.js";
 export { detectEcosystems } from "./detect.js";
 export { parsePythonManifest, type PythonManifest } from "./python/manifest.js";
 export { analyzePythonRepo, listPythonFiles } from "./python/imports.js";
-export { checkPythonDependencies, checkPyPiPackage } from "./python/registry.js";
+export { checkPythonDependencies, checkPyPiPackage, licenseFromClassifiers } from "./python/registry.js";
 export { readProjectLicense, checkLicenseConflicts, type LicenseConflict } from "./license.js";
 export {
   rankFindings,

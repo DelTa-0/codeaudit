@@ -15,6 +15,7 @@ import {
   detectEcosystems,
   verifyPackage,
   checkPyPiPackage,
+  licenseFromClassifiers,
 } from "@codeaudit/engine";
 
 const fixtureDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixture-python");
@@ -83,6 +84,50 @@ const requestsMeta = await checkPyPiPackage("requests");
 checks.push(
   ["checkPyPiPackage(flask) resolves a license via license_expression", typeof flaskMeta.meta?.license === "string"],
   ["checkPyPiPackage(requests) resolves a license via the legacy field", typeof requestsMeta.meta?.license === "string"],
+);
+
+// --- Trove classifier fallback (live PyPI) ---
+// pandas publishes `license_expression: null` and dumps the FULL 61,643-char
+// BSD licence text into the legacy `license` field. Neither is usable as an
+// identifier, so checkPyPiPackage must fall back to the "License ::" trove
+// classifier — otherwise pandas (present in a huge share of Python repos)
+// reads as "declares no licence", a false legal claim about well-licensed
+// software that would land in the CLI's headline "Fix first" section.
+const pandasMeta = await checkPyPiPackage("pandas");
+checks.push(
+  ["checkPyPiPackage(pandas) resolves a non-null license via classifier fallback", pandasMeta.meta?.license != null],
+  [
+    "checkPyPiPackage(pandas) license resolves to a permissive-looking BSD identifier",
+    typeof pandasMeta.meta?.license === "string" && (pandasMeta.meta.license as string).startsWith("BSD"),
+  ],
+);
+
+// --- Classifier -> SPDX ordering (pure, offline, no network) ---
+// "GNU Affero General Public License" and "GNU Lesser General Public
+// License" both contain "General Public" — the more specific families must
+// be matched before the generic GPL fallback, or AGPL/LGPL packages would
+// misreport as plain GPL (a materially different copyleft obligation).
+checks.push(
+  [
+    "AGPL classifier resolves to AGPL-3.0, not GPL-3.0",
+    licenseFromClassifiers(["License :: OSI Approved :: GNU Affero General Public License v3"]) === "AGPL-3.0",
+  ],
+  [
+    "LGPL classifier resolves to LGPL-3.0, not GPL-3.0",
+    licenseFromClassifiers(["License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)"]) === "LGPL-3.0",
+  ],
+  [
+    "GPL classifier resolves to GPL-3.0",
+    licenseFromClassifiers(["License :: OSI Approved :: GNU General Public License v3 (GPLv3)"]) === "GPL-3.0",
+  ],
+  [
+    "MIT classifier resolves to MIT",
+    licenseFromClassifiers(["License :: OSI Approved :: MIT License"]) === "MIT",
+  ],
+  [
+    "a non-licence classifier resolves nothing",
+    licenseFromClassifiers(["Programming Language :: Python :: 3"]) === null,
+  ],
 );
 
 console.log("--- checks ---");
