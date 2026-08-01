@@ -69,6 +69,11 @@ export function checkLicenseConflicts(
 
   for (const dep of deps) {
     if (dep.status === "unused" || dep.status === "phantom") continue;
+    // Workspace members are the project's own code, symlinked in rather than
+    // installed from a registry — not a third-party dependency at all, so
+    // there is no external licence obligation to conflict with. It carries
+    // the project's own licence.
+    if (dep.registryMetadata?.workspaceMember === true) continue;
     const license = (dep.registryMetadata?.license as string | null | undefined) ?? null;
 
     if (license === null) {

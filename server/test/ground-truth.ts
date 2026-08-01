@@ -234,6 +234,7 @@ const licDeps = [
   { packageName: "permissive-lib", declaredVersion: "^1.0.0", status: "healthy", ecosystem: "npm", registryMetadata: { license: "MIT" } },
   { packageName: "unlicensed-lib", declaredVersion: "^1.0.0", status: "healthy", ecosystem: "npm", registryMetadata: { license: null } },
   { packageName: "unused-copyleft", declaredVersion: "^1.0.0", status: "unused", ecosystem: "npm", registryMetadata: { license: "GPL-3.0" } },
+  { packageName: "@fixture/internal", declaredVersion: "workspace:*", status: "healthy", ecosystem: "npm", registryMetadata: { workspaceMember: true } },
 ] as unknown as Parameters<typeof checkLicenseConflicts>[0];
 const mitConflicts = checkLicenseConflicts(licDeps, "MIT");
 const gplConflicts = checkLicenseConflicts(licDeps, "AGPL-3.0");
@@ -244,6 +245,7 @@ checks.push(
   ["MIT dep in an MIT project is NOT a conflict", !conflictNames.has("permissive-lib")],
   ["a dependency with no declared licence is flagged", conflictNames.has("unlicensed-lib")],
   ["an unused copyleft dep is NOT flagged as a licence conflict", !conflictNames.has("unused-copyleft")],
+  ["a workspace member with no declared licence is NOT flagged", !conflictNames.has("@fixture/internal")],
   ["copyleft deps are NOT conflicts when the project is itself AGPL", !gplConflicts.some((c) => c.packageName === "copyleft-lib")],
   ["readProjectLicense returns null when package.json declares no license", readProjectLicense(fixtureDir) === null],
 );
