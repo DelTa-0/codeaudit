@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fetchJson, type DependencyVerdict } from "../registry.js";
 import { checkTyposquat, fuzzyAlternative } from "../typosquat.js";
+import { classifyLicenseTerm } from "../licenseClass.js";
 import type { PythonManifest } from "./manifest.js";
 import { PYTHON_STDLIB } from "./stdlib.js";
 import { importNameToDistribution, normalizePyPiName } from "./aliases.js";
@@ -30,7 +31,71 @@ const NEVER_FLAG_UNUSED = new Set([
 ]);
 
 /**
- * PyPI "License ::" trove classifiers mapped to SPDX-style identifiers.
+ * A licence blob is full text, not an identifier: it has line breaks or is
+ * far longer than any real SPDX expression (torch's is 99 chars; the cap
+ * below is 200). A 60-character cap discarded torch's valid compound
+ * expression outright — detect a blob by structure, not by an arbitrary
+ * length that happens to be shorter than a real-world expression.
+ */
+function looksLikeLicenseText(value: string): boolean {
+  return value.includes("\n") || value.length > 200;
+}
+
+/**
+ * A resolved value that structurally looks like an SPDX identifier or
+ * expression, as opposed to a package name ("python-ldap") or a free-text
+ * description ("Dual Licensed - GNU AFFERO GPL 3.0 or Artifex Commercial
+ * License"). A genuine SPDX expression is built entirely from identifier
+ * tokens (letters, digits, dots, hyphens, plus signs, parentheses) joined
+ * by the AND/OR/WITH operators — nothing else. Prose fails this even when
+ * it mentions a real licence family by name, and is better routed through
+ * the same keyword extraction used for trove classifiers than parsed as an
+ * identifier outright.
+ */
+function looksLikeSpdxIdentifier(value: string): boolean {
+  const token = "[A-Za-z0-9.+()-]+";
+  return new RegExp(`^${token}(\\s+(AND|OR|WITH)\\s+${token})*$`).test(value.trim());
+}
+
+/**
+ * Extract a licence FAMILY string — not an invented version — from a piece
+ * of text: a PyPI trove classifier leaf ("GNU General Public License v2
+ * (GPLv2)") or a free-text legacy `license` description ("Dual Licensed -
+ * GNU AFFERO GPL 3.0 or Artifex Commercial License"). A `GNU General Public
+ * License v2` classifier must not resolve to "GPL-3.0": that is a licence
+ * the package does not carry, shown to a user making a legal decision.
+ * These family strings still classify correctly through classifyLicenseTerm.
+ *
+ * Order matters: "GNU Affero General Public License" and "GNU Lesser General
+ * Public License" both contain "General Public", so the more specific
+ * families must be tested first.
+ */
+function familyFromText(text: string): string | null {
+  if (/GNU Affero/i.test(text)) return "AGPL";
+  if (/GNU Lesser|LGPL/i.test(text)) return "LGPL";
+  if (/GNU General Public|GPL/i.test(text)) return "GPL";
+  if (/Mozilla/i.test(text)) return "MPL";
+  if (/Eclipse/i.test(text)) return "EPL";
+  if (/Apache/i.test(text)) return "Apache-2.0";
+  if (/BSD/i.test(text)) return "BSD";
+  if (/\bMIT\b/i.test(text)) return "MIT";
+  if (/\bISC\b/i.test(text)) return "ISC";
+  if (/Python Software Foundation/i.test(text)) return "PSF";
+  if (/Public Domain|Unlicense|CC0/i.test(text)) return "CC0-1.0";
+  return null;
+}
+
+/** Restrictiveness order, mirroring licenseClass.ts's private ranking. */
+const CLASS_RANK: Record<string, number> = {
+  permissive: 0,
+  unknown: 1,
+  "weak-copyleft": 2,
+  "strong-copyleft": 3,
+};
+
+/**
+ * PyPI "License ::" trove classifiers mapped to SPDX-style family
+ * identifiers.
  *
  * Needed because a large share of packages publish no `license_expression`
  * and put the entire licence TEXT in `license` — 61 KB of it for pandas.
@@ -38,27 +103,68 @@ const NEVER_FLAG_UNUSED = new Set([
  * carry, and without it they read as "declares no licence", which is a false
  * legal claim about well-licensed software.
  *
- * Order matters: "GNU Affero General Public License" and "GNU Lesser General
- * Public License" both contain "General Public", so the more specific
- * families must be tested first.
+ * A package can carry several licence classifiers at once (dual-licensed, or
+ * simply over-tagged) — `[MIT, GPLv3]` classifiers previously returned "MIT"
+ * on first match, silently dropping the GPL obligation. Every matching
+ * classifier is now collected and the MOST restrictive one wins, the same
+ * way `checkLicenseConflicts` treats an AND-ed compound expression.
  */
 export function licenseFromClassifiers(classifiers: string[]): string | null {
+  let best: string | null = null;
+  let bestRank = -1;
   for (const classifier of classifiers) {
     if (!classifier.startsWith("License ::")) continue;
     const leaf = classifier.split("::").pop()?.trim() ?? "";
-    if (/GNU Affero/i.test(leaf)) return "AGPL-3.0";
-    if (/GNU Lesser|LGPL/i.test(leaf)) return "LGPL-3.0";
-    if (/GNU General Public|GPL/i.test(leaf)) return "GPL-3.0";
-    if (/Mozilla/i.test(leaf)) return "MPL-2.0";
-    if (/Eclipse/i.test(leaf)) return "EPL-2.0";
-    if (/Apache/i.test(leaf)) return "Apache-2.0";
-    if (/BSD/i.test(leaf)) return "BSD-3-Clause";
-    if (/\bMIT\b/i.test(leaf)) return "MIT";
-    if (/\bISC\b/i.test(leaf)) return "ISC";
-    if (/Python Software Foundation/i.test(leaf)) return "PSF-2.0";
-    if (/Public Domain|Unlicense|CC0/i.test(leaf)) return "CC0-1.0";
+    const family = familyFromText(leaf);
+    if (!family) continue;
+    const rank = CLASS_RANK[classifyLicenseTerm(family)];
+    if (rank > bestRank) {
+      bestRank = rank;
+      best = family;
+    }
   }
-  return null;
+  return best;
+}
+
+/**
+ * Resolve a PyPI package's licence from PEP 639's `license_expression`, the
+ * legacy `license` field, and trove classifiers, in that precedence order.
+ *
+ * `license_expression` is preferred because it is a proper SPDX expression by
+ * construction. The legacy `license` field is free text: sometimes a short
+ * identifier, sometimes the entire licence document (pandas ships 61 KB of
+ * it there). A short value that still doesn't read as an identifier (a bare
+ * package name, e.g. python-ldap's "python-ldap") is rejected in favour of
+ * the classifier signal rather than surfaced as-is.
+ */
+function resolveLicense(
+  licenseExpression: string | null,
+  legacyLicense: string | null,
+  classifiers: string[],
+): { license: string | null; hasLicenseText: boolean } {
+  let hasLicenseText = false;
+  let license: string | null = null;
+
+  if (licenseExpression) {
+    if (looksLikeLicenseText(licenseExpression)) hasLicenseText = true;
+    else license = licenseExpression;
+  }
+  if (license === null && legacyLicense) {
+    if (looksLikeLicenseText(legacyLicense)) hasLicenseText = true;
+    else license = legacyLicense;
+  }
+  if (license === null || (classifyLicenseTerm(license) === "unknown" && !looksLikeSpdxIdentifier(license))) {
+    // Prefer a classifier signal when one exists; otherwise the resolved
+    // value itself may be free text that names a real licence family without
+    // being a parseable identifier (pymupdf's legacy `license` field is
+    // "Dual Licensed - GNU AFFERO GPL 3.0 or Artifex Commercial License" —
+    // no "License ::" classifier at all, but unmistakably AGPL). Extracting
+    // the family from that text beats discarding it and reading as
+    // permissive/unlicensed.
+    const fallback = licenseFromClassifiers(classifiers) ?? (license ? familyFromText(license) : null);
+    if (fallback) license = fallback;
+  }
+  return { license, hasLicenseText };
 }
 
 export async function checkPyPiPackage(name: string) {
@@ -100,17 +206,16 @@ export async function checkPyPiPackage(name: string) {
     }
     // PEP 639: modern PyPI publishes an SPDX identifier in
     // `license_expression` and leaves the legacy `license` field null.
-    // Older packages do the reverse, so consult both. A `license` value long
-    // enough to be the full licence text is not an identifier — treat it as
-    // unknown rather than prefix-matching against a blob. A large share of
+    // Older packages do the reverse, so consult both. A large share of
     // packages (pandas among them) publish neither a usable expression nor a
     // short `license` string — they dump the full licence TEXT into
     // `license` instead. Those packages still carry a reliable signal in
     // their trove classifiers, so fall back to that before giving up.
-    const rawLicense = doc.info?.license_expression || doc.info?.license || null;
-    const license =
-      (rawLicense && rawLicense.length <= 60 ? rawLicense : null) ??
-      licenseFromClassifiers(doc.info?.classifiers ?? []);
+    const { license, hasLicenseText } = resolveLicense(
+      doc.info?.license_expression ?? null,
+      doc.info?.license ?? null,
+      doc.info?.classifiers ?? [],
+    );
     result.meta = {
       created,
       latest: doc.info?.version ?? null,
@@ -118,6 +223,11 @@ export async function checkPyPiPackage(name: string) {
       weeklyDownloads: monthlyDownloads,
       downloadsPeriod: "month",
       license,
+      // Licence text existed (legacy `license` or `license_expression` was a
+      // blob) but couldn't be parsed as an identifier — unknown is not the
+      // same as absent, so downstream conflict checks must not treat this
+      // package as declaring no licence at all.
+      hasLicenseText,
       deprecated: doc.info?.yanked ? "This release has been yanked from PyPI." : null,
     };
   }

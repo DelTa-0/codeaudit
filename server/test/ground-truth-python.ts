@@ -109,16 +109,16 @@ checks.push(
 // misreport as plain GPL (a materially different copyleft obligation).
 checks.push(
   [
-    "AGPL classifier resolves to AGPL-3.0, not GPL-3.0",
-    licenseFromClassifiers(["License :: OSI Approved :: GNU Affero General Public License v3"]) === "AGPL-3.0",
+    "AGPL classifier resolves to the AGPL family, not GPL",
+    licenseFromClassifiers(["License :: OSI Approved :: GNU Affero General Public License v3"]) === "AGPL",
   ],
   [
-    "LGPL classifier resolves to LGPL-3.0, not GPL-3.0",
-    licenseFromClassifiers(["License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)"]) === "LGPL-3.0",
+    "LGPL classifier resolves to the LGPL family, not GPL",
+    licenseFromClassifiers(["License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)"]) === "LGPL",
   ],
   [
-    "GPL classifier resolves to GPL-3.0",
-    licenseFromClassifiers(["License :: OSI Approved :: GNU General Public License v3 (GPLv3)"]) === "GPL-3.0",
+    "GPL classifier resolves to the GPL family",
+    licenseFromClassifiers(["License :: OSI Approved :: GNU General Public License v3 (GPLv3)"]) === "GPL",
   ],
   [
     "MIT classifier resolves to MIT",
@@ -128,7 +128,22 @@ checks.push(
     "a non-licence classifier resolves nothing",
     licenseFromClassifiers(["Programming Language :: Python :: 3"]) === null,
   ],
+  [
+    "[MIT, GPLv3] classifiers resolve to the GPL family, not MIT (most-restrictive wins)",
+    licenseFromClassifiers([
+      "License :: OSI Approved :: MIT License",
+      "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    ]) === "GPL",
+  ],
 );
+
+// --- torch's compound SPDX expression (live PyPI) ---
+// torch publishes a 99-character `license_expression`
+// ("BSD-3-Clause AND ...") that a prior 60-char cap discarded outright,
+// leaving torch reading as "declares no licence" — the headline regression
+// guard for this fix.
+const torchMeta = await checkPyPiPackage("torch");
+checks.push(["checkPyPiPackage(torch) resolves a non-null license (99-char expression)", torchMeta.meta?.license != null]);
 
 console.log("--- checks ---");
 let failed = 0;
