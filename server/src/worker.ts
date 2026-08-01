@@ -17,6 +17,7 @@ import {
 import { query, queryOne } from "./db/pool.js";
 import { cloneRepoSandboxed, cleanupScanDir } from "./analysis/clone.js";
 import { computeAiAuthorship } from "./analysis/aiAuthorship.js";
+import { listTrackedFiles } from "./analysis/trackedFiles.js";
 import {
   parseManifest,
   analyzeRepo,
@@ -36,6 +37,7 @@ import {
   readProjectLicense,
   checkLicenseConflicts,
   rankFindings,
+  findSecrets,
   type DependencyVerdict,
   type DeadCodeCandidate,
   type ResolvedTree,
@@ -207,6 +209,44 @@ async function processScanJob(scanJobId: string) {
           z.findingType,
           z.confidence,
           z.reasoning,
+        ],
+      );
+    }
+
+    // Deliberately after the LLM pass and never part of its input: that call
+    // already receives raw source in each candidate's `body`, and secrets must
+    // not widen what leaves the machine. Persisted redacted — the raw value is
+    // never written to the database.
+    let secrets: ReturnType<typeof findSecrets> = [];
+    try {
+      const trackedFiles = await listTrackedFiles(dir);
+      secrets = trackedFiles
+        ? findSecrets(dir, { isTracked: (p) => trackedFiles.has(p) })
+        : findSecrets(dir);
+    } catch (err) {
+      console.error(
+        `[scan ${scanJobId}] secret scan failed (continuing without it):`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+    for (const s of secrets) {
+      await query(
+        `INSERT INTO code_findings
+           (scan_job_id, file_path, line_start, line_end, symbol_name, finding_type,
+            confidence_score, llm_reasoning, detail)
+         VALUES ($1, $2, $3, $3, $4, 'hardcoded_secret', 1.0, $5, $6)`,
+        [
+          scanJobId,
+          s.filePath,
+          s.line,
+          s.provider,
+          `A ${s.provider} appears to be hardcoded here. Rotate it, then move it to an environment variable.`,
+          JSON.stringify({
+            provider: s.provider,
+            redacted: s.redacted,
+            fingerprint: s.fingerprint,
+            tier: s.tier,
+          }),
         ],
       );
     }
