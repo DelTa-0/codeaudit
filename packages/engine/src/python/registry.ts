@@ -41,7 +41,7 @@ export async function checkPyPiPackage(name: string) {
   if (status !== 404 && data) {
     result.exists = true;
     const doc = data as {
-      info?: { version?: string; license?: string; yanked?: boolean };
+      info?: { version?: string; license?: string; license_expression?: string; yanked?: boolean };
       releases?: Record<string, { upload_time_iso_8601?: string }[]>;
     };
     // First release date = earliest upload across all versions (best-effort).
@@ -60,13 +60,20 @@ export async function checkPyPiPackage(name: string) {
     } catch {
       // pypistats is best-effort and rate-limited — tolerate failures
     }
+    // PEP 639: modern PyPI publishes an SPDX identifier in
+    // `license_expression` and leaves the legacy `license` field null.
+    // Older packages do the reverse, so consult both. A `license` value long
+    // enough to be the full licence text is not an identifier — treat it as
+    // unknown rather than prefix-matching against a blob.
+    const rawLicense = doc.info?.license_expression || doc.info?.license || null;
+    const license = rawLicense && rawLicense.length <= 60 ? rawLicense : null;
     result.meta = {
       created,
       latest: doc.info?.version ?? null,
       // stored under the same key the dashboard's downloads column reads
       weeklyDownloads: monthlyDownloads,
       downloadsPeriod: "month",
-      license: doc.info?.license || null,
+      license,
       deprecated: doc.info?.yanked ? "This release has been yanked from PyPI." : null,
     };
   }

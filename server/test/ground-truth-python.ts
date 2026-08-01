@@ -14,6 +14,7 @@ import {
   findDeadCodeCandidates,
   detectEcosystems,
   verifyPackage,
+  checkPyPiPackage,
 } from "@codeaudit/engine";
 
 const fixtureDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixture-python");
@@ -72,6 +73,18 @@ checks.push(
   ["verifyPackage(reqeusts, pypi) suggests requests", verifyPhantomTypoPy.alternatives?.[0]?.name === "requests"],
   ["verifyPackage(requests, pypi) is not phantom", verifyHealthyPy.status !== "phantom"],
 );
+// --- PEP 639 licence resolution (live PyPI) ---
+// flask publishes only `license_expression` (modern PEP 639 metadata) and
+// leaves the legacy `license` field null; requests is the reverse. Both
+// must resolve to a non-null license, or every popular Python dependency
+// falsely reads as "declares no licence".
+const flaskMeta = await checkPyPiPackage("flask");
+const requestsMeta = await checkPyPiPackage("requests");
+checks.push(
+  ["checkPyPiPackage(flask) resolves a license via license_expression", typeof flaskMeta.meta?.license === "string"],
+  ["checkPyPiPackage(requests) resolves a license via the legacy field", typeof requestsMeta.meta?.license === "string"],
+);
+
 console.log("--- checks ---");
 let failed = 0;
 for (const [label, ok] of checks) {
