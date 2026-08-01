@@ -836,42 +836,184 @@ git commit -m "Score hardcoded secrets and rank them above every other finding"
 
 ---
 
-### Task 6: Surface secrets in the CLI, dashboard and PR comment
+### Task 6: CLI surfacing
 
-Three surfaces, one commit each. Every one must render `detail.redacted`, never a value.
+**Files:** Modify `cli/src/index.ts`.
 
-**Files:**
-- Modify: `cli/src/index.ts`, `web/src/pages/ScanDetail.tsx`, `web/src/lib/api.ts`, `server/src/queue/prComment.ts`, `server/src/worker.ts`
+Call `findSecrets(dir)` inside the existing advisory try/catch, pass the result to `rankFindings` as `secrets`, add it to the `--json` payload under a `secrets` key, and print a `Secrets` section above `Fix first` when non-empty. Print `provider`, `filePath:line` and `redacted` — nothing else. Reuse the existing `RED`/`DIM`/`RESET` constants; do not redefine them.
 
-- [ ] **Step 1: CLI**
+Do not change the exit-code logic. Exit codes are a documented CI contract (0/1/2) and secrets are presentational here — scoring already handles their severity via `computeSummary`.
 
-Call `findSecrets(dir)` inside the existing advisory try/catch, pass it to `rankFindings`, add it to the `--json` payload as `secrets`, and print a `Secrets` section above `Fix first` when non-empty. Print `provider`, `filePath:line`, and `redacted` only. Follow the existing colour-constant conventions; use `RED`.
-
-Verify: `npm run build:cli && node cli/dist/index.js scan <scratch-dir-with-fake-key>` shows the redacted shape and **not** the key.
-
-Commit: `Report redacted secrets in CLI output`
-
-- [ ] **Step 2: Dashboard**
-
-Add `detail?: { provider: string; redacted: string; removedFromHead?: boolean; firstSeenCommit?: string } | null` to `CodeFinding` in `web/src/lib/api.ts`. In `ScanDetail.tsx` add a critical-styled Secrets card listing findings whose `finding_type` starts with `hardcoded_secret`, showing provider, `file:line`, the redacted shape, and guidance that switches on `removedFromHead` — "rotate this credential" versus "remove and rotate".
-
-Verify: `npm run build --workspace web` exits 0, and the card renders against a real scan.
-
-Commit: `Add a secrets card to the scan detail page`
-
-- [ ] **Step 3: PR comment**
-
-Add a secrets row to the counts table and, when any exist, a line above the table stating how many were found and that values are withheld. **Never interpolate `redacted` or any detail into the comment** — on a public repository the comment is world-readable, and even a redacted prefix plus a file path narrows an attacker's search. State the count and the file path only, and route the reader to the dashboard.
-
-Pass the secret count through to `computeSummary` in the worker so `summary.counts.secrets` is populated for this.
-
-Verify: `npm run lint` exits 0; render the body with a fixture summary via a scratch script and confirm no redacted shape appears.
-
-Commit: `Surface secret counts in the PR comment without leaking values`
+- [ ] **Step 1:** Implement as above.
+- [ ] **Step 2:** `npm run build:cli`, then run against a scratch directory (created OUTSIDE this repo) containing a file with `AKIAIOSFODNN7EXAMPLE`. Confirm the output shows `AKIA…(20 chars)` and that the full key appears nowhere.
+- [ ] **Step 3:** Confirm `node cli/dist/index.js scan . --json | grep -c AKIAIOSFODNN7EXAMPLE` returns 0 for that scratch directory.
+- [ ] **Step 4:** Commit `Report redacted secrets in CLI output`.
 
 ---
 
-### Task 7: Full gate and publish
+### Task 7: Dashboard surfacing
+
+**Files:** Modify `web/src/lib/api.ts`, `web/src/pages/ScanDetail.tsx`.
+
+Add to `CodeFinding` in `api.ts`:
+
+```ts
+  detail?: {
+    provider: string;
+    redacted: string;
+    tier?: number;
+    removedFromHead?: boolean;
+    firstSeenCommit?: string;
+    lastSeenCommit?: string;
+  } | null;
+```
+
+In `ScanDetail.tsx` add a critical-styled Secrets card listing findings whose `finding_type` starts with `hardcoded_secret`, showing provider, `file:line`, the redacted shape, and guidance that switches on `removedFromHead`: *"still in git history — rotate this credential; deleting the file does not revoke it"* versus *"remove it from source and rotate"*.
+
+The field is optional because every pre-existing `code_findings` row has `detail = NULL`. Guard every access with optional chaining at each level.
+
+- [ ] **Step 1:** Implement as above.
+- [ ] **Step 2:** `npm run build --workspace web` must exit 0.
+- [ ] **Step 3:** Confirm a scan with no secrets renders no card and logs no console error.
+- [ ] **Step 4:** Commit `Add a secrets card to the scan detail page`.
+
+---
+
+### Task 8: PR comment surfacing
+
+**Files:** Modify `server/src/queue/prComment.ts`, `server/src/worker.ts`.
+
+Pass the secret count into `computeSummary` in the worker so `summary.counts.secrets` is populated, then add a secrets row to the PR comment's counts table.
+
+**Never interpolate `redacted`, `provider`, or any `detail` field into the comment.** On a public repository this comment is world-readable, and a redacted prefix plus a file path materially narrows an attacker's search. State the count only and route the reader to the dashboard.
+
+- [ ] **Step 1:** Implement as above.
+- [ ] **Step 2:** `npm run lint` must exit 0.
+- [ ] **Step 3:** Render the body via a scratch script (outside the repo) with a summary containing secrets, and confirm no redacted shape, provider name, or file path appears anywhere in the output.
+- [ ] **Step 4:** Commit `Surface secret counts in the PR comment without leaking values`.
+
+---
+
+### Task 9: MCP `scan_secrets` tool
+
+**Files:** Modify `mcp/src/index.ts`. Test: `mcp/test/ground-truth.ts`.
+
+**Why this belongs in the MCP surface:** the existing tools answer *"is this package real?"* before an agent installs it. This answers *"am I about to hardcode a credential?"* before an agent **writes a file**. That is the moment the mistake is cheapest to prevent, and it is the single most common credential mistake in AI-generated code.
+
+**Interfaces:**
+- Consumes: `scanTextForSecrets`, `isSecretScannablePath` from `@codeaudit/engine`
+- Produces: a `scan_secrets` MCP tool
+
+- [ ] **Step 1: Register the tool**
+
+Follow the exact shape of the existing `registerTool` calls — same `title`/`description`/`inputSchema` structure, same `{ content: [{ type: "text" as const, text: JSON.stringify(..., null, 2) }] }` return.
+
+```ts
+server.registerTool(
+  "scan_secrets",
+  {
+    title: "Scan content for hardcoded secrets",
+    description:
+      "Call this before writing or editing any file that could contain configuration, credentials or connection strings. Detects hardcoded API keys, tokens and private keys. Returns redacted matches only — the secret value is never echoed back.",
+    inputSchema: {
+      content: z.string().min(1).max(200_000).describe("The file content about to be written."),
+      filePath: z
+        .string()
+        .max(500)
+        .optional()
+        .describe(
+          "Path the content will be written to. Used to skip files that legitimately hold placeholders, such as .env.example.",
+        ),
+    },
+  },
+  async ({ content, filePath }) => {
+    const target = filePath ?? "<buffer>";
+    // Say so explicitly rather than returning an empty result, or the agent
+    // reads "no findings" as "safe" when we simply did not look.
+    if (filePath && !isSecretScannablePath(filePath)) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify(
+              { scanned: false, reason: `${filePath} is a template or excluded path; not scanned.`, findings: [] },
+              null,
+              2,
+            ),
+          },
+        ],
+      };
+    }
+    const findings = scanTextForSecrets(content, target);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(
+            {
+              scanned: true,
+              findingCount: findings.length,
+              // `scanTextForSecrets` returns redacted shapes and fingerprints
+              // only — it never carries the value — so this is safe to hand
+              // back to a model whose context may be logged by its provider.
+              findings,
+              guidance: findings.length
+                ? "Do not write these values into source. Load them from an environment variable, and rotate any credential that was already committed."
+                : "No hardcoded secrets detected.",
+            },
+            null,
+            2,
+          ),
+        },
+      ],
+    };
+  },
+);
+```
+
+- [ ] **Step 2: Add ground-truth checks**
+
+`mcp/test/ground-truth.ts` drives the server over stdio JSON-RPC. Follow its existing `callTool` pattern and assert:
+- `scan_secrets` with content containing `AKIA` + `IOSFODNN7EXAMPLE` reports `findingCount === 1`
+- the response text does **not** contain the full key
+- `scan_secrets` with `filePath: ".env.example"` reports `scanned: false`
+- `scan_secrets` with `const k = process.env.API_KEY;` reports `findingCount === 0`
+
+- [ ] **Step 3:** Run the MCP ground-truth suite; all checks pass.
+- [ ] **Step 4:** Commit `Add scan_secrets tool to the MCP server`.
+
+---
+
+### Task 10: Rename to `codematrix`
+
+Do this AFTER all functional work, so the new name's first release is correct rather than carrying known bugs.
+
+**Files:** `cli/package.json`, `cli/build.mjs`, `mcp/package.json`, `package.json`, `server/src/routes/cliScans.ts`, `web/src/pages/RepoDetail.tsx`, `web/src/components/landing/{Hero,Cli,FinalCta}.tsx`, `web/src/lib/useScanDemo.ts`, `README.md`, `cli/README.md`, `mcp/README.md`, `docs/setup.md`.
+
+- [ ] **Step 1: Confirm the name is actually publishable**
+
+`npm view codematrix` returns 404, but `code-matrix` **exists** — and a similarity collision of exactly that shape previously rejected `codeaudit` with a 403. A 404 is not proof of publishability.
+
+Set `cli/package.json`'s `name` to `codematrix` and its `bin` key to `codematrix` (they must match — the existing decision record explains that this is what makes `npx` resolve the sole bin unambiguously), then:
+
+```bash
+npm publish --dry-run --workspace cli
+```
+
+**If this 403s, STOP and report.** Do not silently fall back to another name.
+
+- [ ] **Step 2: Rename the MCP package** to `codematrix-mcp` (name + bin), keeping the family symmetric.
+
+- [ ] **Step 3: Update every reference.** Search for `codeaudit-scan` and `codeaudit-mcp` across the repo and update user-facing strings: the dashboard's CLI/CI upload usage string, the landing page copy and its scripted terminal demo, and all READMEs.
+
+**Do not rewrite `docs/roadmap.md`, `docs/known-issues.md`, `docs/decisions.md`, or anything under `docs/superpowers/`.** Those are historical records of what happened under the old name; rewriting history to match a rename makes the record false.
+
+- [ ] **Step 4:** `npm run lint`, `npm run build`, `npm run build:cli` all exit 0; both ground-truth suites pass.
+- [ ] **Step 5:** Commit `Rename the published packages to codematrix`.
+
+---
+
+### Task 11: Full gate and publish
 
 - [ ] **Step 1: Run everything**
 
@@ -883,30 +1025,42 @@ npm run lint
 npm run build
 npm run build:cli
 ```
-All must exit 0 with zero FAIL lines. Report actual PASS counts — do not trust a summary.
+All must exit 0 with zero FAIL lines. Report actual PASS counts — do not trust a summary; subagent-reported counts were wrong repeatedly during Phase 1a.
 
-- [ ] **Step 2: Egress audit**
+- [ ] **Step 2: Egress audit — the release gate for this feature**
 
-Grep the built CLI bundle and a real scan's database rows for any value that looks like a live credential. Confirm the only representations anywhere are `…(N chars)` shapes.
+Create a scratch repository outside this project containing a fake AWS key, scan it, then confirm the key string appears in **none** of: the built CLI bundle, the CLI's human output, the CLI's `--json` output, the `code_findings` table, an `--upload` payload, a rendered PR comment body, or an exported report. The only representation anywhere may be `AKIA…(N chars)`.
 
-- [ ] **Step 3: Bump and publish**
+- [ ] **Step 3: Set the version**
+
+`codematrix` is a new package, so start at `1.0.0` — it is not a continuation of `codeaudit-scan`'s version line.
 
 ```bash
-npm version minor --no-git-tag-version --prefix cli
+npm version 1.0.0 --no-git-tag-version --prefix cli
 npm run build:cli
-git add cli/package.json package-lock.json
-git commit -m "Publish codeaudit-scan 0.4.0 with secret detection"
+git add cli/package.json mcp/package.json package-lock.json
+git commit -m "Release codematrix 1.0.0 with secret detection"
 ```
 
-`npm publish --workspace cli` is a world-visible, irreversible action — get explicit confirmation before running it.
+- [ ] **Step 4: Publish — requires explicit confirmation**
+
+`npm publish` is world-visible and irreversible. Get a clear go-ahead before running it, and note the environment may not be npm-authenticated.
+
+- [ ] **Step 5: Deprecate the old name**
+
+```bash
+npm deprecate codeaudit-scan "Renamed to codematrix. Install codematrix instead."
+```
 
 ---
 
 ## Self-Review
 
-**Spec coverage.** Tier 1/2/3 detection → Task 2. Own file walk → Task 2 (`isSecretScannablePath`, `findSecrets`). Redaction choke point → Task 2, enforced by serialization assertions and re-verified in Tasks 3, 6 and 7. Migration 004 → Task 3. Git history + dedupe + `removedFromHead` → Task 4. Secrets score immediately at −20 capped −40 → Task 5. Ranked above everything → Task 5 (`KIND_ORDER: -1`). CLI/dashboard/PR surfacing → Task 6. Publish discipline → Task 7. The two dogfooding accuracy bugs → Task 1.
+**Spec coverage.** Tier 1/2/3 detection → Task 2. Own file walk → Task 2 (`isSecretScannablePath`, `findSecrets`). Redaction choke point → Task 2, enforced by serialization assertions and re-verified independently in Tasks 3, 6, 8, 9 and 11. Migration 004 → Task 3. Git history + dedupe + `removedFromHead` → Task 4. Secrets score immediately at −20 capped −40 → Task 5. Ranked above everything → Task 5 (`KIND_ORDER: -1`). CLI → Task 6. Dashboard → Task 7. PR comment → Task 8. MCP → Task 9. Rename → Task 10. Publish discipline and the egress audit → Task 11. The two dogfooding accuracy bugs → Task 1.
 
-**Deliberately excluded.** CLI-side git-history scanning (needs its own git plumbing; the shared detector already makes it cheap later). Pre-commit hook. Weighting the Phase 1a advisory findings into the score.
+**Why the three surfaces are separate tasks.** Each is a distinct egress path for a credential, with a different blast radius: the CLI prints to a terminal, the dashboard writes to a database the user owns, and the PR comment publishes to the internet on a public repo. They deserve independent review gates rather than one shared one.
+
+**Deliberately excluded.** CLI-side git-history scanning (needs its own git plumbing; the shared detector makes it cheap to add later). Pre-commit hook. Weighting the Phase 1a advisory findings into the score. Rewriting historical docs to match the rename — `roadmap.md`, `known-issues.md`, `decisions.md` and `docs/superpowers/` record what happened under the old name and must stay accurate.
 
 **Placeholder scan.** No TBD/TODO. Tasks 1–5 carry complete code. Task 6's three steps are specified as behaviour plus exact type signatures rather than full JSX, because they must match conventions in files the implementer has to read first — the same approach that worked for Phase 1a Tasks 7 and 8, where verbatim sketches went stale.
 
