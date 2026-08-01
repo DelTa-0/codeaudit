@@ -2,6 +2,21 @@ import { queryOne } from "../db/pool.js";
 import { upsertPrComment, githubConfigured } from "../services/github.js";
 import type { ScanSummary, RankedFinding } from "@codeaudit/engine";
 
+/**
+ * Package names reach this comment as raw JSON keys from the scanned repo's
+ * package.json, file paths come from its git tree, and reasoning text can come
+ * from an LLM — all attacker-influencable, and this comment is posted publicly
+ * on the pull request. Collapse whitespace so nothing can forge new lines,
+ * table rows or list items, and escape the metacharacters that would let a
+ * crafted name smuggle in a link, an image, or fake report structure.
+ * Mirrors the escaping already applied to exported reports (docs/decisions.md).
+ */
+function mdSafe(value: string, max = 200): string {
+  const collapsed = String(value).replace(/\s+/g, " ").trim();
+  const escaped = collapsed.replace(/[\\`*[\]|<>]/g, "\\$&");
+  return escaped.length > max ? `${escaped.slice(0, max - 1)}…` : escaped;
+}
+
 export async function processPrCommentJob(scanJobId: string) {
   if (!githubConfigured()) return;
 
@@ -46,7 +61,7 @@ export async function processPrCommentJob(scanJobId: string) {
     ? `\n**Fix first**\n\n${topPriorities
         .map(
           (p) =>
-            `${p.rank}. **${p.title}** \`${p.band}\` · effort ${p.effort}${p.location ? ` · \`${p.location}\`` : ""}\n   ${p.why}`,
+            `${p.rank}. **${mdSafe(p.title)}** \`${p.band}\` · effort ${p.effort}${p.location ? ` · \`${mdSafe(p.location, 120)}\`` : ""}\n   ${mdSafe(p.why, 300)}`,
         )
         .join("\n")}\n`
     : "";
