@@ -437,6 +437,12 @@ checks.push(
     "tier 2: a high-entropy value on a secret-named key is detected",
     fire(`const apiKey = "9f2Kq7ZxVb3LmNp8RtYw1CsE4DhGj6Uk";`).length === 1,
   ],
+  [
+    "tier 2: a 32-character hex secret is detected (total-entropy floor admits low-alphabet, long secrets)",
+    fire(
+      `const secret = "${"a3f9" + "c17e" + "b204" + "8d5a" + "6f1b" + "e093" + "2c74" + "d8e6"}";`,
+    ).length === 1,
+  ],
   // --- must NOT fire: these matter more than the ones above ---
   [
     "does NOT fire on a process.env reference",
@@ -462,7 +468,11 @@ checks.push(
   ["DOES scan a terraform file", isSecretScannablePath("infra/main.tf")],
   // --- redaction: the highest-severity guarantee in this feature ---
   ["redact never returns the raw value", redact(AWS) !== AWS],
-  ["redact reveals at most 4 leading characters", redact(AWS).startsWith("AKIA") && !redact(AWS).includes("IOSFODNN7EXAMPLE")],
+  [
+    "redact reveals at most 4 leading characters",
+    redact(AWS).indexOf("…") === 4 && !redact(AWS).includes(AWS.slice(4)),
+  ],
+  ["redact does not disclose a short value whole", !redact("abcd").includes("abcd")],
   ["redact reports the length", /\(\d+ chars\)/.test(redact(AWS))],
   ["fingerprint is not the raw value", fingerprintSecret(AWS) !== AWS],
   ["fingerprint is stable", fingerprintSecret(AWS) === fingerprintSecret(AWS)],
