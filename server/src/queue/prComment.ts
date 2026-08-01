@@ -53,9 +53,10 @@ export async function processPrCommentJob(scanJobId: string) {
   const delta = prev ? (s.score - Number(prev.score)).toFixed(1) : null;
   const deltaText = delta === null ? "" : Number(delta) >= 0 ? ` (+${delta})` : ` (${delta})`;
   const vulnerable = s.counts.vulnerable ?? 0;
+  const secretCount = s.counts.secrets ?? 0;
   const recommendation =
-    s.counts.phantom > 0 || vulnerable > 0
-      ? "🔴 **Request changes** — phantom dependencies and/or known vulnerabilities must be resolved before merge."
+    secretCount > 0 || s.counts.phantom > 0 || vulnerable > 0
+      ? "🔴 **Request changes** — hardcoded secrets, phantom dependencies, and/or known vulnerabilities must be resolved before merge."
       : s.score < 60
         ? "🟡 **Review recommended** — health score below threshold."
         : "🟢 **Looks good** from a debt perspective.";
@@ -78,6 +79,7 @@ export async function processPrCommentJob(scanJobId: string) {
 ${fixFirst}
 | Finding | Count |
 | --- | --- |
+| 🔑 Hardcoded secrets | ${secretCount} |
 | 🚨 Phantom dependencies | ${s.counts.phantom} |
 | 🛡️ Known vulnerabilities | ${vulnerable} |
 | ⚠️ Suspicious packages | ${s.counts.suspicious} |

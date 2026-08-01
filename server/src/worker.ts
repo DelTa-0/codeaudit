@@ -307,7 +307,13 @@ async function processScanJob(scanJobId: string) {
     try {
       duplicates = findDuplicateLibraries(deps);
       licenseConflicts = checkLicenseConflicts(deps, readProjectLicense(dir));
-      priorities = rankFindings({ deps, codeFindings: zombies, duplicates, licenseConflicts });
+      priorities = rankFindings({
+        deps,
+        codeFindings: zombies,
+        duplicates,
+        licenseConflicts,
+        secrets: [...secrets, ...historySecrets],
+      });
     } catch (err) {
       console.error(
         `[scan ${scanJobId}] advisory analysis failed (continuing without it):`,
@@ -315,7 +321,7 @@ async function processScanJob(scanJobId: string) {
       );
     }
     const summary = {
-      ...computeSummary(deps, zombies, fileCount, reviewStatus),
+      ...computeSummary(deps, zombies, fileCount, reviewStatus, secrets.length + historySecrets.length),
       ai: aiStats,
       priorities,
       advisories: { duplicates, licenseConflicts },
