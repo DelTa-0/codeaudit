@@ -298,6 +298,29 @@ export function ScanDetail() {
         </Card>
       )}
 
+      {scan.summary?.priorities && scan.summary.priorities.length > 0 && (
+        <Card>
+          <p className="mb-1 text-sm font-medium text-muted">Fix first</p>
+          <p className="mb-3 text-xs text-muted">
+            Ranked by severity, then kind, then confidence, then effort.
+          </p>
+          <ol className="space-y-3">
+            {scan.summary.priorities.map((p) => (
+              <li key={p.rank} className="flex gap-3">
+                <Badge label={p.band} />
+                <div className="min-w-0">
+                  <div className="text-sm font-medium">{p.title}</div>
+                  <div className="text-sm text-muted">{p.why}</div>
+                  <div className="mt-1 text-xs text-muted">
+                    {p.location ? `${p.location} · ` : ""}effort {p.effort}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </Card>
+      )}
+
       {scan.summary?.ai && scan.summary.ai.totalCommits > 0 && (
         <AiAuthorshipCard ai={scan.summary.ai} />
       )}
@@ -490,6 +513,42 @@ export function ScanDetail() {
           )}
         </Card>
       )}
+
+      {scan.summary?.advisories?.duplicates && scan.summary.advisories.duplicates.length > 0 && (
+        <Card>
+          <p className="mb-1 text-sm font-medium text-muted">Consolidation opportunities</p>
+          <p className="mb-3 text-xs text-muted">
+            Libraries that solve the same problem. Not a defect — a repo mid-migration
+            legitimately has both.
+          </p>
+          <ul className="space-y-2">
+            {scan.summary.advisories.duplicates.map((d) => (
+              <li key={d.category}>
+                <div className="text-sm font-medium">{d.packages.join(" + ")}</div>
+                <div className="text-sm text-muted">{d.recommendation}</div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      {scan.summary?.advisories?.licenseConflicts &&
+        scan.summary.advisories.licenseConflicts.length > 0 && (
+          <Card>
+            <p className="mb-3 text-sm font-medium text-muted">Licence review</p>
+            <ul className="space-y-2">
+              {scan.summary.advisories.licenseConflicts.map((c) => (
+                <li key={c.packageName}>
+                  <div className="text-sm font-medium">
+                    {c.packageName}{" "}
+                    <span className="text-muted">({c.packageLicense ?? "none declared"})</span>
+                  </div>
+                  <div className="text-sm text-muted">{c.reason}</div>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
 
       {codeFindings && (
         <Card>

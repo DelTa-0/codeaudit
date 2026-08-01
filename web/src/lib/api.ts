@@ -105,6 +105,39 @@ export interface ScanSummary {
   /** "skipped" means zombie findings are unfiltered static candidates (no LLM verdict) — score is noisier. */
   reviewStatus?: "full" | "partial" | "skipped";
   ai?: AiAuthorshipStats | null;
+  priorities?: RankedFinding[];
+  advisories?: {
+    duplicates: DuplicateGroup[];
+    licenseConflicts: LicenseConflict[];
+  };
+}
+
+export interface RankedFinding {
+  rank: number;
+  band: "critical" | "high" | "medium" | "low";
+  kind: string;
+  title: string;
+  location: string | null;
+  why: string;
+  effort: "S" | "M" | "L";
+  confidence: number;
+}
+
+export interface DuplicateGroup {
+  category: string;
+  ecosystem: string;
+  packages: string[];
+  prefer: string | null;
+  recommendation: string;
+}
+
+export interface LicenseConflict {
+  packageName: string;
+  ecosystem: string;
+  packageLicense: string | null;
+  projectLicense: string | null;
+  severity: "high" | "medium";
+  reason: string;
 }
 
 export interface Scan {
