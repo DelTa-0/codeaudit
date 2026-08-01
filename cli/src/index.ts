@@ -266,7 +266,10 @@ async function main() {
           deadCodeCandidates: staticFindings,
           priorities,
           advisories: { duplicates, licenseConflicts },
-          secrets,
+          // `fingerprint` is a dedup-internal hash (see secrets.ts) that must
+          // never be rendered into CLI output, an export, or a PR comment —
+          // it exists only to recognize the same credential across scans.
+          secrets: secrets.map(({ fingerprint: _fingerprint, ...s }) => s),
           upload: uploadResult,
           exitCode,
         },
