@@ -500,6 +500,14 @@ export function ScanDetail() {
                         <td className="py-2 font-mono text-muted">{d.declared_version ?? "—"}</td>
                         <td className="py-2">
                           <Badge label={d.status} />
+                          {/* `deprecated` is metadata, not a status — status stays
+                              "healthy" so it never moves the score. Surface it as a
+                              second badge instead of hiding it. */}
+                          {typeof d.registry_metadata?.deprecated === "string" && (
+                            <span className="ml-1">
+                              <Badge label="deprecated" />
+                            </span>
+                          )}
                         </td>
                         <td className="py-2 font-mono text-muted">
                           {d.registry_metadata?.weeklyDownloads?.toLocaleString() ?? "—"}

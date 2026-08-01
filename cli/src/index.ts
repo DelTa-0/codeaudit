@@ -271,21 +271,31 @@ async function main() {
     console.log();
   }
 
+  // `deprecated` is stored as registryMetadata.deprecated, not as a status —
+  // status stays "healthy" so it never moves the score (score.ts is
+  // untouched). Without this, a deprecated package is hidden from the table
+  // and counted in "N healthy packages not shown" while Fix first calls it
+  // deprecated a few lines above — a visible self-contradiction.
+  const isDeprecated = (d: DependencyVerdict) => typeof d.registryMetadata?.deprecated === "string";
   const interesting = deps
-    .filter((d) => d.status !== "healthy")
+    .filter((d) => d.status !== "healthy" || isDeprecated(d))
     .sort((a, b) => a.status.localeCompare(b.status));
   if (interesting.length) {
     console.log(`${BOLD}Dependencies${RESET}`);
     for (const d of interesting) {
-      const color = statusColor[d.status] ?? "";
+      const deprecated = isDeprecated(d);
+      const label = deprecated && d.status === "healthy" ? "deprecated" : d.status;
+      const color = deprecated ? YELLOW : (statusColor[d.status] ?? "");
       const eco = polyglot ? `${DIM}${d.ecosystem.padEnd(5)}${RESET} ` : "";
       const alternatives = (d.registryMetadata as { alternatives?: { name: string }[] } | null)?.alternatives;
       const suggestion = alternatives?.length
         ? ` ${DIM}(did you mean ${alternatives.map((a) => a.name).join(", ")}?)${RESET}`
         : "";
-      console.log(`  ${color}${d.status.padEnd(10)}${RESET} ${eco}${d.packageName}${suggestion}`);
+      const deprecatedMarker = deprecated && d.status !== "healthy" ? ` ${DIM}(deprecated)${RESET}` : "";
+      console.log(`  ${color}${label.padEnd(10)}${RESET} ${eco}${d.packageName}${suggestion}${deprecatedMarker}`);
     }
-    console.log(`  ${DIM}${summary.counts.healthy} healthy packages not shown${RESET}\n`);
+    const shownHealthy = interesting.filter((d) => d.status === "healthy").length;
+    console.log(`  ${DIM}${summary.counts.healthy - shownHealthy} healthy packages not shown${RESET}\n`);
   } else {
     console.log(`${GREEN}All ${deps.length} dependencies healthy${RESET}\n`);
   }

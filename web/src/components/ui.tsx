@@ -65,6 +65,7 @@ const badgeStyles: Record<string, string> = {
   high: "bg-danger/10 text-danger",
   medium: "bg-warning/10 text-warning",
   low: "bg-surface-2 text-muted",
+  deprecated: "bg-warning/10 text-warning",
 };
 
 export function Badge({ label }: { label: string }) {

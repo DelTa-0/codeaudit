@@ -178,6 +178,7 @@ export interface DependencyFinding {
     typosquatDistance?: number;
     transitive?: boolean;
     alternatives?: { name: string; reason: string; confidence: number; source: "fuzzy" | "ai" }[];
+    deprecated?: string | null;
   } | null;
 }
 
