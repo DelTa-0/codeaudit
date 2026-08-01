@@ -32,41 +32,62 @@ export async function scanHistorySecrets(
       { cwd: repoDir, timeout: TIMEOUT_MS, maxBuffer: MAX_OUTPUT_BYTES },
     );
     stdout = result.stdout;
-  } catch {
+  } catch (err) {
+    // Distinguishable from a genuinely clean history: an oversized or failed
+    // `git log` returns no findings, and without this line that is
+    // indistinguishable from "there were none".
+    console.error(
+      "[history-secrets] git log failed or exceeded the output limit; history not scanned:",
+      err instanceof Error ? err.message : err,
+    );
     return [];
   }
 
   const byFingerprint = new Map<string, SecretFinding>();
   let commit = "";
   let file = "";
+  let addedLineNumber = 0;
 
   for (const line of stdout.split("\n")) {
     if (line.startsWith("commit ")) {
       commit = line.slice(7, 47).trim();
       continue;
     }
-    if (line.startsWith("+++ b/")) {
-      file = line.slice(6).trim();
+    if (/^\+\+\+ (b\/|\/dev\/null)/.test(line)) {
+      file = line.startsWith("+++ b/") ? line.slice(6).trim() : "";
+      addedLineNumber = 0;
+      continue;
+    }
+    // `@@ -old,count +new,count @@` — with --unified=0 there are no context
+    // lines, so the header's new-file start is the exact line of the next
+    // added line, and each added line advances it by one. Without this every
+    // history finding reports line 1, because the engine's detector receives
+    // one line at a time and numbers it relative to that input.
+    const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
+    if (hunk) {
+      addedLineNumber = Number(hunk[1]);
       continue;
     }
     // Added lines only: every secret ever introduced appears as one at some
     // point, so this is complete without walking whole trees.
-    if (!line.startsWith("+") || line.startsWith("+++")) continue;
+    if (!line.startsWith("+")) continue;
 
     for (const found of scanTextForSecrets(line.slice(1), file)) {
-      const existing = byFingerprint.get(found.fingerprint);
+      const finding = { ...found, line: addedLineNumber || found.line };
+      const existing = byFingerprint.get(finding.fingerprint);
       if (existing) {
         // git log is newest-first, so an earlier iteration saw a later commit.
         existing.firstSeenCommit = commit;
         continue;
       }
-      byFingerprint.set(found.fingerprint, {
-        ...found,
+      byFingerprint.set(finding.fingerprint, {
+        ...finding,
         firstSeenCommit: commit,
         lastSeenCommit: commit,
-        removedFromHead: !headFingerprints.has(found.fingerprint),
+        removedFromHead: !headFingerprints.has(finding.fingerprint),
       });
     }
+    addedLineNumber++;
   }
 
   return [...byFingerprint.values()].filter((f) => f.removedFromHead);
