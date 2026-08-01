@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { verifyPackage, type PackageVerifyResult } from "@codeaudit/engine";
+import { scanTextForSecrets, isSecretScannablePath } from "../../packages/engine/dist/secrets.js";
 import { fetchHostedAlternatives } from "./hosted.js";
 
 const token = process.env.CODEAUDIT_TOKEN || null;
@@ -123,6 +124,69 @@ server.registerTool(
     );
     await enrichWithHostedAlternatives(results);
     return { content: [{ type: "text" as const, text: JSON.stringify(results, null, 2) }] };
+  },
+);
+
+server.registerTool(
+  "scan_secrets",
+  {
+    title: "Scan content for hardcoded secrets",
+    description:
+      "Call this before writing or editing any file that could contain configuration, credentials or connection strings. Detects hardcoded API keys, tokens and private keys. Returns redacted matches only — the secret value is never echoed back.",
+    inputSchema: {
+      content: z.string().min(1).max(200_000).describe("The file content about to be written."),
+      filePath: z
+        .string()
+        .max(500)
+        .optional()
+        .describe(
+          "Path the content will be written to. Used to skip files that legitimately hold placeholders, such as .env.example.",
+        ),
+    },
+  },
+  async ({ content, filePath }) => {
+    const target = filePath ?? "<buffer>";
+    // Say so explicitly rather than returning an empty result, or the agent
+    // reads "no findings" as "safe" when we simply did not look.
+    if (filePath && !isSecretScannablePath(filePath)) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify(
+              { scanned: false, reason: `${filePath} is a template or excluded path; not scanned.`, findings: [] },
+              null,
+              2,
+            ),
+          },
+        ],
+      };
+    }
+    const findings = scanTextForSecrets(content, target);
+    // `fingerprint` is dedup-internal (see packages/engine/src/secrets.ts) and
+    // must never leave the server — this response goes straight into another
+    // model's context window, which may be logged by its own provider. Strip
+    // it here, matching the CLI/dashboard/PR-comment surfaces that already do.
+    const safeFindings = findings.map(({ fingerprint: _fingerprint, ...rest }) => rest);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(
+            {
+              scanned: true,
+              findingCount: safeFindings.length,
+              findings: safeFindings,
+              guidance: safeFindings.length
+                ? "Do not write these values into source. Load them from an environment variable, and rotate any credential that was already committed."
+                : "No hardcoded secrets detected.",
+            },
+            null,
+            2,
+          ),
+        },
+      ],
+    };
   },
 );
 

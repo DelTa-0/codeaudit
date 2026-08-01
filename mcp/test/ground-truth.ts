@@ -127,6 +127,29 @@ checks.push([
 ]);
 degraded.child.kill();
 
+const AWS_MCP_TEST_KEY = "AKIA" + "3RTQ7ZK2WPLM5XDN";
+const secretHit = await callTool(send, "scan_secrets", {
+  content: `const k = "${AWS_MCP_TEST_KEY}";`,
+  filePath: "src/config.ts",
+});
+checks.push(
+  ["scan_secrets detects a hardcoded AWS-shaped key", secretHit.findingCount === 1],
+  ["scan_secrets response does not contain the raw key", !JSON.stringify(secretHit).includes(AWS_MCP_TEST_KEY)],
+  ["scan_secrets response does not contain a fingerprint field", !JSON.stringify(secretHit).includes("fingerprint")],
+);
+
+const templateFile = await callTool(send, "scan_secrets", {
+  content: `const k = "${AWS_MCP_TEST_KEY}";`,
+  filePath: ".env.example",
+});
+checks.push(["scan_secrets does not scan a .env.example path", templateFile.scanned === false]);
+
+const envRef = await callTool(send, "scan_secrets", {
+  content: "const k = process.env.API_KEY;",
+  filePath: "src/config.ts",
+});
+checks.push(["scan_secrets does NOT fire on a process.env reference", envRef.findingCount === 0]);
+
 console.log("--- checks ---");
 let failed = 0;
 for (const [label, ok] of checks) {
