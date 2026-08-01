@@ -68,7 +68,7 @@ async function enrichWithHostedAlternatives(results: PackageVerifyResult[]): Pro
 const TOOL_DESCRIPTION_PREFIX =
   "Call this before running an install command for any package the user did not explicitly name, and before adding a new entry to a manifest file. ";
 
-const server = new McpServer({ name: "codeaudit-mcp", version: "0.1.0" });
+const server = new McpServer({ name: "codematrix-mcp", version: "0.1.0" });
 
 server.registerTool(
   "verify_package",

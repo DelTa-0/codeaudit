@@ -66,7 +66,7 @@ const checks: [string, boolean][] = [
   ["genuinely-uncalled `lazy_docx_load` still flagged", candNames.has("lazy_docx_load")],
 ];
 
-// --- Single-package verification primitive (offline path, for codeaudit-mcp) ---
+// --- Single-package verification primitive (offline path, for codematrix-mcp) ---
 const verifyPhantomTypoPy = await verifyPackage("reqeusts", "pypi");
 const verifyHealthyPy = await verifyPackage("requests", "pypi");
 checks.push(

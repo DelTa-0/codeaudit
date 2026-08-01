@@ -1,5 +1,5 @@
 {
-  "name": "codeaudit-mcp",
+  "name": "codematrix-mcp",
   "version": "0.1.1",
   "type": "module",
   "description": "MCP server for AI coding agents (Claude Code, Cursor, Cline, etc.) to verify a package is real and trustworthy before installing it.",
@@ -25,7 +25,7 @@
     "node": ">=18"
   },
   "bin": {
-    "codeaudit-mcp": "dist/index.js"
+    "codematrix-mcp": "dist/index.js"
   },
   "files": [
     "dist"

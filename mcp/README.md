@@ -1,13 +1,14 @@
-# codeaudit-mcp
+# codematrix-mcp
 
 An MCP server that lets AI coding agents (Claude Code, Cursor, Cline, and
 other MCP-compatible tools) check whether a package is real and
 trustworthy **before** installing it — catching hallucinated ("phantom")
 packages, typosquats, and known CVEs at the moment an agent is about to
-`npm install`/`pip install` something.
+`npm install`/`pip install` something — and check content for hardcoded
+secrets before it's written to a file.
 
 Runs fully offline by default (no account needed) — same registry/CVE
-checks as `npx codeaudit-scan`. Set `CODEAUDIT_TOKEN` to additionally get
+checks as `npx codematrix`. Set `CODEAUDIT_TOKEN` to additionally get
 an LLM-suggested real alternative for phantom packages that aren't a
 simple typo of anything popular (e.g. `fastimagepro` → Pillow/imageio).
 
@@ -16,7 +17,7 @@ simple typo of anything popular (e.g. `fastimagepro` → Pillow/imageio).
 **Claude Code** — one command, no file editing:
 
 ```bash
-claude mcp add codeaudit -- npx -y codeaudit-mcp
+claude mcp add codeaudit -- npx -y codematrix-mcp
 ```
 
 (Add `-e CODEAUDIT_TOKEN=your-token` before `--` if you have one. Use
@@ -25,10 +26,10 @@ repo for your whole team rather than just your own machine.)
 
 **Cursor** — click to install:
 
-[![Add codeaudit-mcp to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](cursor://anysphere.cursor-deeplink/mcp/install?name=codeaudit&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImNvZGVhdWRpdC1tY3AiXX0=)
+[![Add codematrix-mcp to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](cursor://anysphere.cursor-deeplink/mcp/install?name=codeaudit&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImNvZGVtYXRyaXgtbWNwIl19)
 
 Or manually via **Settings → MCP → Add new MCP server**, pointing the
-command at `npx -y codeaudit-mcp`.
+command at `npx -y codematrix-mcp`.
 
 **Any other MCP-compatible client** (Cline, Windsurf, etc.) — add this to
 whatever JSON config the client reads (e.g. Cline's `cline_mcp_settings.json`):
@@ -38,19 +39,20 @@ whatever JSON config the client reads (e.g. Cline's `cline_mcp_settings.json`):
   "mcpServers": {
     "codeaudit": {
       "command": "npx",
-      "args": ["-y", "codeaudit-mcp"],
+      "args": ["-y", "codematrix-mcp"],
       "env": { "CODEAUDIT_TOKEN": "" }
     }
   }
 }
 ```
 
-Then add one line to your agent's instructions file (e.g. `CLAUDE.md`) so
-the agent actually calls it — an MCP tool's description alone doesn't force
-an agent to invoke it:
+Then add a line to your agent's instructions file (e.g. `CLAUDE.md`) so
+the agent actually calls these tools — an MCP tool's description alone
+doesn't force an agent to invoke it:
 
 > Before installing any new package, call the CodeAudit `verify_package`
-> tool.
+> tool. Before writing or editing a file that could contain configuration
+> or credentials, call `scan_secrets`.
 
 ### Windows: if `npx` fails to connect
 
@@ -62,13 +64,13 @@ skip `npx` entirely — install globally once and point the command straight
 at the installed binary:
 
 ```bash
-npm install -g codeaudit-mcp
-claude mcp add codeaudit -- codeaudit-mcp
+npm install -g codematrix-mcp
+claude mcp add codeaudit -- codematrix-mcp
 ```
 
-(For other clients, set `"command": "codeaudit-mcp", "args": []` instead of
-`npx`/`-y`/`codeaudit-mcp`.) This bypasses the broken `npx` resolution step
-entirely, at the cost of needing `npm update -g codeaudit-mcp` manually for
+(For other clients, set `"command": "codematrix-mcp", "args": []` instead of
+`npx`/`-y`/`codematrix-mcp`.) This bypasses the broken `npx` resolution step
+entirely, at the cost of needing `npm update -g codematrix-mcp` manually for
 future versions instead of `npx` always fetching latest.
 
 ## Tools
@@ -78,13 +80,18 @@ future versions instead of `npx` always fetching latest.
   against that version instead of the registry's latest.
 - `verify_packages({ packages: [{ name, ecosystem? }] })` — checks several
   at once (e.g. every new line in a manifest diff).
+- `scan_secrets({ content, filePath? })` — checks file content for
+  hardcoded API keys, tokens and private keys before it's written. Returns
+  redacted matches only (e.g. `AKIA…(20 chars)`) — the actual secret value
+  is never echoed back. `filePath` is optional and used to skip files that
+  legitimately hold placeholders, such as `.env.example`.
 
-`ecosystem` (`"npm"` or `"pypi"`) is optional — omit it and the tool tries
-npm first, then PyPI.
+`ecosystem` (`"npm"` or `"pypi"`) is optional — omit it and `verify_package`/
+`verify_packages` try npm first, then PyPI.
 
 ## Getting a token (optional)
 
-A `CODEAUDIT_TOKEN` is the same per-repo token used by `codeaudit-scan
+A `CODEAUDIT_TOKEN` is the same per-repo token used by `codematrix
 --upload` — generate one from your repository's settings page at
 [codeaudit.dev](https://codeaudit.dev), or via `POST
 /repos/:repoId/cli-token` if self-hosting.

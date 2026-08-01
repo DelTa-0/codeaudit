@@ -27,8 +27,8 @@ Every automated action (auto-scan on push, merge gate, auto-fix PRs) is **opt-in
   - [Auto-fix PRs](#auto-fix-prs)
   - [README badge](#readme-badge)
   - [AI-authorship metrics](#ai-authorship-metrics)
-  - [CLI (`npx codeaudit-scan`)](#cli-npx-codeaudit-scan)
-  - [Guardrails for AI coding agents (`codeaudit-mcp`)](#guardrails-for-ai-coding-agents-codeaudit-mcp)
+  - [CLI (`npx codematrix`)](#cli-npx-codematrix)
+  - [Guardrails for AI coding agents (`codematrix-mcp`)](#guardrails-for-ai-coding-agents-codematrix-mcp)
   - [CLI/CI upload tracking](#clici-upload-tracking)
   - [Billing (Stripe test mode)](#billing-stripe-test-mode)
 - [Testing](#testing)
@@ -267,32 +267,33 @@ patterns in the last 100 commits) and reports:
 Shown as a card on the scan report when the repo has commit history to
 analyze. Advisory only — a heuristic, not a certainty.
 
-### CLI (`npx codeaudit-scan`)
+### CLI (`npx codematrix`)
 
 A deliberately **limited, funnel-oriented** local scanner — static analysis
 only (phantom/unused/suspicious dependencies + dead-code *candidates*), no
 LLM review, no history, no PR integration. Those stay platform-only so the
 CLI drives adoption of the SaaS rather than replacing it.
 
-Published to npm as `codeaudit-scan` (the plain `codeaudit` name was
-rejected by the registry as too similar to an existing package). The
-installed command is `codeaudit-scan`; `scan` is its subcommand:
+Published to npm as `codematrix` (previously `codeaudit-scan`; the plain
+`codeaudit` name was rejected by the registry as too similar to an existing
+package). The installed command is `codematrix`; `scan` is its subcommand:
 
 ```bash
-npx codeaudit-scan scan [dir]              # human-readable output
-npx codeaudit-scan scan . --json           # machine-readable, for CI parsing
-npx codeaudit-scan scan . --min-score 80   # exit 1 if score is below 80
+npx codematrix scan [dir]              # human-readable output
+npx codematrix scan . --json           # machine-readable, for CI parsing
+npx codematrix scan . --min-score 80   # exit 1 if score is below 80
 ```
 
 Exit codes: `0` clean, `1` phantom dependencies found or below
 `--min-score`, `2` usage/runtime error.
 
-### Guardrails for AI coding agents (`codeaudit-mcp`)
+### Guardrails for AI coding agents (`codematrix-mcp`)
 
 An MCP server your AI coding agent can call *before* installing a package,
 to check whether it's real, well-maintained, and free of known CVEs —
 catching hallucinated packages and typosquats at the moment an agent is
-about to install them, rather than in a scan after the fact. See
+about to install them, rather than in a scan after the fact. Also checks
+file content for hardcoded secrets before it's written. See
 [`mcp/README.md`](mcp/README.md) for setup (Claude Code, Cursor, and any
 other MCP-compatible agent).
 
@@ -308,7 +309,7 @@ without GitHub webhooks):
 2. Run with `--upload`:
 
 ```bash
-CODEAUDIT_TOKEN=ca_xxxxx npx codeaudit-scan scan . --upload --api https://your-codeaudit-api.example
+CODEAUDIT_TOKEN=ca_xxxxx npx codematrix scan . --upload --api https://your-codeaudit-api.example
 ```
 
 On success the CLI prints the resulting dashboard URL. The upload lands in

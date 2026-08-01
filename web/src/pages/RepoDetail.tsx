@@ -258,7 +258,7 @@ function RepoSettings({
 
         <SettingRow
           title="CLI / CI uploads"
-          description="Per-repo token letting `npx codeaudit-scan scan --upload` report results into this dashboard from any machine or CI."
+          description="Per-repo token letting `npx codematrix scan --upload` report results into this dashboard from any machine or CI."
         >
           <Button
             variant="ghost"

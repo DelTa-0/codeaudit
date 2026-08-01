@@ -8,7 +8,7 @@ import { config } from "../lib/config.js";
 import { suggestAlternatives } from "@codeaudit/engine/llm";
 
 /**
- * Public route for codeaudit-mcp — authed by the same per-repo CLI token as
+ * Public route for codematrix-mcp — authed by the same per-repo CLI token as
  * cliUploadRouter (see routes/cliScans.ts), not a JWT: the MCP server runs
  * locally with no browser session to carry a user's cookie/JWT.
  */

@@ -1,4 +1,4 @@
-# codeaudit-scan
+# codematrix
 
 A local, static scanner for AI-generated technical debt in JS/TS and Python
 repos — phantom (hallucinated) dependencies, suspicious/typosquat packages,
@@ -16,7 +16,7 @@ try the core checks first.
 No install needed — run it straight from your repo root with `npx`:
 
 ```bash
-npx codeaudit-scan scan .
+npx codematrix scan .
 ```
 
 That's it. It detects whether the repo is npm, PyPI, or both (polyglot
@@ -24,14 +24,14 @@ repos get scanned on both ecosystems in one pass), checks every declared
 dependency against the live npm/PyPI registries, and flags exported
 symbols with zero call-sites as dead-code candidates.
 
-Prefer a permanent install? `npm install -g codeaudit-scan` then run
-`codeaudit-scan scan .` directly — same behavior, just skips npx's
+Prefer a permanent install? `npm install -g codematrix` then run
+`codematrix scan .` directly — same behavior, just skips npx's
 resolve-on-every-run step.
 
 ## Usage
 
 ```
-codeaudit-scan scan [dir] [options]
+codematrix scan [dir] [options]
 ```
 
 `dir` defaults to `.` (the current directory).
@@ -56,7 +56,7 @@ codeaudit-scan scan [dir] [options]
 Use the exit code directly as a CI gate:
 
 ```bash
-npx codeaudit-scan scan . --min-score 80
+npx codematrix scan . --min-score 80
 ```
 
 ## What it checks
@@ -93,7 +93,7 @@ npx codeaudit-scan scan . --min-score 80
 ## Example output
 
 ```
-$ npx codeaudit-scan scan .
+$ npx codematrix scan .
 
 CodeAudit · static scan of ~/projects/checkout-service
 
@@ -135,7 +135,7 @@ thing you can act on, and ties break toward the cheapest fix. `[S]`, `[M]` and
 ### JSON output (for CI)
 
 ```bash
-npx codeaudit-scan scan . --json
+npx codematrix scan . --json
 ```
 
 Returns a single JSON object with `score`, `grade`, `counts` (per-status
@@ -153,7 +153,7 @@ token from the dashboard (**Settings → CLI / CI uploads → Get token**),
 then:
 
 ```bash
-CODEAUDIT_TOKEN=ca_xxxxx npx codeaudit-scan scan . --upload
+CODEAUDIT_TOKEN=ca_xxxxx npx codematrix scan . --upload
 ```
 
 Treat the token like a password (CI secret store, not source control). On
@@ -164,7 +164,7 @@ success the CLI prints the resulting dashboard URL; the run is tagged
 
 Running the scanner after the fact catches phantoms already committed.
 To stop an AI coding agent from installing one in the first place, see
-[`codeaudit-mcp`](https://github.com/DelTa-0/codeaudit/blob/main/mcp/README.md)
+[`codematrix-mcp`](https://github.com/DelTa-0/codeaudit/blob/main/mcp/README.md)
 — an MCP server that checks a package name the moment an agent is about
 to install it.
 

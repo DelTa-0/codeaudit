@@ -1,4 +1,4 @@
-// Ground-truth validation for codeaudit-mcp, mirroring server/test/ground-
+// Ground-truth validation for codematrix-mcp, mirroring server/test/ground-
 // truth.ts's style: spawns the built server as a real child process and
 // speaks JSON-RPC 2.0 over its stdio, exactly as an MCP client would. Runs
 // with CODEAUDIT_TOKEN unset — only exercises the offline (fuzzy-match)
