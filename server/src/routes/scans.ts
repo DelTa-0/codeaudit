@@ -109,7 +109,7 @@ scansRouter.get("/scans/:scanId/code-findings", async (req, res, next) => {
     if (!scan) throw notFound("Scan not found");
     const page = Math.max(1, Number(req.query.page) || 1);
     const perPage = Math.min(100, Number(req.query.per_page) || 50);
-    const rows = await query(
+    const rows = await query<{ detail: Record<string, unknown> | null }>(
       `SELECT id, file_path, line_start, line_end, symbol_name, finding_type,
               confidence_score, llm_reasoning, detail
        FROM code_findings WHERE scan_job_id = $1
@@ -117,7 +117,17 @@ scansRouter.get("/scans/:scanId/code-findings", async (req, res, next) => {
        LIMIT $2 OFFSET $3`,
       [scan.id, perPage, (page - 1) * perPage],
     );
-    res.json(rows);
+    // `detail.fingerprint` (secrets) is dedup-internal — a peppered hash that
+    // still targets a human-chosen password for tier-2 findings — and must
+    // never leave the server, not even inert-but-present in a browser
+    // network response. Strip it here rather than trusting every consumer
+    // to simply not render a field it was handed.
+    const sanitized = rows.map((row) => {
+      if (!row.detail || !("fingerprint" in row.detail)) return row;
+      const { fingerprint: _fingerprint, ...detail } = row.detail;
+      return { ...row, detail };
+    });
+    res.json(sanitized);
   } catch (err) {
     next(err);
   }
