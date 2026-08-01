@@ -13,6 +13,10 @@
     "./llm": {
       "types": "./dist/llm.d.ts",
       "default": "./dist/llm.js"
+    },
+    "./secrets": {
+      "types": "./dist/secrets.d.ts",
+      "default": "./dist/secrets.js"
     }
   },
   "scripts": {

@@ -29,8 +29,17 @@ await build({
   // in breaks at runtime ("Dynamic require of \"tty\" is not supported",
   // from @babel/traverse's "debug" dependency). The MCP server never does
   // import-graph analysis, so it never needs that code path.
+  //
+  // esbuild treats an aliased bare specifier as a root replacement, not a
+  // prefix redirect: "@codeaudit/engine" -> ".../verify.js" does NOT also
+  // redirect "@codeaudit/engine/secrets" to ".../secrets.js" — it instead
+  // appends "/secrets" onto the verify.js file path and fails to resolve.
+  // Each subpath actually imported needs its own explicit alias entry.
+  // secrets.js is safe to alias the same way (it imports only node:fs,
+  // node:path, node:crypto — no babel, so none of the risk above applies).
   alias: {
     "@codeaudit/engine": path.resolve(here, "../packages/engine/dist/verify.js"),
+    "@codeaudit/engine/secrets": path.resolve(here, "../packages/engine/dist/secrets.js"),
   },
 });
 

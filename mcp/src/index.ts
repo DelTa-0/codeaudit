@@ -3,7 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { verifyPackage, type PackageVerifyResult } from "@codeaudit/engine";
-import { scanTextForSecrets, isSecretScannablePath } from "../../packages/engine/dist/secrets.js";
+import { scanTextForSecrets, isSecretScannablePath } from "@codeaudit/engine/secrets";
 import { fetchHostedAlternatives } from "./hosted.js";
 
 const token = process.env.CODEAUDIT_TOKEN || null;
