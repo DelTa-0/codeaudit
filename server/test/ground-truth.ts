@@ -29,6 +29,10 @@ import {
   readProjectLicense,
   rankFindings,
   classifyLicenseTerm,
+  scanTextForSecrets,
+  isSecretScannablePath,
+  redact,
+  fingerprintSecret,
 } from "@codeaudit/engine";
 
 const fixtureDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixture");
@@ -414,6 +418,57 @@ checks.push(
   [
     "a transitive CVE's why does not claim a direct version bump",
     !/usually a version bump/i.test(transitiveItem?.why ?? ""),
+  ],
+);
+
+// --- Secret detection: tiers, exclusions, redaction ---
+const AWS = "AKIA" + "IOSFODNN7EXAMPLE";
+const GROQ = "gsk_" + "a".repeat(52);
+const fire = (text: string, file = "src/config.ts") => scanTextForSecrets(text, file);
+checks.push(
+  ["tier 1: an AWS access key is detected", fire(`const k = "${AWS}";`).length === 1],
+  ["tier 1: a Groq key is detected", fire(`const k = "${GROQ}";`).length === 1],
+  [
+    "tier 1: a PEM private key header is detected",
+    fire("-----BEGIN RSA PRIVATE KEY-----").length === 1,
+  ],
+  [
+    "tier 2: a high-entropy value on a secret-named key is detected",
+    fire(`const apiKey = "9f2Kq7ZxVb3LmNp8RtYw1CsE4DhGj6Uk";`).length === 1,
+  ],
+  // --- must NOT fire: these matter more than the ones above ---
+  [
+    "does NOT fire on a process.env reference",
+    fire(`const apiKey = process.env.API_KEY;`).length === 0,
+  ],
+  [
+    "does NOT fire on an obvious placeholder",
+    fire(`const apiKey = "your-api-key-here-placeholder";`).length === 0,
+  ],
+  [
+    "does NOT fire on a low-entropy repeated string",
+    fire(`const apiKey = "aaaaaaaaaaaaaaaaaaaaaaaa";`).length === 0,
+  ],
+  [
+    "does NOT fire on a short value",
+    fire(`const apiKey = "abc123";`).length === 0,
+  ],
+  ["does NOT scan a .env.example file", !isSecretScannablePath(".env.example")],
+  ["does NOT scan a lockfile", !isSecretScannablePath("package-lock.json")],
+  ["does NOT scan a fixture directory", !isSecretScannablePath("server/test/fixture/x.ts")],
+  ["DOES scan a real .env file", isSecretScannablePath(".env")],
+  ["DOES scan a docker-compose file", isSecretScannablePath("docker-compose.yml")],
+  ["DOES scan a terraform file", isSecretScannablePath("infra/main.tf")],
+  // --- redaction: the highest-severity guarantee in this feature ---
+  ["redact never returns the raw value", redact(AWS) !== AWS],
+  ["redact reveals at most 4 leading characters", redact(AWS).startsWith("AKIA") && !redact(AWS).includes("IOSFODNN7EXAMPLE")],
+  ["redact reports the length", /\(\d+ chars\)/.test(redact(AWS))],
+  ["fingerprint is not the raw value", fingerprintSecret(AWS) !== AWS],
+  ["fingerprint is stable", fingerprintSecret(AWS) === fingerprintSecret(AWS)],
+  ["fingerprint differs for different values", fingerprintSecret(AWS) !== fingerprintSecret(GROQ)],
+  [
+    "no finding object contains the raw secret anywhere in its serialization",
+    !JSON.stringify(fire(`const k = "${AWS}";`)).includes(AWS),
   ],
 );
 

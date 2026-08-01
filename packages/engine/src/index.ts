@@ -51,3 +51,11 @@ export {
   type Effort,
   type PriorityBand,
 } from "./priority.js";
+export {
+  findSecrets,
+  scanTextForSecrets,
+  isSecretScannablePath,
+  redact,
+  fingerprintSecret,
+  type SecretFinding,
+} from "./secrets.js";
