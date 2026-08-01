@@ -313,6 +313,39 @@ checks.push(
   ["ranking respects the limit option", rankFindings({ deps: rankDeps, codeFindings: [], limit: 2 }).length === 2],
 );
 
+// --- Kind ordering: typosquat-suspicious outranks a licence conflict (offline, pure) ---
+// Spec order: phantom -> vulnerable -> suspicious(typosquat) -> licence
+// conflict -> deprecated -> duplicate library -> unused -> dead code.
+const squatDeps = [
+  {
+    packageName: "reqeusts",
+    declaredVersion: "^1.0.0",
+    status: "suspicious",
+    ecosystem: "npm",
+    registryMetadata: { typosquatOf: "requests" },
+  },
+] as unknown as Parameters<typeof rankFindings>[0]["deps"];
+const squatVsLicense = rankFindings({
+  deps: squatDeps,
+  codeFindings: [],
+  duplicates: [],
+  licenseConflicts: [
+    {
+      packageName: "some-lib",
+      ecosystem: "npm",
+      packageLicense: "GPL-3.0",
+      projectLicense: "MIT",
+      severity: "high",
+      reason: "test",
+    },
+  ],
+});
+const squatVsLicenseKinds = squatVsLicense.map((r) => r.kind);
+checks.push([
+  "a typosquat-suspicious finding outranks a licence conflict",
+  squatVsLicenseKinds.indexOf("suspicious_dependency") < squatVsLicenseKinds.indexOf("license_conflict"),
+]);
+
 console.log("--- checks ---");
 let failed = 0;
 for (const [label, ok] of checks) {

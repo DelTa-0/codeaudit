@@ -215,15 +215,29 @@ async function main() {
   }));
 
   const summary = computeSummary(deps, staticFindings, fileCount);
-  const duplicates = findDuplicateLibraries(deps);
-  const licenseConflicts = checkLicenseConflicts(deps, readProjectLicense(dir));
-  const priorities = rankFindings({
-    deps,
-    codeFindings: staticFindings,
-    duplicates,
-    licenseConflicts,
-    limit: 5,
-  });
+  // Advisory-only, matching the worker's guarding (server/src/worker.ts): an
+  // unexpected throw here must not change the CLI's documented exit-code
+  // contract (0/1/2). A failure means the advisory data is absent, not that
+  // the scan broke.
+  let duplicates: ReturnType<typeof findDuplicateLibraries> = [];
+  let licenseConflicts: ReturnType<typeof checkLicenseConflicts> = [];
+  let priorities: ReturnType<typeof rankFindings> = [];
+  try {
+    duplicates = findDuplicateLibraries(deps);
+    licenseConflicts = checkLicenseConflicts(deps, readProjectLicense(dir));
+    priorities = rankFindings({
+      deps,
+      codeFindings: staticFindings,
+      duplicates,
+      licenseConflicts,
+      limit: 5,
+    });
+  } catch (err) {
+    console.error(
+      "codeaudit: advisory analysis failed (continuing without it):",
+      err instanceof Error ? err.message : err,
+    );
+  }
   const phantomCount = summary.counts.phantom;
   const belowMin = minScore !== null && summary.score < minScore;
   const exitCode = phantomCount > 0 || belowMin ? 1 : 0;

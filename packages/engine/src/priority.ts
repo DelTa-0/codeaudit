@@ -33,11 +33,11 @@ const EFFORT_ORDER: Record<Effort, number> = { S: 0, M: 1, L: 2 };
 const KIND_ORDER: Record<string, number> = {
   phantom_dependency: 0,
   vulnerable_dependency: 1,
-  license_conflict: 2,
-  suspicious_dependency: 3,
+  suspicious_dependency: 2,
+  license_conflict: 3,
   deprecated_dependency: 4,
-  unused_dependency: 5,
-  duplicate_library: 6,
+  duplicate_library: 5,
+  unused_dependency: 6,
   dead_code: 7,
 };
 const DEFAULT_LIMIT = 20;
@@ -114,7 +114,7 @@ export function rankFindings(input: RankInput): RankedFinding[] {
         kind: "deprecated_dependency",
         title: `${dep.packageName} is deprecated`,
         location: dep.ecosystem === "npm" ? "package.json" : "requirements",
-        why: `The maintainer has marked this package deprecated: "${meta.deprecated.slice(0, 160)}" It will not receive security fixes.`,
+        why: `The maintainer has marked this package deprecated: "${meta.deprecated.slice(0, 160)}" — it will not receive security fixes.`,
         effort: "M",
         confidence: 1,
       });

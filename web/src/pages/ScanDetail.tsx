@@ -531,7 +531,7 @@ export function ScanDetail() {
           </p>
           <ul className="space-y-2">
             {scan.summary.advisories.duplicates.map((d) => (
-              <li key={d.category}>
+              <li key={`${d.ecosystem}:${d.category}`}>
                 <div className="text-sm font-medium">{d.packages.join(" + ")}</div>
                 <div className="text-sm text-muted">{d.recommendation}</div>
               </li>
@@ -546,7 +546,7 @@ export function ScanDetail() {
             <p className="mb-3 text-sm font-medium text-muted">Licence review</p>
             <ul className="space-y-2">
               {scan.summary.advisories.licenseConflicts.map((c) => (
-                <li key={c.packageName}>
+                <li key={`${c.ecosystem}:${c.packageName}`}>
                   <div className="text-sm font-medium">
                     {c.packageName}{" "}
                     <span className="text-muted">({c.packageLicense ?? "none declared"})</span>
