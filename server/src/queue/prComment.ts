@@ -13,7 +13,13 @@ import type { ScanSummary, RankedFinding } from "@codeaudit/engine";
  */
 function mdSafe(value: string, max = 200): string {
   const collapsed = String(value).replace(/\s+/g, " ").trim();
-  const escaped = collapsed.replace(/[\\`*[\]|<>]/g, "\\$&");
+  const escaped = collapsed
+    .replace(/[\\`*[\]|<>~]/g, "\\$&")
+    // Only the FIRST character can open a block construct once whitespace is
+    // collapsed to a single line, so escaping it there closes heading,
+    // blockquote, thematic-break and Setext-underline forgery while leaving
+    // ordinary names like "date-fns" readable.
+    .replace(/^([#>\-=+])/, "\\$1");
   return escaped.length > max ? `${escaped.slice(0, max - 1)}…` : escaped;
 }
 
