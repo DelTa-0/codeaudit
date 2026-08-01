@@ -108,6 +108,14 @@ const LOCKFILE =
 const TEMPLATE_FILE = /(\.example|\.sample|\.template|\.dist)$|(^|\/)\.env\.(example|sample|template)$/i;
 const MINIFIED = /\.min\.(js|css)$|\.map$/;
 
+/**
+ * Files that exist to hold local credentials and are gitignored by convention.
+ * Only skipped when the caller could not tell us what git actually tracks —
+ * with a real `isTracked` predicate these ARE scanned, because a committed
+ * `.env` is a genuine leak.
+ */
+const LOCAL_SECRET_FILE = /(^|\/)\.env(\.[A-Za-z0-9_-]+)?$/;
+
 export function isSecretScannablePath(relPath: string): boolean {
   const normalized = relPath.split(path.sep).join("/");
   if (EXCLUDED_PATH.test(normalized)) return false;
@@ -167,8 +175,23 @@ export function scanTextForSecrets(text: string, filePath: string): SecretFindin
 const MAX_FILE_BYTES = 512 * 1024;
 const MAX_FINDINGS = 100;
 
+export interface FindSecretsOptions {
+  /**
+   * Whether a repo-relative path is tracked by git. A credential in a tracked
+   * file is a leak; one in a gitignored file like `.env` is correct practice,
+   * and flagging it would fire on nearly every well-configured project.
+   *
+   * The engine cannot answer this itself — it is deliberately subprocess-free —
+   * so callers that have git available supply it. When omitted, conventional
+   * local-secret files are skipped instead, which is the safe default: better
+   * to miss a secret in a file that is almost certainly gitignored than to
+   * report every project's .env as a critical leak.
+   */
+  isTracked?: (relPath: string) => boolean;
+}
+
 /** Walks the repository. Its own walk: credentials live in .env and .tf, not just source. */
-export function findSecrets(repoDir: string): SecretFinding[] {
+export function findSecrets(repoDir: string, options: FindSecretsOptions = {}): SecretFinding[] {
   const findings: SecretFinding[] = [];
   const stack = [repoDir];
 
@@ -188,6 +211,11 @@ export function findSecrets(repoDir: string): SecretFinding[] {
         continue;
       }
       if (!entry.isFile() || !isSecretScannablePath(rel)) continue;
+      if (options.isTracked) {
+        if (!options.isTracked(rel)) continue;
+      } else if (LOCAL_SECRET_FILE.test(rel)) {
+        continue;
+      }
       try {
         if (fs.statSync(full).size > MAX_FILE_BYTES) continue;
         findings.push(...scanTextForSecrets(fs.readFileSync(full, "utf8"), rel));

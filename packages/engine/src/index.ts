@@ -58,4 +58,5 @@ export {
   redact,
   fingerprintSecret,
   type SecretFinding,
+  type FindSecretsOptions,
 } from "./secrets.js";

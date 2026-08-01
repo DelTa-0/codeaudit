@@ -33,6 +33,7 @@ import {
   isSecretScannablePath,
   redact,
   fingerprintSecret,
+  findSecrets,
 } from "@codeaudit/engine";
 
 const fixtureDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixture");
@@ -477,6 +478,45 @@ checks.push(
   [
     "DOES scan a markdown file (docs are a real leak vector)",
     isSecretScannablePath("README.md"),
+  ],
+);
+
+// --- findSecrets: tracked-file gating (isTracked predicate) ---
+// A gitignored .env full of real credentials is correct practice, not a leak.
+// Nearly every well-configured Node project has one, so without this gate
+// findSecrets would flag essentially every repo as CRITICAL.
+const trackedDir = fs.mkdtempSync(path.join(os.tmpdir(), "codeaudit-secrets-tracked-"));
+fs.mkdirSync(path.join(trackedDir, "src"));
+fs.writeFileSync(path.join(trackedDir, ".env"), `AWS_KEY=${AWS}\n`);
+fs.writeFileSync(path.join(trackedDir, "src", "config.ts"), `const k = "${AWS}";\n`);
+
+const noPredicateFindings = findSecrets(trackedDir);
+const trackedAllFindings = findSecrets(trackedDir, { isTracked: () => true });
+const trackedExceptConfigFindings = findSecrets(trackedDir, {
+  isTracked: (p) => p !== "src/config.ts",
+});
+fs.rmSync(trackedDir, { recursive: true, force: true });
+
+checks.push(
+  [
+    "no isTracked: finds the secret in src/config.ts",
+    noPredicateFindings.some((f) => f.filePath === "src/config.ts"),
+  ],
+  [
+    "no isTracked: does NOT find the secret in .env",
+    !noPredicateFindings.some((f) => f.filePath === ".env"),
+  ],
+  [
+    "isTracked always true: finds the secret in src/config.ts",
+    trackedAllFindings.some((f) => f.filePath === "src/config.ts"),
+  ],
+  [
+    "isTracked always true: a committed .env IS still caught",
+    trackedAllFindings.some((f) => f.filePath === ".env"),
+  ],
+  [
+    "isTracked excludes src/config.ts: does NOT report it",
+    !trackedExceptConfigFindings.some((f) => f.filePath === "src/config.ts"),
   ],
 );
 
