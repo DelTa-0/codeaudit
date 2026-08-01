@@ -17,7 +17,13 @@ export interface DuplicateGroup {
  */
 export function findDuplicateLibraries(deps: DependencyVerdict[]): DuplicateGroup[] {
   const inUse = new Set(
-    deps.filter((d) => d.status !== "unused" && d.status !== "phantom").map((d) => `${d.ecosystem}:${d.packageName}`),
+    deps
+      // An unreachable registry means "in use" is unknown, not true — the
+      // verdict only carries `error: registry_unreachable` because the
+      // status check itself never ran. Treating that as "in use" turns a
+      // genuinely unused library into fabricated consolidation advice.
+      .filter((d) => d.status !== "unused" && d.status !== "phantom" && !d.registryMetadata?.error)
+      .map((d) => `${d.ecosystem}:${d.packageName}`),
   );
 
   const groups: DuplicateGroup[] = [];

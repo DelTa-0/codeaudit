@@ -74,6 +74,11 @@ export function checkLicenseConflicts(
     // there is no external licence obligation to conflict with. It carries
     // the project's own licence.
     if (dep.registryMetadata?.workspaceMember === true) continue;
+    // An unreachable registry means the licence is unknown, not absent — the
+    // metadata we'd read it from was never fetched. Asserting "no licence"
+    // (and worse, "all rights reserved") from missing data is a false legal
+    // claim; saying nothing is strictly safer than saying something wrong.
+    if (dep.registryMetadata?.error) continue;
     const license = (dep.registryMetadata?.license as string | null | undefined) ?? null;
 
     if (license === null) {

@@ -250,6 +250,41 @@ checks.push(
   ["readProjectLicense returns null when package.json declares no license", readProjectLicense(fixtureDir) === null],
 );
 
+// --- Unreachable registry is "unknown", not "unlicensed"/"in use" (offline, pure) ---
+// A registry_unreachable verdict has no license key at all (it was never
+// fetched), which used to read identically to "declares no licence" and fire
+// a conflict for every dependency in the repo when a scan runs behind a
+// corporate proxy.
+const unreachableDeps = [
+  {
+    packageName: "unreachable-lib",
+    declaredVersion: "^1.0.0",
+    status: "healthy",
+    ecosystem: "npm",
+    registryMetadata: { error: "registry_unreachable" },
+  },
+] as unknown as Parameters<typeof checkLicenseConflicts>[0];
+const unreachableConflicts = checkLicenseConflicts(unreachableDeps, "MIT");
+checks.push([
+  "a registry_unreachable dep produces NO licence conflict",
+  !unreachableConflicts.some((c) => c.packageName === "unreachable-lib"),
+]);
+
+// A duplicate-group pair that both carry registry_unreachable must not be
+// reported as "in use" duplicates — an unreachable registry never confirmed
+// they're genuinely used at all.
+const unreachableDupDeps = [
+  { packageName: "moment", declaredVersion: "^2.30.0", status: "healthy", ecosystem: "npm", registryMetadata: { error: "registry_unreachable" } },
+  { packageName: "dayjs", declaredVersion: "^1.11.0", status: "healthy", ecosystem: "npm", registryMetadata: { error: "registry_unreachable" } },
+] as const;
+const unreachableDupGroups = findDuplicateLibraries(
+  unreachableDupDeps as unknown as Parameters<typeof findDuplicateLibraries>[0],
+);
+checks.push([
+  "two registry_unreachable equivalent-group members produce NO duplicate group",
+  !unreachableDupGroups.some((g) => g.category === "date"),
+]);
+
 // --- Prioritization (offline, pure) ---
 const rankDeps = [
   { packageName: "date-fns", declaredVersion: "^4.1.0", status: "unused", ecosystem: "npm", registryMetadata: null },
