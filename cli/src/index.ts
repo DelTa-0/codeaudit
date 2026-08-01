@@ -299,7 +299,11 @@ async function main() {
     for (const d of interesting) {
       const deprecated = isDeprecated(d);
       const label = deprecated && d.status === "healthy" ? "deprecated" : d.status;
-      const color = deprecated ? YELLOW : (statusColor[d.status] ?? "");
+      // The status colour wins whenever the status is not "healthy" — a
+      // package that is BOTH deprecated and vulnerable must render red, not
+      // yellow, or it loses its severity cue. Yellow-for-deprecated only
+      // applies when there is no other status colour to preserve.
+      const color = deprecated && d.status === "healthy" ? YELLOW : (statusColor[d.status] ?? "");
       const eco = polyglot ? `${DIM}${d.ecosystem.padEnd(5)}${RESET} ` : "";
       const alternatives = (d.registryMetadata as { alternatives?: { name: string }[] } | null)?.alternatives;
       const suggestion = alternatives?.length
