@@ -68,6 +68,8 @@ const uploadSchema = z.object({
     // still listed them — a real gap found in the pre-1.0.0 release review.
     secrets: z.number().int().min(0).default(0),
   }),
+  reviewStatus: z.enum(["full", "partial", "skipped"]).optional(),
+  llmReviewSource: z.literal("cli-byok").optional(),
   branch: z.string().max(200).optional(),
   commitSha: z.string().max(64).optional(),
   dependencies: z
@@ -154,7 +156,14 @@ cliUploadRouter.post("/cli-scans", uploadLimiter, validateBody(uploadSchema), as
       grade: body.grade,
       counts: body.counts,
       source: "cli",
-      reviewStatus: "skipped",
+      // Older published CLIs (pre-BYOK) don't send reviewStatus at all —
+      // default to "skipped", which was always true for them.
+      reviewStatus: body.reviewStatus ?? "skipped",
+      // Present only when the CLI's own reviewStatus said review happened.
+      // This is the CLI's self-report, not a platform-verified fact — the
+      // dashboard cannot confirm an arbitrary CLI run's claim is honest (see
+      // web/src/pages/ScanDetail.tsx's banner copy, Task 7).
+      ...(body.llmReviewSource ? { llmReviewSource: body.llmReviewSource } : {}),
       // Optional — older published CLIs don't send these, and the schema
       // caps each array independently of whatever the CLI itself sliced to.
       ...(body.priorities ? { priorities: body.priorities.slice(0, 20) } : {}),

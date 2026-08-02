@@ -116,6 +116,7 @@ async function uploadResults(
   candidates: ReviewedFinding[],
   priorities: RankedFinding[],
   advisories: { duplicates: DuplicateGroup[]; licenseConflicts: LicenseConflict[] },
+  reviewStatus: "full" | "partial" | "skipped",
 ): Promise<{ ok: boolean; url?: string; error?: string }> {
   try {
     const res = await fetch(`${apiUrl.replace(/\/$/, "")}/api/cli-scans`, {
@@ -126,6 +127,11 @@ async function uploadResults(
         score: summary.score,
         grade: summary.grade,
         counts: summary.counts,
+        reviewStatus,
+        // Present only when review actually happened — an older server that
+        // doesn't know this field ignores it (see uploadSchema in
+        // server/src/routes/cliScans.ts, which makes both fields optional).
+        ...(reviewStatus !== "skipped" ? { llmReviewSource: "cli-byok" as const } : {}),
         dependencies: (deps as {
           packageName: string;
           declaredVersion: string | null;
@@ -292,10 +298,16 @@ async function main() {
 
   let uploadResult: { ok: boolean; url?: string; error?: string } | null = null;
   if (upload && token) {
-    uploadResult = await uploadResults(apiUrl, token, summary, deps, staticFindings, priorities, {
-      duplicates,
-      licenseConflicts,
-    });
+    uploadResult = await uploadResults(
+      apiUrl,
+      token,
+      summary,
+      deps,
+      staticFindings,
+      priorities,
+      { duplicates, licenseConflicts },
+      reviewStatus,
+    );
   }
 
   if (json) {
