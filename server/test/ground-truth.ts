@@ -436,7 +436,11 @@ checks.push(
   ],
   [
     "tier 2: a high-entropy value on a secret-named key is detected",
-    fire(`const apiKey = "9f2Kq7ZxVb3LmNp8RtYw1CsE4DhGj6Uk";`).length === 1,
+    // Split like AWS/GROQ above — an unbroken 32-char literal here reads as
+    // a live credential to external secret scanners (GitGuardian flagged
+    // this exact line before the split), even though it's synthetic test
+    // data for the entropy detector itself.
+    fire(`const apiKey = "${"9f2Kq7ZxVb3LmNp8" + "RtYw1CsE4DhGj6Uk"}";`).length === 1,
   ],
   [
     "tier 2: a 32-character hex secret is detected (total-entropy floor admits low-alphabet, long secrets)",
