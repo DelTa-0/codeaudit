@@ -2,8 +2,9 @@
 // node_modules dependency at install time, so `npm publish` ships a package
 // that works standalone via `npx codematrix`, without needing the monorepo's
 // workspace linking or any of its own dependencies resolved on the consumer's
-// machine. @codeaudit/engine's "./llm" subpath (which pulls in the "openai"
-// SDK) is never imported by the CLI, so it never enters this bundle either.
+// machine. @codeaudit/engine's LLM review functions are plain fetch() calls
+// (no SDK), so BYOK review (see docs/superpowers/specs/2026-08-02-cli-byok-design.md)
+// can reach them from this bundle without adding heavy dependencies.
 import { build } from "esbuild";
 import { chmod } from "node:fs/promises";
 import { fileURLToPath } from "node:url";

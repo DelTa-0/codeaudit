@@ -5,7 +5,7 @@ import { queryOne } from "../db/pool.js";
 import { validateBody } from "../middleware/validate.js";
 import { unauthorized } from "../lib/errors.js";
 import { config } from "../lib/config.js";
-import { suggestAlternatives } from "@codeaudit/engine/llm";
+import { suggestAlternatives } from "@codeaudit/engine";
 
 /**
  * Public route for codematrix-mcp — authed by the same per-repo CLI token as

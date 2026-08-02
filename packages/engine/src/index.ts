@@ -1,7 +1,6 @@
-// Core, no-heavy-dependency surface — safe to bundle into the CLI without
-// pulling in the "openai" SDK. LLM review lives at the separate "./llm"
-// subpath (see package.json "exports") specifically so consumers that don't
-// need it (the CLI) never touch that import graph.
+// Core, no-heavy-dependency surface. LLM review functions are plain fetch()
+// calls (no SDK), so they live in this same main export alongside everything
+// else — no separate subpath needed to keep the CLI bundle light.
 export { parseManifest, type Manifest } from "./manifest.js";
 export { analyzeRepo, listSourceFiles, type RepoAnalysis, type SymbolInfo } from "./imports.js";
 export {
@@ -32,7 +31,15 @@ export { findDuplicateLibraries, type DuplicateGroup } from "./duplicates.js";
 export { EQUIVALENT_GROUPS, type EquivalentGroup } from "./data/equivalents.js";
 export { verifyPackage, type PackageVerifyResult } from "./verify.js";
 export { findDeadCodeCandidates, type DeadCodeCandidate } from "./deadcode.js";
-export { callChatCompletion, type LlmConfig, type ReviewedFinding } from "./llm.js";
+export {
+  callChatCompletion,
+  reviewCandidatesWithLlm,
+  suggestAlternatives,
+  type LlmConfig,
+  type ReviewedFinding,
+  type ReviewStatus,
+  type LlmReviewResult,
+} from "./llm.js";
 export { computeSummary, type ScanSummary } from "./score.js";
 export { detectEcosystems } from "./detect.js";
 export { parsePythonManifest, type PythonManifest } from "./python/manifest.js";

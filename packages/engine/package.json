@@ -10,10 +10,6 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./llm": {
-      "types": "./dist/llm.d.ts",
-      "default": "./dist/llm.js"
-    },
     "./secrets": {
       "types": "./dist/secrets.d.ts",
       "default": "./dist/secrets.js"
@@ -25,7 +21,6 @@
   "dependencies": {
     "@babel/parser": "^7.26.0",
     "@babel/traverse": "^7.26.0",
-    "openai": "^4.77.0",
     "smol-toml": "^1.7.0"
   },
   "devDependencies": {

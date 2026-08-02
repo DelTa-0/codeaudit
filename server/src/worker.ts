@@ -44,7 +44,7 @@ import {
   type ResolvedTree,
   type SecretFinding,
 } from "@codeaudit/engine";
-import { reviewCandidatesWithLlm, suggestAlternatives } from "@codeaudit/engine/llm";
+import { reviewCandidatesWithLlm, suggestAlternatives } from "@codeaudit/engine";
 import { config } from "./lib/config.js";
 
 async function setStatus(scanJobId: string, status: string, progress: string) {

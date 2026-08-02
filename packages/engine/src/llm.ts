@@ -1,4 +1,3 @@
-import OpenAI from "openai";
 import type { DeadCodeCandidate } from "./deadcode.js";
 import type { RepoAnalysis } from "./imports.js";
 import type { AlternativeSuggestion, Ecosystem } from "./registry.js";
@@ -75,9 +74,9 @@ For each candidate symbol, judge whether it is truly dead code (unreachable / ne
 Response schema:
 {"findings":[{"symbol_name":"string","verdict":"dead_code"|"alive"|"uncertain","confidence":0.0-1.0,"reasoning":"one or two sentences"}]}`;
 
-function getClient(llm: LlmConfig | undefined): OpenAI | null {
+function getClient(llm: LlmConfig | undefined): LlmConfig | null {
   if (!llm?.apiKey) return null;
-  return new OpenAI({ apiKey: llm.apiKey, baseURL: llm.baseUrl });
+  return llm;
 }
 
 function truncateBody(body: string): string {
@@ -131,7 +130,7 @@ function unreviewedFallback(candidates: DeadCodeCandidate[], reasoning: string):
 }
 
 async function reviewFileBatch(
-  client: OpenAI,
+  client: LlmConfig,
   model: string,
   filePath: string,
   candidates: DeadCodeCandidate[],
@@ -158,16 +157,10 @@ ${candidateBlocks}`;
   let rateLimited = false;
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      const completion = await client.chat.completions.create({
-        model,
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: userPrompt },
-        ],
-        temperature: 0,
-        max_tokens: 2000,
-      });
-      const raw = completion.choices[0]?.message?.content ?? "";
+      const raw = await callChatCompletion(client, [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: userPrompt },
+      ]);
       const verdicts = parseVerdicts(raw);
       const byName = new Map(candidates.map((c) => [c.name, c]));
       const findings = verdicts
@@ -319,7 +312,7 @@ function parseAlternatives(raw: string): AlternativesResponseItem[] {
 }
 
 async function suggestAlternativesBatch(
-  client: OpenAI,
+  client: LlmConfig,
   model: string,
   targets: { packageName: string; ecosystem: Ecosystem }[],
 ): Promise<Map<string, AlternativeSuggestion[]>> {
@@ -330,16 +323,10 @@ async function suggestAlternativesBatch(
 
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const completion = await client.chat.completions.create({
-        model,
-        messages: [
-          { role: "system", content: ALTERNATIVES_SYSTEM_PROMPT },
-          { role: "user", content: userPrompt },
-        ],
-        temperature: 0,
-        max_tokens: 1500,
-      });
-      const raw = completion.choices[0]?.message?.content ?? "";
+      const raw = await callChatCompletion(client, [
+        { role: "system", content: ALTERNATIVES_SYSTEM_PROMPT },
+        { role: "user", content: userPrompt },
+      ]);
       const byName = new Set(targets.map((t) => t.packageName));
       for (const item of parseAlternatives(raw)) {
         if (!byName.has(item.package_name)) continue;
