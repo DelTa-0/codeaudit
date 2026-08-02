@@ -82,6 +82,7 @@ const uploadMock = await startMockServer((_req, _body, res) => {
   ]);
   const parsed = JSON.parse(result.stdout) as { reviewStatus: string };
   checks.push(["reviewStatus is full (mock LLM responded successfully)", parsed.reviewStatus === "full"]);
+  checks.push(["--json stderr never contains the raw key", !result.stderr.includes(FAKE_KEY)]);
 }
 
 // --- run 2: --upload with the same key, separately verify the upload body ---
