@@ -32,12 +32,14 @@
   ],
   "scripts": {
     "build": "tsc --noEmit -p tsconfig.json && node build.mjs",
+    "test:llm-config": "tsx test/llm-config.ts",
     "prepublishOnly": "npm run build && npm run test:ground-truth --prefix ../server && npm run test:ground-truth-python --prefix ../server"
   },
   "devDependencies": {
     "@codeaudit/engine": "*",
     "@types/node": "^22.10.0",
     "esbuild": "^0.28.1",
+    "tsx": "^4.19.0",
     "typescript": "^5.7.0"
   }
 }
