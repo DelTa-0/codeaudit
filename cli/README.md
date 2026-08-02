@@ -6,10 +6,11 @@ unused dependencies, and dead-code _candidates_. No account, no signup,
 nothing leaves your machine unless you opt in with `--upload`.
 
 This is the CLI half of [CodeAudit](https://github.com/DelTa-0/codeaudit).
-It's deliberately limited to static analysis — no LLM review, no scan
-history, no PR integration. Those live in the full platform at
-[codeaudit.dev](https://codeaudit.dev); the CLI is the free, offline way to
-try the core checks first.
+It does static analysis by default — no scan history, no PR integration.
+Those stay platform-only at [codeaudit.dev](https://codeaudit.dev); the CLI
+is the free, offline way to try the core checks first. LLM-backed dead-code
+review is also available, bring-your-own-key — see
+[LLM review](#llm-review-optional-bring-your-own-key) below.
 
 ## Quick start
 
@@ -43,7 +44,7 @@ codematrix scan [dir] [options]
 | `--upload`      | Send results to your CodeAudit dashboard (requires a token; see [Uploading results](#uploading-results))                      |
 | `--token T`     | Per-repo CLI token for `--upload` (or set `CODEAUDIT_TOKEN`)                                                                  |
 | `--api URL`     | API base URL for `--upload` (or set `CODEAUDIT_API_URL`; defaults to `http://localhost:4000`, only relevant if you self-host) |
-| `--key T`       | Your own LLM API key for real dead-code review (or set `GROQ_API_KEY` / `OPENAI_API_KEY`; see [LLM review](#llm-review-optional-bring-your-own-key)) |
+| `--key T`       | Your own LLM API key for real dead-code review (or set `GROQ_API_KEY` / `OPENAI_API_KEY` / `CODEAUDIT_LLM_KEY`; see [LLM review](#llm-review-optional-bring-your-own-key)) |
 | `--url URL`     | OpenAI-compatible base URL for `--key` (or set `CODEAUDIT_LLM_URL`; required alongside a bare `--key`)                        |
 | `--model M`     | Model name for `--url` (or set `CODEAUDIT_LLM_MODEL`; required alongside a custom `--url`)                                   |
 | `-h`, `--help`  | Show usage                                                                                                                    |
@@ -88,10 +89,12 @@ npx codematrix scan . --min-score 80
   repo mid-migration legitimately has both — but a strong signal that
   something reached for a new library instead of reusing the one already there.
 - **Dead-code candidates** — exported functions/components with zero
-  call-sites in the repo. Flagged as _candidates_ at a fixed confidence:
-  the CLI does static analysis only, so treat these as leads to check by
-  hand, not verdicts. The platform's LLM review pass (codeaudit.dev)
-  confirms or dismisses each one with a confidence score.
+  call-sites in the repo. By default flagged as _candidates_ at a fixed
+  confidence — static analysis only, so treat these as leads to check by
+  hand, not verdicts. Supply your own LLM API key (see
+  [LLM review](#llm-review-optional-bring-your-own-key) below) and the CLI
+  confirms or dismisses each one with a real confidence score, the same
+  review pass the hosted platform (codeaudit.dev) runs.
 
 ## Example output
 

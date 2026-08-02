@@ -1,7 +1,9 @@
 #!/usr/bin/env node
-// CodeAudit CLI — static-only scan of a local directory.
-// Deliberately limited: no LLM verdicts, no history, no PR integration —
-// those live in the CodeAudit platform.
+// CodeAudit CLI — static scan of a local directory, with static analysis by
+// default and LLM-backed dead-code review available via BYOK (--key/--url/
+// --model or GROQ_API_KEY/OPENAI_API_KEY/CODEAUDIT_LLM_KEY).
+// Deliberately limited: no scan history, no PR integration — those live in
+// the CodeAudit platform.
 import path from "node:path";
 import fs from "node:fs";
 import {
@@ -53,7 +55,7 @@ Options:
   --upload        send results to your CodeAudit dashboard (requires a token)
   --token T       per-repo CLI token (or set CODEAUDIT_TOKEN)
   --api URL       API base URL (or set CODEAUDIT_API_URL, default http://localhost:4000)
-  --key T         your own LLM API key for real dead-code review (or set GROQ_API_KEY / OPENAI_API_KEY)
+  --key T         your own LLM API key for real dead-code review (or set GROQ_API_KEY / OPENAI_API_KEY / CODEAUDIT_LLM_KEY)
   --url URL       OpenAI-compatible base URL for --key (or set CODEAUDIT_LLM_URL; required with a bare --key)
   --model M       model name for --url (or set CODEAUDIT_LLM_MODEL; required alongside a custom --url)
   -h, --help      show this help

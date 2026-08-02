@@ -319,6 +319,10 @@ and verified.
   updated to import from `@codeaudit/engine/llm`. This means the CLI's
   import graph never reaches `openai`, keeping the bundle lean and correct
   regardless of tree-shaking behavior.
+  (Historical log, left as-is — the `"./llm"` subpath described here was
+  later removed once the `openai` SDK itself was replaced by a shared
+  `fetch()` wrapper; see [[docs/decisions.md]]'s "CLI BYOK: fetch() instead
+  of the openai SDK" entry.)
 - **Bundled the CLI with esbuild** (`cli/build.mjs`) into a single
   self-contained `dist/index.js` — no `node_modules` needed at install
   time. `cli/package.json`: `private: true` removed, real publish metadata
