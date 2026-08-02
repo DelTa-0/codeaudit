@@ -99,4 +99,8 @@ for (const [label, ok] of checks) {
   console.log(`${ok ? "PASS" : "FAIL"}: ${label}`);
   if (!ok) failed++;
 }
-process.exit(failed ? 1 : 0);
+// process.exit() here races libuv's handle cleanup against AbortSignal.timeout's
+// internal timer on Windows (`Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)`
+// in src/win/async.c) — setting exitCode and letting the event loop drain
+// naturally avoids the crash while still producing the right process exit code.
+process.exitCode = failed ? 1 : 0;
