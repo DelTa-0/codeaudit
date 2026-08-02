@@ -24,6 +24,8 @@ import {
   checkLicenseConflicts,
   rankFindings,
   findSecrets,
+  reviewCandidatesWithLlm,
+  suggestAlternatives,
   type DependencyVerdict,
   type DeadCodeCandidate,
   type ReviewedFinding,
@@ -33,6 +35,7 @@ import {
   type LicenseConflict,
   type SecretFinding,
 } from "@codeaudit/engine";
+import { resolveLlmConfig, type LlmFlags } from "./llmConfig.js";
 
 const RESET = "\x1b[0m";
 const BOLD = "\x1b[1m";
@@ -50,7 +53,13 @@ Options:
   --upload        send results to your CodeAudit dashboard (requires a token)
   --token T       per-repo CLI token (or set CODEAUDIT_TOKEN)
   --api URL       API base URL (or set CODEAUDIT_API_URL, default http://localhost:4000)
+  --key T         your own LLM API key for real dead-code review (or set GROQ_API_KEY / OPENAI_API_KEY)
+  --url URL       OpenAI-compatible base URL for --key (or set CODEAUDIT_LLM_URL; required with a bare --key)
+  --model M       model name for --url (or set CODEAUDIT_LLM_MODEL; required alongside a custom --url)
   -h, --help      show this help
+
+Without a key, dead-code candidates are static-only (fixed confidence, no LLM verdict).
+Set GROQ_API_KEY for free LLM-backed review with zero other flags.
 
 Exit codes: 0 ok · 1 phantom deps found or score below --min-score · 2 usage/error`);
   process.exit(2);
@@ -63,6 +72,7 @@ interface CliArgs {
   upload: boolean;
   token: string | null;
   apiUrl: string;
+  llmFlags: LlmFlags;
 }
 
 function parseArgs(argv: string[]): CliArgs {
@@ -76,12 +86,18 @@ function parseArgs(argv: string[]): CliArgs {
   let upload = false;
   let token: string | null = process.env.CODEAUDIT_TOKEN ?? null;
   let apiUrl = process.env.CODEAUDIT_API_URL ?? "http://localhost:4000";
+  let key: string | null = null;
+  let url: string | null = null;
+  let model: string | null = null;
   while (args.length) {
     const arg = args.shift()!;
     if (arg === "--json") json = true;
     else if (arg === "--upload") upload = true;
     else if (arg === "--token") token = args.shift() ?? null;
     else if (arg === "--api") apiUrl = args.shift() ?? apiUrl;
+    else if (arg === "--key") key = args.shift() ?? null;
+    else if (arg === "--url") url = args.shift() ?? null;
+    else if (arg === "--model") model = args.shift() ?? null;
     else if (arg === "--min-score") {
       const value = Number(args.shift());
       if (!Number.isFinite(value)) usage();
@@ -89,7 +105,7 @@ function parseArgs(argv: string[]): CliArgs {
     } else if (!arg.startsWith("-")) dir = arg;
     else usage();
   }
-  return { dir: path.resolve(dir), json, minScore, upload, token, apiUrl };
+  return { dir: path.resolve(dir), json, minScore, upload, token, apiUrl, llmFlags: { key, url, model } };
 }
 
 async function uploadResults(
@@ -150,7 +166,13 @@ const statusColor: Record<string, string> = {
 };
 
 async function main() {
-  const { dir, json, minScore, upload, token, apiUrl } = parseArgs(process.argv.slice(2));
+  const { dir, json, minScore, upload, token, apiUrl, llmFlags } = parseArgs(process.argv.slice(2));
+  const llmResolution = resolveLlmConfig(llmFlags, process.env);
+  if (!llmResolution.ok) {
+    console.error(llmResolution.error);
+    process.exit(2);
+  }
+  const llm = llmResolution.config;
   if (upload && !token) {
     console.error("codeaudit: --upload requires a token (--token or CODEAUDIT_TOKEN). Generate one in your repo settings.");
     process.exit(2);
@@ -163,6 +185,7 @@ async function main() {
   const ecosystems = detectEcosystems(dir);
   const deps: DependencyVerdict[] = [];
   const candidates: DeadCodeCandidate[] = [];
+  const mergedFileImportExports = new Map<string, string[]>();
   let npmTree: ResolvedTree | null = null;
   let pyTree: ResolvedTree | null = null;
   let fileCount = 0;
@@ -179,6 +202,7 @@ async function main() {
         })),
       );
     candidates.push(...findDeadCodeCandidates(analysis));
+    for (const [k, v] of analysis.fileImportExports) mergedFileImportExports.set(k, v);
   }
 
   if (ecosystems.includes("pypi")) {
@@ -192,6 +216,7 @@ async function main() {
       })),
     );
     candidates.push(...findDeadCodeCandidates(pyAnalysis));
+    for (const [k, v] of pyAnalysis.fileImportExports) mergedFileImportExports.set(k, v);
   }
 
   // Known-vulnerability lookup (OSV) — static/HTTP, so the CLI runs it too.
@@ -203,18 +228,36 @@ async function main() {
     applyVulnerabilities(deps, await checkVulnerabilities(vulnTargets));
   }
 
+  // "Did you mean X?" for phantom packages with no offline fuzzy match —
+  // same best-effort, optional path the hosted worker uses
+  // (server/src/worker.ts). No-op when llm is null.
+  if (llm) {
+    const phantomsNeedingAiSuggestion = deps.filter(
+      (d) => d.status === "phantom" && !(d.registryMetadata as { alternatives?: unknown } | null)?.alternatives,
+    );
+    if (phantomsNeedingAiSuggestion.length) {
+      const aiSuggestions = await suggestAlternatives(
+        phantomsNeedingAiSuggestion.map((d) => ({ packageName: d.packageName, ecosystem: d.ecosystem })),
+        { apiKey: llm.apiKey, baseUrl: llm.baseUrl, model: llm.model },
+      );
+      for (const d of phantomsNeedingAiSuggestion) {
+        const alternatives = aiSuggestions.get(d.packageName);
+        if (alternatives?.length) d.registryMetadata = { ...(d.registryMetadata ?? {}), alternatives };
+      }
+    }
+  }
+
   const polyglot = ecosystems.length > 1;
 
-  // Static-only findings: candidates at fixed confidence, no LLM verdict.
-  const staticFindings: ReviewedFinding[] = candidates.map((c) => ({
-    filePath: c.filePath,
-    lineStart: c.lineStart,
-    lineEnd: c.lineEnd,
-    symbolName: c.name,
-    findingType: c.findingType,
-    confidence: 0.5,
-    reasoning: "candidate — LLM verification available on codeaudit.dev",
-  }));
+  // With a BYOK key resolved, reach the same LLM review path the hosted
+  // worker uses (server/src/worker.ts) — additive to the CLI's existing
+  // static-only behavior, never a replacement: with `llm === null` this is
+  // byte-for-byte the old static-only path.
+  const { findings: staticFindings, reviewStatus } = await reviewCandidatesWithLlm(
+    candidates,
+    { fileImportExports: mergedFileImportExports },
+    llm ? { apiKey: llm.apiKey, baseUrl: llm.baseUrl, model: llm.model } : undefined,
+  );
 
   // Advisory-only, matching the worker's guarding (server/src/worker.ts): an
   // unexpected throw here must not change the CLI's documented exit-code
@@ -242,7 +285,7 @@ async function main() {
       err instanceof Error ? err.message : err,
     );
   }
-  const summary = computeSummary(deps, staticFindings, fileCount, "skipped", secrets.length);
+  const summary = computeSummary(deps, staticFindings, fileCount, reviewStatus, secrets.length);
   const phantomCount = summary.counts.phantom;
   const belowMin = minScore !== null && summary.score < minScore;
   const exitCode = phantomCount > 0 || belowMin ? 1 : 0;
@@ -262,6 +305,7 @@ async function main() {
           score: summary.score,
           grade: summary.grade,
           counts: summary.counts,
+          reviewStatus,
           dependencies: deps,
           deadCodeCandidates: staticFindings,
           priorities,
@@ -336,9 +380,16 @@ async function main() {
   }
 
   if (staticFindings.length) {
-    console.log(`${BOLD}Dead-code candidates${RESET} ${DIM}(static analysis only)${RESET}`);
+    const reviewLabel =
+      reviewStatus === "full"
+        ? `LLM-reviewed via ${llm?.source ?? "your key"}`
+        : reviewStatus === "partial"
+          ? "partially LLM-reviewed — some batches fell back to static analysis"
+          : "static analysis only";
+    console.log(`${BOLD}Dead-code candidates${RESET} ${DIM}(${reviewLabel})${RESET}`);
     for (const f of staticFindings) {
-      console.log(`  ${YELLOW}candidate${RESET}  ${f.symbolName}  ${DIM}${f.filePath}:${f.lineStart}${RESET}`);
+      const confidenceNote = reviewStatus !== "skipped" ? ` ${DIM}(${Math.round(f.confidence * 100)}% confidence)${RESET}` : "";
+      console.log(`  ${YELLOW}candidate${RESET}  ${f.symbolName}  ${DIM}${f.filePath}:${f.lineStart}${RESET}${confidenceNote}`);
     }
     console.log();
   }
