@@ -268,12 +268,18 @@ export function ScanDetail() {
         <Card className="flex items-center gap-6">
           <ScoreRing score={scan.summary.score} />
           <div className="flex-1">
+            {scan.summary.reviewStatus === "full" && scan.summary.llmReviewSource === "cli-byok" && (
+              <p className="mb-3 rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning">
+                LLM-reviewed with the uploader's own API key, not the platform's — this is the CLI
+                user's self-report and has not been independently verified by CodeAudit.
+              </p>
+            )}
             {scan.summary.reviewStatus && scan.summary.reviewStatus !== "full" && (
               <p className="mb-3 rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning">
                 Static-only score — dead-code findings weren't verified by the LLM, so this score
                 is noisier than an LLM-verified scan.
                 {scan.summary.reviewStatus === "skipped"
-                  ? " No LLM is configured for this scan (expected for CLI uploads, or when the server has no model API key set)."
+                  ? " No LLM is configured for this scan (the server has no model API key set, or a CLI upload ran without a BYOK key — see codematrix scan --help)."
                   : " Some batches could not be reviewed — most often the model provider's rate limit or daily token quota. Expand a finding below to see the exact reason, and re-run the scan once the quota resets."}
               </p>
             )}

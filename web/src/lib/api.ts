@@ -106,6 +106,8 @@ export interface ScanSummary {
   };
   /** "skipped" means zombie findings are unfiltered static candidates (no LLM verdict) — score is noisier. */
   reviewStatus?: "full" | "partial" | "skipped";
+  /** Present only when reviewStatus !== "skipped" AND the review was a CLI user's own key, not the platform's — self-reported by the CLI, never platform-verified. */
+  llmReviewSource?: "cli-byok";
   ai?: AiAuthorshipStats | null;
   priorities?: RankedFinding[];
   advisories?: {
