@@ -16,6 +16,10 @@ const cliPath = path.join(here, "..", "dist", "index.js");
 // Reuses the server workspace's existing ground-truth fixture — it already
 // has a dead-code candidate (zombieFormatter) and doesn't need its own copy.
 const fixtureDir = path.join(here, "..", "..", "server", "test", "fixture");
+// A tiny fixture with genuinely zero dead-code candidates (every symbol is
+// called from within its own file) — used to regression-test that a no-key
+// scan with zero candidates reports reviewStatus "skipped", not "full".
+const zeroCandidatesFixtureDir = path.join(here, "fixture-zero-candidates");
 const FAKE_KEY = "distinctive-fake-byok-key-9f8e7d6c5b4a";
 
 function startMockServer(
@@ -67,6 +71,20 @@ const uploadMock = await startMockServer((_req, _body, res) => {
   res.end(JSON.stringify({ ok: true, scanId: "fake-scan-id", url: "http://localhost/scans/fake-scan-id" }));
 });
 
+// --- mock upload endpoint dedicated to the zero-candidates run (kept
+// separate so its captured requests aren't mixed with run 2's) ---
+const uploadMockZero = await startMockServer((_req, _body, res) => {
+  res.writeHead(201, { "content-type": "application/json" });
+  res.end(JSON.stringify({ ok: true, scanId: "fake-scan-id-zero", url: "http://localhost/scans/fake-scan-id-zero" }));
+});
+
+// --- mock LLM endpoint that always fails (500) — stands in for a
+// misconfigured/unreachable BYOK provider ---
+const llmMockFailing = await startMockServer((_req, _body, res) => {
+  res.writeHead(500, { "content-type": "application/json" });
+  res.end(JSON.stringify({ error: "internal error" }));
+});
+
 // --- run 1: --json with a BYOK key, no upload ---
 {
   const result = await runCli(
@@ -79,6 +97,10 @@ const uploadMock = await startMockServer((_req, _body, res) => {
   checks.push([
     "the mock LLM endpoint received the key as a Bearer token",
     llmMock.requests.some((r) => r.authorization === `Bearer ${FAKE_KEY}`),
+  ]);
+  checks.push([
+    "the mock LLM endpoint's request body never contains the raw key (only the Authorization header should)",
+    llmMock.requests.every((r) => !r.body.includes(FAKE_KEY)),
   ]);
   const parsed = JSON.parse(result.stdout) as { reviewStatus: string };
   checks.push(["reviewStatus is full (mock LLM responded successfully)", parsed.reviewStatus === "full"]);
@@ -113,8 +135,67 @@ const uploadMock = await startMockServer((_req, _body, res) => {
   checks.push(['the --upload request body carries reviewStatus: "full"', uploadBody.includes('"reviewStatus":"full"')]);
 }
 
+// --- run 3: zero dead-code candidates, NO key/url/model at all, --upload ---
+// Regression test for the bug where reviewCandidatesWithLlm's zero-candidate
+// early return hardcoded reviewStatus "full" regardless of whether an LLM
+// was configured — which let a no-key scan with nothing to review upload
+// llmReviewSource: "cli-byok", falsely claiming a BYOK review never
+// performed. Fixed in packages/engine/src/llm.ts to check getClient(llm).
+{
+  const result = await runCli(
+    [
+      "scan",
+      zeroCandidatesFixtureDir,
+      "--upload",
+      "--token",
+      "ca_faketokenfaketokenfaketoken12",
+      "--api",
+      `http://127.0.0.1:${uploadMockZero.port}`,
+    ],
+    {},
+  );
+  checks.push(["zero-candidates no-key --upload run exits 0 or 1 (never a crash/usage error)", result.exitCode === 0 || result.exitCode === 1]);
+  const uploadBodyZero = uploadMockZero.requests.at(-1)?.body ?? "";
+  checks.push(['zero-candidates no-key upload body carries reviewStatus: "skipped"', uploadBodyZero.includes('"reviewStatus":"skipped"')]);
+  checks.push(["zero-candidates no-key upload body does NOT carry llmReviewSource (no LLM was ever contacted)", !uploadBodyZero.includes('"llmReviewSource"')]);
+}
+
+// --- run 4: a real (fake) BYOK key configured, but the LLM endpoint always
+// fails (500) — the LLM-failure path must never crash the scan or change
+// the CLI's documented exit-code contract (never exit 2, never throw), and
+// reviewStatus must land on "partial" (not "full", not a crash). ---
+{
+  const result = await runCli(
+    [
+      "scan",
+      fixtureDir,
+      "--json",
+      "--key",
+      FAKE_KEY,
+      "--url",
+      `http://127.0.0.1:${llmMockFailing.port}`,
+      "--model",
+      "test-model",
+    ],
+    {},
+  );
+  checks.push(["LLM-failure run exits 0 or 1, never 2, never crashes", result.exitCode === 0 || result.exitCode === 1]);
+  let parsedFailure: { reviewStatus?: string } | null = null;
+  try {
+    parsedFailure = JSON.parse(result.stdout) as { reviewStatus?: string };
+  } catch {
+    parsedFailure = null;
+  }
+  checks.push(["LLM-failure run produced parseable JSON output", parsedFailure !== null]);
+  checks.push(['LLM-failure run reports reviewStatus "partial" (not "full", not a crash)', parsedFailure?.reviewStatus === "partial"]);
+  checks.push(["LLM-failure run stdout never contains the raw key", !result.stdout.includes(FAKE_KEY)]);
+  checks.push(["LLM-failure run stderr never contains the raw key", !result.stderr.includes(FAKE_KEY)]);
+}
+
 await llmMock.close();
 await uploadMock.close();
+await uploadMockZero.close();
+await llmMockFailing.close();
 
 console.log("--- BYOK redaction checks ---");
 let failed = 0;

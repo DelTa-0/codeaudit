@@ -236,8 +236,8 @@ export async function reviewCandidatesWithLlm(
   analysis: Pick<RepoAnalysis, "fileImportExports">,
   llm?: LlmConfig,
 ): Promise<LlmReviewResult> {
-  if (candidates.length === 0) return { findings: [], reviewStatus: "full" };
   const client = getClient(llm);
+  if (candidates.length === 0) return { findings: [], reviewStatus: client ? "full" : "skipped" };
   if (!client) {
     return {
       findings: unreviewedFallback(
