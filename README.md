@@ -269,10 +269,12 @@ analyze. Advisory only — a heuristic, not a certainty.
 
 ### CLI (`npx codematrix`)
 
-A deliberately **limited, funnel-oriented** local scanner — static analysis
-only (phantom/unused/suspicious dependencies + dead-code *candidates*), no
-LLM review, no history, no PR integration. Those stay platform-only so the
-CLI drives adoption of the SaaS rather than replacing it.
+A **funnel-oriented** local scanner — static analysis (phantom/unused/
+suspicious dependencies + dead-code *candidates*) by default, no scan
+history or PR integration. Those stay platform-only so the CLI drives
+adoption of the SaaS rather than replacing it. LLM-backed dead-code review is
+available with a bring-your-own-key flag (`--key`/`--url`/`--model`, or
+`GROQ_API_KEY`/`OPENAI_API_KEY`) — see [`cli/README.md`](cli/README.md#llm-review-optional-bring-your-own-key).
 
 Published to npm as `codematrix` (previously `codeaudit-scan`; the plain
 `codeaudit` name was rejected by the registry as too similar to an existing

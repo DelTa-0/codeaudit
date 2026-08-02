@@ -216,3 +216,19 @@ push with `git log --all --diff-filter=A --name-only | grep -i env` (empty
 result) and a check for tracked `.pem` files (also empty). The GitHub App
 private key lives outside the repo entirely
 (`C:\Users\ASUS\Desktop\arbytes\codeauditsec\`).
+
+## CLI BYOK: fetch() instead of the openai SDK
+
+The CLI's LLM review (dead-code confidence scores, phantom-package
+alternatives) was previously platform-only specifically to keep the `openai`
+SDK (8.7MB) out of the CLI's esbuild bundle — see the `"./llm"` export
+subpath split, above. Bring-your-own-key needed the CLI to reach an LLM,
+which directly conflicted with that boundary.
+
+Rather than bundle `openai` into the CLI or maintain a second implementation
+of the same prompt/parsing logic, `packages/engine/src/llm.ts` was rewritten
+against a ~40-line `fetch()` wrapper (`callChatCompletion`) that both the
+server and the CLI share. The `"./llm"` export subpath was removed — the
+reason for its existence (keeping the SDK out of the CLI) no longer applies
+once there's no SDK to keep out. Full design: `docs/superpowers/specs/
+2026-08-02-cli-byok-design.md`.

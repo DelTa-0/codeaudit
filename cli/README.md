@@ -43,6 +43,9 @@ codematrix scan [dir] [options]
 | `--upload`      | Send results to your CodeAudit dashboard (requires a token; see [Uploading results](#uploading-results))                      |
 | `--token T`     | Per-repo CLI token for `--upload` (or set `CODEAUDIT_TOKEN`)                                                                  |
 | `--api URL`     | API base URL for `--upload` (or set `CODEAUDIT_API_URL`; defaults to `http://localhost:4000`, only relevant if you self-host) |
+| `--key T`       | Your own LLM API key for real dead-code review (or set `GROQ_API_KEY` / `OPENAI_API_KEY`; see [LLM review](#llm-review-optional-bring-your-own-key)) |
+| `--url URL`     | OpenAI-compatible base URL for `--key` (or set `CODEAUDIT_LLM_URL`; required alongside a bare `--key`)                        |
+| `--model M`     | Model name for `--url` (or set `CODEAUDIT_LLM_MODEL`; required alongside a custom `--url`)                                   |
 | `-h`, `--help`  | Show usage                                                                                                                    |
 
 ### Exit codes
@@ -159,6 +162,36 @@ CODEAUDIT_TOKEN=ca_xxxxx npx codematrix scan . --upload
 Treat the token like a password (CI secret store, not source control). On
 success the CLI prints the resulting dashboard URL; the run is tagged
 `trigger: cli` in the same history/trend chart as webhook-triggered scans.
+
+## LLM review (optional, bring-your-own-key)
+
+By default, dead-code candidates are static analysis only — a fixed 0.5
+confidence and no verdict. Supply your own LLM API key and the CLI performs
+the same LLM-backed review the hosted dashboard does, entirely on your
+machine:
+
+```bash
+GROQ_API_KEY=gsk_xxxxx npx codematrix scan .
+```
+
+[Groq](https://console.groq.com) has a free tier and is the zero-config
+default. `OPENAI_API_KEY` also works out of the box. Any other
+OpenAI-compatible endpoint (a local Ollama, a self-hosted proxy, Anthropic
+via an OpenAI-compatible shim) works with `--key`/`--url`/`--model`:
+
+```bash
+npx codematrix scan . --key sk-xxxxx --url https://api.openai.com/v1 --model gpt-4o-mini
+```
+
+`--url` is required whenever `--key` isn't one of the two recognized env
+vars above — the CLI never guesses a provider it wasn't told about. Your key
+is used only in the request to the endpoint you configured: it is never
+included in `--json` output, never sent as part of `--upload`, and never
+written to disk.
+
+With a key configured, dead-code candidates get real confidence scores and
+reasoning, and phantom-package findings with no offline spelling match may
+get an AI-suggested real alternative (e.g. `fastimagepro` → Pillow/imageio).
 
 ## Guarding against phantom packages _before_ they land
 
