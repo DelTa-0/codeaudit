@@ -1,6 +1,6 @@
 // Bundles the CLI into a single self-contained dist/index.js — no
 // node_modules dependency at install time, so `npm publish` ships a package
-// that works standalone via `npx codematrix`, without needing the monorepo's
+// that works standalone via `npx codeorion`, without needing the monorepo's
 // workspace linking or any of its own dependencies resolved on the consumer's
 // machine. @codeaudit/engine's LLM review functions are plain fetch() calls
 // (no SDK), so BYOK review (see docs/superpowers/specs/2026-08-02-cli-byok-design.md)

@@ -1,4 +1,4 @@
-# codematrix-mcp
+# codeorion-mcp
 
 An MCP server that lets AI coding agents (Claude Code, Cursor, Cline, and
 other MCP-compatible tools) check whether a package is real and
@@ -8,7 +8,7 @@ packages, typosquats, and known CVEs at the moment an agent is about to
 secrets before it's written to a file.
 
 Runs fully offline by default (no account needed) — same registry/CVE
-checks as `npx codematrix`. Set `CODEAUDIT_TOKEN` to additionally get
+checks as `npx codeorion`. Set `CODEAUDIT_TOKEN` to additionally get
 an LLM-suggested real alternative for phantom packages that aren't a
 simple typo of anything popular (e.g. `fastimagepro` → Pillow/imageio).
 
@@ -17,7 +17,7 @@ simple typo of anything popular (e.g. `fastimagepro` → Pillow/imageio).
 **Claude Code** — one command, no file editing:
 
 ```bash
-claude mcp add codeaudit -- npx -y codematrix-mcp
+claude mcp add codeaudit -- npx -y codeorion-mcp
 ```
 
 (Add `-e CODEAUDIT_TOKEN=your-token` before `--` if you have one. Use
@@ -26,10 +26,10 @@ repo for your whole team rather than just your own machine.)
 
 **Cursor** — click to install:
 
-[![Add codematrix-mcp to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](cursor://anysphere.cursor-deeplink/mcp/install?name=codeaudit&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImNvZGVtYXRyaXgtbWNwIl19)
+[![Add codeorion-mcp to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](cursor://anysphere.cursor-deeplink/mcp/install?name=codeaudit&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImNvZGVvcmlvbi1tY3AiXX0=)
 
 Or manually via **Settings → MCP → Add new MCP server**, pointing the
-command at `npx -y codematrix-mcp`.
+command at `npx -y codeorion-mcp`.
 
 **Any other MCP-compatible client** (Cline, Windsurf, etc.) — add this to
 whatever JSON config the client reads (e.g. Cline's `cline_mcp_settings.json`):
@@ -39,7 +39,7 @@ whatever JSON config the client reads (e.g. Cline's `cline_mcp_settings.json`):
   "mcpServers": {
     "codeaudit": {
       "command": "npx",
-      "args": ["-y", "codematrix-mcp"],
+      "args": ["-y", "codeorion-mcp"],
       "env": { "CODEAUDIT_TOKEN": "" }
     }
   }
@@ -64,13 +64,13 @@ skip `npx` entirely — install globally once and point the command straight
 at the installed binary:
 
 ```bash
-npm install -g codematrix-mcp
-claude mcp add codeaudit -- codematrix-mcp
+npm install -g codeorion-mcp
+claude mcp add codeaudit -- codeorion-mcp
 ```
 
-(For other clients, set `"command": "codematrix-mcp", "args": []` instead of
-`npx`/`-y`/`codematrix-mcp`.) This bypasses the broken `npx` resolution step
-entirely, at the cost of needing `npm update -g codematrix-mcp` manually for
+(For other clients, set `"command": "codeorion-mcp", "args": []` instead of
+`npx`/`-y`/`codeorion-mcp`.) This bypasses the broken `npx` resolution step
+entirely, at the cost of needing `npm update -g codeorion-mcp` manually for
 future versions instead of `npx` always fetching latest.
 
 ## Tools
@@ -91,7 +91,7 @@ future versions instead of `npx` always fetching latest.
 
 ## Getting a token (optional)
 
-A `CODEAUDIT_TOKEN` is the same per-repo token used by `codematrix
+A `CODEAUDIT_TOKEN` is the same per-repo token used by `codeorion
 --upload` — generate one from your repository's settings page at
 [codeaudit.dev](https://codeaudit.dev), or via `POST
 /repos/:repoId/cli-token` if self-hosting.

@@ -13,6 +13,48 @@ related:
 
 # Roadmap
 
+## Second npm rename: `codematrix` → `codeorion` (2026-08-02)
+
+Following the `codematrix` publish rejection (below), the user chose
+`codeorion` as the replacement name. `npm view codeorion` / `npm view
+codeorion-mcp` both 404'd (unclaimed) before touching any code. Repo-wide
+rename sweep, same scope as the `codeaudit` → `codeaudit-scan` rename:
+`cli/package.json` and `mcp/package.json` (`name` + `bin`), root
+`package.json`'s `build:cli`/`build:mcp` workspace references,
+`cli/src/index.ts`'s usage text, `cli/build.mjs`/`mcp/build.mjs` header
+comments, `mcp/src/index.ts`'s MCP protocol handshake `name` field,
+`server/src/routes/cliScans.ts`'s generated CLI usage string,
+`server/src/routes/mcpAlternatives.ts`'s comment, `packages/engine/src/
+verify.ts`'s comment, both server ground-truth test files' comments,
+`mcp/test/ground-truth.ts`'s header comment, `README.md` (including its
+TOC anchors), `cli/README.md`, `mcp/README.md` (including re-encoding the
+base64 Cursor deep-link config, which a plain-text find-and-replace can't
+reach), the landing page (`Hero.tsx`/`Cli.tsx`/`FinalCta.tsx`), `RepoDetail.
+tsx`/`ScanDetail.tsx`, `docs/setup.md`, and `docs/about.md`.
+
+`docs/about.md`'s CLI publish-status line was also corrected while touching
+it: it previously (inaccurately) claimed `codematrix@1.0.0` was "published
+to npm" — written before the 403 rejection was discovered. Now states the
+CLI is built and verified but not currently published, with the accurate
+history (last real publish was `codeaudit-scan@0.2.3`).
+
+`package-lock.json` regenerated via `npm install` (not hand-edited) to pick
+up the renamed workspace packages. Full gate re-verified green post-rename:
+`npm run build` / `build:cli` / `build:mcp` all 0; all 6 test suites (server
+ground-truth × 2, plan-limits, llm-protocol, CLI llm-config, CLI
+byok-redaction, MCP ground-truth) 0 failures; server typecheck 0; the built
+CLI's own `--help` correctly prints `Usage: codeorion scan`.
+`npm publish --dry-run` passed clean for both `codeorion@1.0.0` and
+`codeorion-mcp@1.0.0` — per the lesson the previous rejection taught, this
+is not proof of acceptance, only the real `npm publish` is. See
+[[known-issues#`codematrix` name rejected by npm — renamed to `codeorion`,
+real publish still pending (2026-08-02)]].
+
+`docs/roadmap.md` (this file), `docs/known-issues.md`, and the
+`docs/superpowers/plans/*.md` files are deliberately left referencing
+`codematrix` where they describe past events — historical record, not
+current state, same precedent as the `codeaudit` → `codeaudit-scan` rename.
+
 ## CLI Bring-Your-Own-Key (BYOK) shipped; `codematrix` name rejected by npm on real publish (2026-08-02)
 
 Implemented per `docs/superpowers/plans/2026-08-02-cli-byok-design.md` (9

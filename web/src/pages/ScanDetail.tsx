@@ -280,7 +280,7 @@ export function ScanDetail() {
                 Static-only score — dead-code findings weren't verified by the LLM, so this score
                 is noisier than an LLM-verified scan.
                 {scan.summary.reviewStatus === "skipped"
-                  ? " No LLM is configured for this scan (the server has no model API key set, or a CLI upload ran without a BYOK key — see codematrix scan --help)."
+                  ? " No LLM is configured for this scan (the server has no model API key set, or a CLI upload ran without a BYOK key — see codeorion scan --help)."
                   : " Some batches could not be reviewed — most often the model provider's rate limit or daily token quota. Expand a finding below to see the exact reason, and re-run the scan once the quota resets."}
               </p>
             )}

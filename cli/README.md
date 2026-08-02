@@ -1,4 +1,4 @@
-# codematrix
+# codeorion
 
 A local, static scanner for AI-generated technical debt in JS/TS and Python
 repos — phantom (hallucinated) dependencies, suspicious/typosquat packages,
@@ -17,7 +17,7 @@ review is also available, bring-your-own-key — see
 No install needed — run it straight from your repo root with `npx`:
 
 ```bash
-npx codematrix scan .
+npx codeorion scan .
 ```
 
 That's it. It detects whether the repo is npm, PyPI, or both (polyglot
@@ -25,14 +25,14 @@ repos get scanned on both ecosystems in one pass), checks every declared
 dependency against the live npm/PyPI registries, and flags exported
 symbols with zero call-sites as dead-code candidates.
 
-Prefer a permanent install? `npm install -g codematrix` then run
-`codematrix scan .` directly — same behavior, just skips npx's
+Prefer a permanent install? `npm install -g codeorion` then run
+`codeorion scan .` directly — same behavior, just skips npx's
 resolve-on-every-run step.
 
 ## Usage
 
 ```
-codematrix scan [dir] [options]
+codeorion scan [dir] [options]
 ```
 
 `dir` defaults to `.` (the current directory).
@@ -60,7 +60,7 @@ codematrix scan [dir] [options]
 Use the exit code directly as a CI gate:
 
 ```bash
-npx codematrix scan . --min-score 80
+npx codeorion scan . --min-score 80
 ```
 
 ## What it checks
@@ -99,7 +99,7 @@ npx codematrix scan . --min-score 80
 ## Example output
 
 ```
-$ npx codematrix scan .
+$ npx codeorion scan .
 
 CodeAudit · static scan of ~/projects/checkout-service
 
@@ -141,7 +141,7 @@ thing you can act on, and ties break toward the cheapest fix. `[S]`, `[M]` and
 ### JSON output (for CI)
 
 ```bash
-npx codematrix scan . --json
+npx codeorion scan . --json
 ```
 
 Returns a single JSON object with `score`, `grade`, `counts` (per-status
@@ -159,7 +159,7 @@ token from the dashboard (**Settings → CLI / CI uploads → Get token**),
 then:
 
 ```bash
-CODEAUDIT_TOKEN=ca_xxxxx npx codematrix scan . --upload
+CODEAUDIT_TOKEN=ca_xxxxx npx codeorion scan . --upload
 ```
 
 Treat the token like a password (CI secret store, not source control). On
@@ -174,7 +174,7 @@ the same LLM-backed review the hosted dashboard does, entirely on your
 machine:
 
 ```bash
-GROQ_API_KEY=gsk_xxxxx npx codematrix scan .
+GROQ_API_KEY=gsk_xxxxx npx codeorion scan .
 ```
 
 [Groq](https://console.groq.com) has a free tier and is the zero-config
@@ -183,7 +183,7 @@ OpenAI-compatible endpoint (a local Ollama, a self-hosted proxy, Anthropic
 via an OpenAI-compatible shim) works with `--key`/`--url`/`--model`:
 
 ```bash
-npx codematrix scan . --key sk-xxxxx --url https://api.openai.com/v1 --model gpt-4o-mini
+npx codeorion scan . --key sk-xxxxx --url https://api.openai.com/v1 --model gpt-4o-mini
 ```
 
 `--url` is required whenever `--key` isn't one of the two recognized env
@@ -200,7 +200,7 @@ get an AI-suggested real alternative (e.g. `fastimagepro` → Pillow/imageio).
 
 Running the scanner after the fact catches phantoms already committed.
 To stop an AI coding agent from installing one in the first place, see
-[`codematrix-mcp`](https://github.com/DelTa-0/codeaudit/blob/main/mcp/README.md)
+[`codeorion-mcp`](https://github.com/DelTa-0/codeaudit/blob/main/mcp/README.md)
 — an MCP server that checks a package name the moment an agent is about
 to install it.
 

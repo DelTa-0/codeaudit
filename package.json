@@ -10,8 +10,8 @@
     "dev:web": "npm run dev --workspace web",
     "migrate": "npm run migrate --workspace server",
     "build:engine": "npm run build --workspace @codeaudit/engine",
-    "build:cli": "npm run build --workspace @codeaudit/engine && npm run build --workspace codematrix",
-    "build:mcp": "npm run build --workspace @codeaudit/engine && npm run build --workspace codematrix-mcp",
+    "build:cli": "npm run build --workspace @codeaudit/engine && npm run build --workspace codeorion",
+    "build:mcp": "npm run build --workspace @codeaudit/engine && npm run build --workspace codeorion-mcp",
     "build": "npm run build:engine && npm run build --workspace server && npm run build --workspace web",
     "lint": "npm run typecheck --workspace server"
   },

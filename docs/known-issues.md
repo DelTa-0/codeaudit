@@ -14,7 +14,7 @@ related:
 
 # Known Issues
 
-## `codematrix` name rejected by npm — publish blocked (2026-08-02)
+## `codematrix` name rejected by npm — renamed to `codeorion`, real publish still pending (2026-08-02)
 
 The real `npm publish` (not `--dry-run`) for `cli/` was rejected: `403
 Package name too similar to existing package code-matrix`. This is the
@@ -31,17 +31,27 @@ against the live registry at actual publish time, not during a dry-run.
 Treat a clean `--dry-run` as proof the *tarball* is valid, not proof the
 *name* will be accepted.
 
-**Current state:** neither `codematrix` nor `codematrix-mcp` has been
-published under those names. The `mcp/` package's dry-run was clean but its
-real `npm publish` was never attempted (the `cli/` failure was caught
-first). All code, tests, and docs still reference `codematrix`/
-`codematrix-mcp` throughout the repo — no rename has happened yet. The user
-is searching for a replacement name; once chosen, this will need the same
-repo-wide rename sweep as the `codeaudit` → `codeaudit-scan` rename did
-(package.json name + bin, README/docs everywhere, the server-generated CLI
-usage string in `routes/cliScans.ts`, the landing page copy, etc.) plus a
-fresh `npm publish --dry-run` **and a real publish attempt** — not just the
-dry-run — before treating the name as secured.
+**Current state:** renamed `codematrix` → `codeorion` and `codematrix-mcp` →
+`codeorion-mcp` across the full repo-wide sweep (`package.json` name + `bin`,
+`cli/src/index.ts`'s usage text, `cli/build.mjs`/`mcp/build.mjs` comments,
+the MCP protocol handshake's `name` field, the server-generated CLI usage
+string in `routes/cliScans.ts`, `README.md`/`cli/README.md`/`mcp/README.md`
+including the base64-encoded Cursor deep-link, the landing page copy,
+`docs/setup.md`, `docs/about.md`) — same scope as the `codeaudit` →
+`codeaudit-scan` rename. `docs/roadmap.md`/`docs/known-issues.md` (this
+file) and the two `docs/superpowers/plans/*.md` files are deliberately left
+referencing `codematrix` as historical record, per the same precedent set
+during the earlier rename.
+
+`npm publish --dry-run` passed clean for both `codeorion@1.0.0` and
+`codeorion-mcp@1.0.0` after the rename, and `npm view codeorion`/
+`npm view codeorion-mcp` both 404 (unclaimed). Full gate re-verified green
+post-rename: all 6 CLI/server/mcp test suites, typecheck, and the web build.
+
+**Still open, per the lesson this exact issue taught:** a clean dry-run is
+not proof of a name being accepted — only a real `npm publish` is. Neither
+package has actually been published under the new name yet; that step is
+still the user's to run.
 
 `a2b9411` ("Fix Python analyzer false positives found by real-world FastAPI
 review") fixes exactly the false-positive classes documented in

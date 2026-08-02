@@ -1,4 +1,4 @@
-// Single-package, ad-hoc verification primitive — used by codematrix-mcp to
+// Single-package, ad-hoc verification primitive — used by codeorion-mcp to
 // answer "is this ONE package (that an agent is about to install) real and
 // trustworthy?" without needing a whole repo/manifest/import-graph context.
 // Recomposes the same checks a full scan runs (registry existence, fuzzy

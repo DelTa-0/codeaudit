@@ -47,7 +47,7 @@ const GREEN = "\x1b[32m";
 const DIM = "\x1b[2m";
 
 function usage(): never {
-  console.log(`Usage: codematrix scan [dir] [options]
+  console.log(`Usage: codeorion scan [dir] [options]
 
 Options:
   --json          machine-readable output (for CI)

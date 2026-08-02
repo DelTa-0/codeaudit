@@ -104,7 +104,7 @@ export function Hero() {
             whiteSpace: "nowrap",
           }}
         >
-          npx codematrix scan . <span style={{ color: "#8d9187", fontSize: 12 }}>{copied ? "✓ copied" : "⧉"}</span>
+          npx codeorion scan . <span style={{ color: "#8d9187", fontSize: 12 }}>{copied ? "✓ copied" : "⧉"}</span>
         </span>
       </div>
     </section>

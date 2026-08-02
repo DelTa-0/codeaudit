@@ -26,6 +26,9 @@ Stripe billing) at the user's request.
 
 ## Map of content
 
+- [[about]] — **start here**: single-page overview of the whole project (what it
+  does, why, how it's built, and what's actually finished). Written to be handed
+  to someone seeing the project for the first time
 - [[architecture]] — stack, service layout, scan pipeline, deployment topology
 - [[database-schema]] — all tables, relationships, migration history
 - [[decisions]] — why things are built the way they are (ADR-style log)

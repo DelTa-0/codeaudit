@@ -1,5 +1,5 @@
 // Bundles the MCP server into a single self-contained dist/index.js — no
-// node_modules dependency at install time, so `npx codematrix-mcp` works
+// node_modules dependency at install time, so `npx codeorion-mcp` works
 // standalone. Mirrors cli/build.mjs. ESM output (unlike the CLI's CJS
 // output) is safe here because this package never imports @babel/traverse
 // (no import-graph analysis happens in the MCP server), which is what

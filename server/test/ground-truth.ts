@@ -191,7 +191,7 @@ checks.push(
   ["deep-transitive recorded as transitively required (unused-guard input)", tree?.transitivelyRequired.has("deep-transitive") === true],
 );
 
-// --- Single-package verification primitive (offline path, for codematrix-mcp) ---
+// --- Single-package verification primitive (offline path, for codeorion-mcp) ---
 const verifyPhantomTypo = await verifyPackage("tyepscript", "npm");
 const verifyHealthy = await verifyPackage("lodash", "npm");
 const verifyMadeUp = await verifyPackage("react-toolkitz", "npm");
