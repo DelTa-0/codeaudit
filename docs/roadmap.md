@@ -13,6 +13,35 @@ related:
 
 # Roadmap
 
+## CLI Bring-Your-Own-Key (BYOK) shipped; `codematrix` name rejected by npm on real publish (2026-08-02)
+
+Implemented per `docs/superpowers/plans/2026-08-02-cli-byok-design.md` (9
+tasks, subagent-driven development, final whole-branch review found and
+fixed 1 Critical + 3 Important + 6 Minor): CLI users can now supply their
+own LLM API key (`--key`/`--url`/`--model`, or `GROQ_API_KEY`/
+`OPENAI_API_KEY` with zero flags) for real LLM-backed dead-code review and
+phantom-package alternative suggestions, entirely local. Required removing
+the `openai` npm SDK from `packages/engine/` and `server/` — replaced with
+a ~40-line shared `fetch()` wrapper — since BYOK needed the CLI to reach an
+LLM without bundling the SDK. The Critical finding from final review: a
+no-key scan of a repo with zero dead-code candidates could falsely upload
+`llmReviewSource: "cli-byok"`, claiming a self-reported review that never
+happened — fixed at the engine level (`reviewCandidatesWithLlm`'s
+zero-candidate path now actually checks whether a key is configured).
+Full gate green: 6 test suites, 0 failures.
+
+Attempting the real publish (not `--dry-run`) hit the **same npm
+name-similarity rejection this project already hit once** (see "CLI package
+renamed to `codeaudit-scan`" below) — `codematrix` was rejected as too
+similar to an existing `code-matrix` package, 403, same suggested scoped
+fallback (`@doughnot/codematrix`). Critically, `npm publish --dry-run` had
+already passed clean for both `codematrix` and `codematrix-mcp` — the
+similarity check only fires on a real publish, not a dry-run, so a clean
+dry-run is not proof a name will be accepted. See
+[[known-issues#`codematrix` name rejected by npm — publish blocked
+(2026-08-02)]] for current state. Neither package is published; the user is
+searching for a new name before another repo-wide rename sweep.
+
 ## Supply-chain + tech-debt expansion — CVE / typosquat / lockfile / hotspots (2026-07-21)
 
 Competitor research (Socket.dev, Snyk, CodeScene, SonarQube) surfaced four

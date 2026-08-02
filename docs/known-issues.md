@@ -14,7 +14,34 @@ related:
 
 # Known Issues
 
-## ~~Fixed-in-`main` Python false positives never reached npm~~ — RESOLVED (2026-07-20)
+## `codematrix` name rejected by npm — publish blocked (2026-08-02)
+
+The real `npm publish` (not `--dry-run`) for `cli/` was rejected: `403
+Package name too similar to existing package code-matrix`. This is the
+*second* time this project has hit npm's name-similarity classifier —
+`codeaudit` was rejected the same way on 2026-07-18 for being too close to
+`code-audit` (see [[roadmap#CLI package renamed to `codeaudit-scan`
+(2026-07-18)]]) — and npm suggested the same scoped-package fallback both
+times (`@doughnot/<name>`, `doughnot` being this project's npm account).
+
+**`npm publish --dry-run` did not catch this.** The dry-run for `codematrix`
+passed cleanly (tarball built, no error) immediately before the real publish
+failed on the exact same package — the similarity check appears to run only
+against the live registry at actual publish time, not during a dry-run.
+Treat a clean `--dry-run` as proof the *tarball* is valid, not proof the
+*name* will be accepted.
+
+**Current state:** neither `codematrix` nor `codematrix-mcp` has been
+published under those names. The `mcp/` package's dry-run was clean but its
+real `npm publish` was never attempted (the `cli/` failure was caught
+first). All code, tests, and docs still reference `codematrix`/
+`codematrix-mcp` throughout the repo — no rename has happened yet. The user
+is searching for a replacement name; once chosen, this will need the same
+repo-wide rename sweep as the `codeaudit` → `codeaudit-scan` rename did
+(package.json name + bin, README/docs everywhere, the server-generated CLI
+usage string in `routes/cliScans.ts`, the landing page copy, etc.) plus a
+fresh `npm publish --dry-run` **and a real publish attempt** — not just the
+dry-run — before treating the name as secured.
 
 `a2b9411` ("Fix Python analyzer false positives found by real-world FastAPI
 review") fixes exactly the false-positive classes documented in
