@@ -2,7 +2,7 @@
 type: reference
 title: "CLI Bring-Your-Own-Key (BYOK) LLM review — design"
 created: 2026-08-02
-status: approved
+status: implemented
 related:
   - "[[architecture]]"
   - "[[decisions]]"
