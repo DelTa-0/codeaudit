@@ -152,7 +152,12 @@ const llmMockFailing = await startMockServer((_req, _body, res) => {
       "--api",
       `http://127.0.0.1:${uploadMockZero.port}`,
     ],
-    {},
+    // Explicitly clear the recognized env vars so this "no key" scenario
+    // can't accidentally resolve a real key if one happens to be exported
+    // in the host environment running this test (e.g. a dev box with
+    // GROQ_API_KEY set for everyday use) — this run's whole point is
+    // proving the no-key path, so it must not depend on the ambient shell.
+    { GROQ_API_KEY: "", OPENAI_API_KEY: "", CODEAUDIT_LLM_KEY: "" },
   );
   checks.push(["zero-candidates no-key --upload run exits 0 or 1 (never a crash/usage error)", result.exitCode === 0 || result.exitCode === 1]);
   const uploadBodyZero = uploadMockZero.requests.at(-1)?.body ?? "";
