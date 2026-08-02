@@ -268,7 +268,8 @@ export function ScanDetail() {
         <Card className="flex items-center gap-6">
           <ScoreRing score={scan.summary.score} />
           <div className="flex-1">
-            {scan.summary.reviewStatus === "full" && scan.summary.llmReviewSource === "cli-byok" && (
+            {(scan.summary.reviewStatus === "full" || scan.summary.reviewStatus === "partial") &&
+              scan.summary.llmReviewSource === "cli-byok" && (
               <p className="mb-3 rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning">
                 LLM-reviewed with the uploader's own API key, not the platform's — this is the CLI
                 user's self-report and has not been independently verified by CodeAudit.
