@@ -33,7 +33,8 @@
   "scripts": {
     "build": "tsc --noEmit -p tsconfig.json && node build.mjs",
     "test:llm-config": "tsx test/llm-config.ts",
-    "prepublishOnly": "npm run build && npm run test:ground-truth --prefix ../server && npm run test:ground-truth-python --prefix ../server"
+    "test:byok-redaction": "tsx test/byok-redaction.ts",
+    "prepublishOnly": "npm run build && npm run test:ground-truth --prefix ../server && npm run test:ground-truth-python --prefix ../server && npm run test:llm-config && npm run test:byok-redaction"
   },
   "devDependencies": {
     "@codeaudit/engine": "*",
