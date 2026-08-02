@@ -32,7 +32,7 @@ export { findDuplicateLibraries, type DuplicateGroup } from "./duplicates.js";
 export { EQUIVALENT_GROUPS, type EquivalentGroup } from "./data/equivalents.js";
 export { verifyPackage, type PackageVerifyResult } from "./verify.js";
 export { findDeadCodeCandidates, type DeadCodeCandidate } from "./deadcode.js";
-export type { ReviewedFinding } from "./llm.js";
+export { callChatCompletion, type LlmConfig, type ReviewedFinding } from "./llm.js";
 export { computeSummary, type ScanSummary } from "./score.js";
 export { detectEcosystems } from "./detect.js";
 export { parsePythonManifest, type PythonManifest } from "./python/manifest.js";

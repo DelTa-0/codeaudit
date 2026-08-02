@@ -9,6 +9,43 @@ export interface LlmConfig {
   model: string;
 }
 
+/**
+ * The one HTTP operation both reviewFileBatch and suggestAlternativesBatch
+ * need: a single non-streaming chat-completion call. Exported (not just
+ * internal) specifically so its wire-format handling — success parsing,
+ * error status/headers propagation — can be tested against a mock HTTP
+ * server without going through the batching/retry logic around it.
+ */
+export async function callChatCompletion(
+  config: LlmConfig,
+  messages: { role: "system" | "user"; content: string }[],
+): Promise<string> {
+  const res = await fetch(`${config.baseUrl.replace(/\/$/, "")}/chat/completions`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${config.apiKey}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ model: config.model, messages, temperature: 0, max_tokens: 2000 }),
+    signal: AbortSignal.timeout(60_000),
+  });
+  if (!res.ok) {
+    // Preserve the shape reviewFileBatch's existing retry logic already reads
+    // off caught errors (err.status, err.headers["retry-after"]) — that logic
+    // was written against openai SDK error objects and must not need to
+    // change when the SDK is removed (see Task 2).
+    const err = new Error(`LLM request failed: ${res.status}`) as Error & {
+      status: number;
+      headers: Record<string, string>;
+    };
+    err.status = res.status;
+    err.headers = Object.fromEntries(res.headers.entries());
+    throw err;
+  }
+  const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+  return data.choices?.[0]?.message?.content ?? "";
+}
+
 export interface ReviewedFinding {
   filePath: string;
   lineStart: number;
