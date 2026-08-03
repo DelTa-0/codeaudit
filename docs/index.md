@@ -35,6 +35,7 @@ Stripe billing) at the user's request.
 - [[known-issues]] — current bugs, gaps, and things still needing real credentials
 - [[roadmap]] — the 5-milestone plan and what's next (M5+ backlog)
 - [[setup]] — how to run this locally
+- [[api-keys-and-cli]] — every key/token across CLI, MCP, and dashboard, plus full usage instructions for all three
 
 ### Features by milestone
 - [[features/m1-foundation]] — monorepo, docker-compose, migrations, JWT auth, orgs/roles, React shell

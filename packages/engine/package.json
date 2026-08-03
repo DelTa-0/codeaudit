@@ -13,6 +13,10 @@
     "./secrets": {
       "types": "./dist/secrets.d.ts",
       "default": "./dist/secrets.js"
+    },
+    "./agentConfig": {
+      "types": "./dist/agentConfig.d.ts",
+      "default": "./dist/agentConfig.js"
     }
   },
   "scripts": {

@@ -13,6 +13,8 @@ export interface ScanSummary {
     zombies: number;
     filesAnalyzed: number;
     secrets: number;
+    /** Advisory-only for now — see computeSummary's agentConfigCount param. */
+    agentConfig: number;
   };
   /** Whether zombie/dead-code findings got a real LLM verdict. "skipped" is
    * expected for the static-only CLI edition; "partial" on a hosted scan
@@ -27,6 +29,7 @@ export function computeSummary(
   filesAnalyzed: number,
   reviewStatus: ReviewStatus = "skipped",
   secretCount = 0,
+  agentConfigCount = 0,
 ): ScanSummary {
   const vulnerable = deps.filter((d) => d.status === "vulnerable");
   const counts = {
@@ -38,6 +41,7 @@ export function computeSummary(
     zombies: zombies.length,
     filesAnalyzed,
     secrets: secretCount,
+    agentConfig: agentConfigCount,
   };
 
   // Vulnerability penalty is per-package by its highest-severity advisory —
@@ -65,6 +69,16 @@ export function computeSummary(
   // unlike the advisory detectors it is unambiguous — so unlike deprecated /
   // licence / duplicate findings, it moves the score immediately.
   score -= Math.min(40, secretCount * 20);
+  // Agent-config findings (prompt injection, unsafe MCP/permission config) are
+  // deliberately advisory-only this release — score -= 0. Unlike secrets,
+  // these detectors have no track record against real repos yet (the BOM and
+  // emoji-ZWJ carve-outs in agentConfig.ts prove the false-positive surface
+  // wasn't obvious), and CLI-computed scores are stored verbatim with no
+  // server recompute — a penalty here would silently drop every existing
+  // user's score on upgrade, with no code change, because their .mcp.json
+  // says `npx -y`. Visibility (Fix First, its own CLI/dashboard section)
+  // carries this signal instead of the score, until one release of real
+  // output has been observed. See docs/decisions.md.
   score = Math.max(0, Math.min(100, Math.round(score * 10) / 10));
 
   const grade =

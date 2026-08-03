@@ -3,6 +3,7 @@ import type { ReviewedFinding } from "./llm.js";
 import type { DuplicateGroup } from "./duplicates.js";
 import type { LicenseConflict } from "./license.js";
 import type { SecretFinding } from "./secrets.js";
+import type { AgentConfigFinding } from "./agentConfig.js";
 
 export type Effort = "S" | "M" | "L";
 export type PriorityBand = "critical" | "high" | "medium" | "low";
@@ -30,17 +31,36 @@ const EFFORT_ORDER: Record<Effort, number> = { S: 0, M: 1, L: 2 };
  * coincidence rather than by judgement. Kinds are ordered by how confidently
  * actionable they are: a dependency you can delete from a manifest outranks
  * source code an LLM believes is unreachable.
+ *
+ * `agent_instruction_injection` sits below `hardcoded_secret` and above
+ * `phantom_dependency`. A committed live credential is certain, past-tense
+ * harm — it's already compromised. A poisoned instruction file is
+ * conditional harm: it fires on the next agent run, not before. Certain
+ * outranks conditional. It sits above phantom dependencies because both are
+ * attacker-planted, but a phantom dependency fails loudly at install time;
+ * a poisoned CLAUDE.md succeeds silently. (The secrets-vs-injection call is
+ * genuinely arguable — injection can itself cause a credential leak — this
+ * is a considered trade-off, not an obvious one.)
+ *
+ * `agent_config_risk` sits below `phantom_dependency` and above
+ * `vulnerable_dependency`: a standing execution grant (e.g. an MCP server
+ * with `alwaysAllow` running a raw shell) is removable in one line with
+ * high certainty; a CVE needs an upstream fix to exist at all. In practice
+ * `BAND_ORDER` dominates, so this mostly breaks ties among same-band
+ * findings — which is the point of a lexicographic order, not a weighted sum.
  */
 const KIND_ORDER: Record<string, number> = {
-  hardcoded_secret: -1,
-  phantom_dependency: 0,
-  vulnerable_dependency: 1,
-  suspicious_dependency: 2,
-  license_conflict: 3,
-  deprecated_dependency: 4,
-  duplicate_library: 5,
-  unused_dependency: 6,
-  dead_code: 7,
+  hardcoded_secret: 0,
+  agent_instruction_injection: 1,
+  phantom_dependency: 2,
+  agent_config_risk: 3,
+  vulnerable_dependency: 4,
+  suspicious_dependency: 5,
+  license_conflict: 6,
+  deprecated_dependency: 7,
+  duplicate_library: 8,
+  unused_dependency: 9,
+  dead_code: 10,
 };
 const DEFAULT_LIMIT = 20;
 
@@ -50,6 +70,7 @@ export interface RankInput {
   duplicates?: DuplicateGroup[];
   licenseConflicts?: LicenseConflict[];
   secrets?: SecretFinding[];
+  agentConfig?: AgentConfigFinding[];
   limit?: number;
 }
 
@@ -176,6 +197,22 @@ export function rankFindings(input: RankInput): RankedFinding[] {
       why: group.recommendation,
       effort: "M",
       confidence: 0.6,
+    });
+  }
+
+  for (const finding of input.agentConfig ?? []) {
+    const isConfigRisk = finding.category === "dangerous_agent_config" || finding.category === "unverified_mcp_package";
+    const isPackageRule = finding.rule.startsWith("mcp_package_");
+    items.push({
+      band: finding.severity,
+      kind: isConfigRisk ? "agent_config_risk" : "agent_instruction_injection",
+      title: `${finding.rule.replace(/_/g, " ")} in ${finding.filePath}`,
+      location: `${finding.filePath}:${finding.line}`,
+      why: isConfigRisk
+        ? `${finding.message} Pin, scope, or remove the server.`
+        : `${finding.message} Delete the text, and treat every agent action taken since it landed as suspect.`,
+      effort: isPackageRule ? "M" : "S",
+      confidence: finding.tier === 1 ? 1 : 0.7,
     });
   }
 

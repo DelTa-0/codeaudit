@@ -103,6 +103,8 @@ export interface ScanSummary {
     filesAnalyzed: number;
     /** Absent on scans from before secret detection shipped. */
     secrets?: number;
+    /** Absent on scans from before agent-config auditing shipped. Advisory only — never affects `score`. */
+    agentConfig?: number;
   };
   /** "skipped" means zombie findings are unfiltered static candidates (no LLM verdict) — score is noisier. */
   reviewStatus?: "full" | "partial" | "skipped";
@@ -195,14 +197,24 @@ export interface CodeFinding {
   finding_type: string;
   confidence_score: string | null;
   llm_reasoning: string | null;
-  detail?: {
-    provider: string;
-    redacted: string;
-    tier?: number;
-    removedFromHead?: boolean;
-    firstSeenCommit?: string;
-    lastSeenCommit?: string;
-  } | null;
+  detail?:
+    | {
+        provider: string;
+        redacted: string;
+        tier?: number;
+        removedFromHead?: boolean;
+        firstSeenCommit?: string;
+        lastSeenCommit?: string;
+      }
+    | {
+        category: string;
+        rule: string;
+        severity: "critical" | "high" | "medium";
+        tier: number;
+        surface: string;
+        evidence: string;
+      }
+    | null;
 }
 
 export interface Member {

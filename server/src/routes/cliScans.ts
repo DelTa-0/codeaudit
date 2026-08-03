@@ -67,6 +67,10 @@ const uploadSchema = z.object({
     // silently stored a summary claiming zero while `priorities` (below)
     // still listed them — a real gap found in the pre-1.0.0 release review.
     secrets: z.number().int().min(0).default(0),
+    // Same trap, same fix: without this, an --upload from a CLI that found
+    // agent-config risks would silently store zero while `priorities` still
+    // listed them.
+    agentConfig: z.number().int().min(0).default(0),
   }),
   reviewStatus: z.enum(["full", "partial", "skipped"]).optional(),
   llmReviewSource: z.literal("cli-byok").optional(),

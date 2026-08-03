@@ -54,6 +54,7 @@ export async function processPrCommentJob(scanJobId: string) {
   const deltaText = delta === null ? "" : Number(delta) >= 0 ? ` (+${delta})` : ` (${delta})`;
   const vulnerable = s.counts.vulnerable ?? 0;
   const secretCount = s.counts.secrets ?? 0;
+  const agentConfigCount = s.counts.agentConfig ?? 0;
   const recommendation =
     secretCount > 0 || s.counts.phantom > 0 || vulnerable > 0
       ? "🔴 **Request changes** — hardcoded secrets, phantom dependencies, and/or known vulnerabilities must be resolved before merge."
@@ -80,6 +81,7 @@ ${fixFirst}
 | Finding | Count |
 | --- | --- |
 | 🔑 Hardcoded secrets | ${secretCount} |
+| 🤖 Agent config risks | ${agentConfigCount} |
 | 🚨 Phantom dependencies | ${s.counts.phantom} |
 | 🛡️ Known vulnerabilities | ${vulnerable} |
 | ⚠️ Suspicious packages | ${s.counts.suspicious} |

@@ -67,3 +67,17 @@ export {
   type SecretFinding,
   type FindSecretsOptions,
 } from "./secrets.js";
+export {
+  classifyAgentSurface,
+  scanAgentText,
+  auditAgentJson,
+  collectMcpPackageRefs,
+  redactSnippet,
+  findAgentConfigIssues,
+  findMcpPackageRefs,
+  type AgentSurface,
+  type AgentConfigCategory,
+  type AgentConfigFinding,
+  type McpPackageRef,
+} from "./agentConfig.js";
+export { verifyAgentConfigPackages } from "./agentPackages.js";

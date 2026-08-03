@@ -45,7 +45,10 @@ export function ScanReport() {
   // section, matching ScanDetail.tsx's Secrets card and lib/report.ts's
   // Word-export equivalent.
   const secretFindings = codeFindings.filter((f) => f.finding_type.startsWith("hardcoded_secret"));
-  const deadCodeFindings = codeFindings.filter((f) => !f.finding_type.startsWith("hardcoded_secret"));
+  const agentConfigFindings = codeFindings.filter((f) => f.finding_type.startsWith("agent_"));
+  const deadCodeFindings = codeFindings.filter(
+    (f) => !f.finding_type.startsWith("hardcoded_secret") && !f.finding_type.startsWith("agent_"),
+  );
 
   return (
     <div className="report-page mx-auto max-w-4xl px-6 py-8">
@@ -178,20 +181,54 @@ export function ScanReport() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {secretFindings.map((f) => (
-                <tr key={f.id}>
-                  <td className="py-1 font-mono">{f.detail?.provider ?? "Unknown provider"}</td>
-                  <td className="py-1 font-mono text-xs text-muted">
-                    {f.file_path}
-                    {f.line_start ? `:${f.line_start}` : ""}
-                  </td>
-                  <td className="py-1 text-xs text-muted">
-                    {f.detail?.removedFromHead
-                      ? "Still recoverable from git history — rotate this credential. Deleting the file does not revoke it."
-                      : "Remove this from source, then rotate the credential."}
-                  </td>
-                </tr>
-              ))}
+              {secretFindings.map((f) => {
+                const detail = f.detail && "provider" in f.detail ? f.detail : null;
+                return (
+                  <tr key={f.id}>
+                    <td className="py-1 font-mono">{detail?.provider ?? "Unknown provider"}</td>
+                    <td className="py-1 font-mono text-xs text-muted">
+                      {f.file_path}
+                      {f.line_start ? `:${f.line_start}` : ""}
+                    </td>
+                    <td className="py-1 text-xs text-muted">
+                      {detail?.removedFromHead
+                        ? "Still recoverable from git history — rotate this credential. Deleting the file does not revoke it."
+                        : "Remove this from source, then rotate the credential."}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </Section>
+      )}
+
+      {agentConfigFindings.length > 0 && (
+        <Section title={`Agent config risks (${agentConfigFindings.length})`}>
+          <table className="report-table w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-xs text-muted">
+                <th className="pb-1 font-medium">Rule</th>
+                <th className="pb-1 font-medium">Severity</th>
+                <th className="pb-1 font-medium">Location</th>
+                <th className="pb-1 font-medium">Guidance</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {agentConfigFindings.map((f) => {
+                const detail = f.detail && "rule" in f.detail ? f.detail : null;
+                return (
+                  <tr key={f.id}>
+                    <td className="py-1 font-mono">{detail?.rule ?? f.finding_type}</td>
+                    <td className="py-1 text-xs text-muted">{detail?.severity ?? "—"}</td>
+                    <td className="py-1 font-mono text-xs text-muted">
+                      {f.file_path}
+                      {f.line_start ? `:${f.line_start}` : ""}
+                    </td>
+                    <td className="py-1 text-xs text-muted">{f.llm_reasoning ?? ""}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </Section>

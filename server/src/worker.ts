@@ -39,10 +39,14 @@ import {
   checkLicenseConflicts,
   rankFindings,
   findSecrets,
+  findAgentConfigIssues,
+  findMcpPackageRefs,
+  verifyAgentConfigPackages,
   type DependencyVerdict,
   type DeadCodeCandidate,
   type ResolvedTree,
   type SecretFinding,
+  type AgentConfigFinding,
 } from "@codeaudit/engine";
 import { reviewCandidatesWithLlm, suggestAlternatives } from "@codeaudit/engine";
 import { config } from "./lib/config.js";
@@ -290,6 +294,64 @@ async function processScanJob(scanJobId: string) {
       );
     }
 
+    // Agent-config auditing: prompt injection and unsafe MCP/permission
+    // config in files the AI agent itself trusts as instructions. Placed
+    // after the LLM review pass for the same reason as secrets, only more
+    // so — these files contain text engineered specifically to hijack an
+    // LLM, so this must never become the channel that feeds a poisoned
+    // CLAUDE.md into that call. Two separate try/catches: a sync,
+    // registry-free detector and a network-dependent MCP-package check, so
+    // one failing (e.g. registry unreachable) never discards the other.
+    let agentConfigFindings: AgentConfigFinding[] = [];
+    try {
+      agentConfigFindings = findAgentConfigIssues(dir);
+    } catch (err) {
+      console.error(
+        `[scan ${scanJobId}] agent-config scan failed (continuing without it):`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+    try {
+      const mcpRefs = findMcpPackageRefs(dir);
+      if (mcpRefs.length) {
+        agentConfigFindings = [...agentConfigFindings, ...(await verifyAgentConfigPackages(mcpRefs))];
+      }
+    } catch (err) {
+      console.error(
+        `[scan ${scanJobId}] MCP package verification failed (continuing without it):`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+    for (const f of agentConfigFindings) {
+      const findingType =
+        f.category === "dangerous_agent_config" || f.category === "unverified_mcp_package"
+          ? "agent_config_risk"
+          : "agent_instruction_injection";
+      await query(
+        `INSERT INTO code_findings
+           (scan_job_id, file_path, line_start, line_end, symbol_name, finding_type,
+            confidence_score, llm_reasoning, detail)
+         VALUES ($1, $2, $3, $3, $4, $5, $6, $7, $8)`,
+        [
+          scanJobId,
+          f.filePath,
+          f.line,
+          f.rule,
+          findingType,
+          f.tier === 1 ? 1.0 : 0.7,
+          f.message,
+          JSON.stringify({
+            category: f.category,
+            rule: f.rule,
+            severity: f.severity,
+            tier: f.tier,
+            surface: f.surface,
+            evidence: f.evidence,
+          }),
+        ],
+      );
+    }
+
     await setStatus(scanJobId, "analyzing", "Attributing AI-assisted code");
     const aiStats = await computeAiAuthorship(dir, zombies);
 
@@ -313,6 +375,7 @@ async function processScanJob(scanJobId: string) {
         duplicates,
         licenseConflicts,
         secrets: [...secrets, ...historySecrets],
+        agentConfig: agentConfigFindings,
       });
     } catch (err) {
       console.error(
@@ -321,7 +384,14 @@ async function processScanJob(scanJobId: string) {
       );
     }
     const summary = {
-      ...computeSummary(deps, zombies, fileCount, reviewStatus, secrets.length + historySecrets.length),
+      ...computeSummary(
+        deps,
+        zombies,
+        fileCount,
+        reviewStatus,
+        secrets.length + historySecrets.length,
+        agentConfigFindings.length,
+      ),
       ai: aiStats,
       priorities,
       advisories: { duplicates, licenseConflicts },
@@ -336,7 +406,7 @@ async function processScanJob(scanJobId: string) {
       summary.score,
     ]);
     console.log(
-      `[scan ${scanJobId}] ${repo.full_name} complete — score ${summary.score} (${summary.counts.secrets ?? 0} secrets, ${summary.counts.phantom} phantom, ${summary.counts.unused} unused, ${zombies.length} zombies)`,
+      `[scan ${scanJobId}] ${repo.full_name} complete — score ${summary.score} (${summary.counts.secrets ?? 0} secrets, ${summary.counts.agentConfig ?? 0} agent-config, ${summary.counts.phantom} phantom, ${summary.counts.unused} unused, ${zombies.length} zombies)`,
     );
 
     const scanRow = await queryOne<{ pr_number: number | null }>(
@@ -359,7 +429,7 @@ async function processScanJob(scanJobId: string) {
         await createCheckRun(Number(repo.installation_id), repo.full_name, scan.commit_sha, {
           conclusion: passed ? "success" : "failure",
           title: `Score ${summary.score} (${summary.grade}) — threshold ${threshold}`,
-          summary: `| Finding | Count |\n| --- | --- |\n| 🔑 Hardcoded secrets | ${summary.counts.secrets ?? 0} |\n| Phantom dependencies | ${summary.counts.phantom} |\n| Suspicious packages | ${summary.counts.suspicious} |\n| Unused dependencies | ${summary.counts.unused} |\n| Zombie code | ${summary.counts.zombies} |\n\nAutomated analysis — verify before acting. Configure or disable this check in CodeAudit repo settings.`,
+          summary: `| Finding | Count |\n| --- | --- |\n| 🔑 Hardcoded secrets | ${summary.counts.secrets ?? 0} |\n| 🤖 Agent config risks | ${summary.counts.agentConfig ?? 0} |\n| Phantom dependencies | ${summary.counts.phantom} |\n| Suspicious packages | ${summary.counts.suspicious} |\n| Unused dependencies | ${summary.counts.unused} |\n| Zombie code | ${summary.counts.zombies} |\n\nAutomated analysis — verify before acting. Configure or disable this check in CodeAudit repo settings.`,
         });
         console.log(`[gate] check run posted for ${repo.full_name}@${scan.commit_sha.slice(0, 7)}: ${passed ? "success" : "failure"}`);
       } catch (err) {

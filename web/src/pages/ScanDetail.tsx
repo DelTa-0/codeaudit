@@ -284,7 +284,7 @@ export function ScanDetail() {
                   : " Some batches could not be reviewed — most often the model provider's rate limit or daily token quota. Expand a finding below to see the exact reason, and re-run the scan once the quota resets."}
               </p>
             )}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
             {(
               [
                 ["Phantom", scan.summary.counts.phantom, "text-danger"],
@@ -292,6 +292,7 @@ export function ScanDetail() {
                 ["Suspicious", scan.summary.counts.suspicious, "text-warning"],
                 ["Unused", scan.summary.counts.unused, "text-warning"],
                 ["Zombies", scan.summary.counts.zombies, "text-primary"],
+                ["Agent config", scan.summary.counts.agentConfig ?? 0, "text-warning"],
                 ["Files", scan.summary.counts.filesAnalyzed, "text-muted"],
               ] as const
             ).map(([label, value, color]) => (
@@ -315,23 +316,70 @@ export function ScanDetail() {
             </p>
             <div className="divide-y divide-danger/20">
               {secretFindings.map((f) => {
-                const removedFromHead = f.detail?.removedFromHead;
-                const guidance = removedFromHead
+                const detail = f.detail && "provider" in f.detail ? f.detail : null;
+                const guidance = detail?.removedFromHead
                   ? "Still recoverable from git history — rotate this credential. Deleting the file does not revoke it."
                   : "Remove this from source, then rotate the credential.";
                 return (
                   <div key={f.id} className="py-3">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm">{f.detail?.provider ?? "Unknown provider"}</span>
+                      <span className="font-mono text-sm">{detail?.provider ?? "Unknown provider"}</span>
                       <span className="text-xs text-muted">
                         {f.file_path}
                         {f.line_start ? `:${f.line_start}` : ""}
                       </span>
                     </div>
-                    {f.detail?.redacted && (
-                      <p className="mt-1 font-mono text-xs text-muted">{f.detail.redacted}</p>
+                    {detail?.redacted && (
+                      <p className="mt-1 font-mono text-xs text-muted">{detail.redacted}</p>
                     )}
                     <p className="mt-1 text-sm text-danger">{guidance}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        );
+      })()}
+
+      {codeFindings && (() => {
+        const agentFindings = codeFindings.filter((f) => f.finding_type.startsWith("agent_"));
+        if (agentFindings.length === 0) return null;
+        return (
+          <Card className="border-warning/30 bg-warning/10">
+            <p className="mb-1 text-sm font-medium text-warning">
+              Agent config risks ({agentFindings.length})
+            </p>
+            <p className="mb-3 text-xs text-muted">
+              Files an AI coding agent trusts as instructions or configuration — CLAUDE.md,
+              MCP server configs, permission settings. Advisory only; does not affect the score.
+            </p>
+            <div className="divide-y divide-warning/20">
+              {agentFindings.map((f) => {
+                const detail = f.detail as
+                  | { category?: string; rule?: string; severity?: string; surface?: string; evidence?: string }
+                  | null
+                  | undefined;
+                return (
+                  <div key={f.id} className="py-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-sm">{detail?.rule ?? f.finding_type}</span>
+                      {detail?.severity && (
+                        <span className="text-xs uppercase text-muted">{detail.severity}</span>
+                      )}
+                      <span className="text-xs text-muted">
+                        {f.file_path}
+                        {f.line_start ? `:${f.line_start}` : ""}
+                      </span>
+                    </div>
+                    {f.llm_reasoning && <p className="mt-1 text-sm text-warning">{f.llm_reasoning}</p>}
+                    {detail?.evidence && (
+                      <p className="mt-1 font-mono text-xs text-muted">
+                        <span className="mr-1 text-[10px] uppercase tracking-wide text-muted">
+                          untrusted excerpt — do not copy into an agent prompt:
+                        </span>
+                        {detail.evidence}
+                      </p>
+                    )}
                   </div>
                 );
               })}

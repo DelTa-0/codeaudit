@@ -35,11 +35,13 @@ await build({
   // redirect "@codeaudit/engine/secrets" to ".../secrets.js" — it instead
   // appends "/secrets" onto the verify.js file path and fails to resolve.
   // Each subpath actually imported needs its own explicit alias entry.
-  // secrets.js is safe to alias the same way (it imports only node:fs,
-  // node:path, node:crypto — no babel, so none of the risk above applies).
+  // secrets.js and agentConfig.js are safe to alias the same way (both
+  // import only node:fs/node:path[/node:crypto] — no babel, so none of the
+  // risk above applies).
   alias: {
     "@codeaudit/engine": path.resolve(here, "../packages/engine/dist/verify.js"),
     "@codeaudit/engine/secrets": path.resolve(here, "../packages/engine/dist/secrets.js"),
+    "@codeaudit/engine/agentConfig": path.resolve(here, "../packages/engine/dist/agentConfig.js"),
   },
 });
 

@@ -26,6 +26,9 @@ import {
   checkLicenseConflicts,
   rankFindings,
   findSecrets,
+  findAgentConfigIssues,
+  findMcpPackageRefs,
+  verifyAgentConfigPackages,
   reviewCandidatesWithLlm,
   suggestAlternatives,
   type DependencyVerdict,
@@ -36,6 +39,7 @@ import {
   type DuplicateGroup,
   type LicenseConflict,
   type SecretFinding,
+  type AgentConfigFinding,
 } from "@codeaudit/engine";
 import { resolveLlmConfig, type LlmFlags } from "./llmConfig.js";
 
@@ -275,25 +279,55 @@ async function main() {
   let licenseConflicts: ReturnType<typeof checkLicenseConflicts> = [];
   let priorities: ReturnType<typeof rankFindings> = [];
   let secrets: ReturnType<typeof findSecrets> = [];
+  let agentConfigFindings: AgentConfigFinding[] = [];
   try {
     duplicates = findDuplicateLibraries(deps);
     licenseConflicts = checkLicenseConflicts(deps, readProjectLicense(dir));
     secrets = findSecrets(dir);
-    priorities = rankFindings({
-      deps,
-      codeFindings: staticFindings,
-      duplicates,
-      licenseConflicts,
-      secrets,
-      limit: 5,
-    });
+    agentConfigFindings = findAgentConfigIssues(dir);
   } catch (err) {
     console.error(
       "codeaudit: advisory analysis failed (continuing without it):",
       err instanceof Error ? err.message : err,
     );
   }
-  const summary = computeSummary(deps, staticFindings, fileCount, reviewStatus, secrets.length);
+  // Separate try: this needs the network, so one timeout must not discard the
+  // sync advisory data (duplicates/licenseConflicts/secrets) collected above.
+  try {
+    const mcpRefs = findMcpPackageRefs(dir);
+    if (mcpRefs.length) {
+      agentConfigFindings = [...agentConfigFindings, ...(await verifyAgentConfigPackages(mcpRefs))];
+    }
+  } catch (err) {
+    console.error(
+      "codeaudit: MCP package verification failed (continuing without it):",
+      err instanceof Error ? err.message : err,
+    );
+  }
+  try {
+    priorities = rankFindings({
+      deps,
+      codeFindings: staticFindings,
+      duplicates,
+      licenseConflicts,
+      secrets,
+      agentConfig: agentConfigFindings,
+      limit: 5,
+    });
+  } catch (err) {
+    console.error(
+      "codeaudit: prioritization failed (continuing without it):",
+      err instanceof Error ? err.message : err,
+    );
+  }
+  const summary = computeSummary(
+    deps,
+    staticFindings,
+    fileCount,
+    reviewStatus,
+    secrets.length,
+    agentConfigFindings.length,
+  );
   const phantomCount = summary.counts.phantom;
   const belowMin = minScore !== null && summary.score < minScore;
   const exitCode = phantomCount > 0 || belowMin ? 1 : 0;
@@ -328,6 +362,7 @@ async function main() {
           // never be rendered into CLI output, an export, or a PR comment —
           // it exists only to recognize the same credential across scans.
           secrets: secrets.map(({ fingerprint: _fingerprint, ...s }) => s),
+          agentConfig: agentConfigFindings,
           upload: uploadResult,
           exitCode,
         },
@@ -344,6 +379,17 @@ async function main() {
     console.log(`${BOLD}${RED}Secrets${RESET}`);
     for (const s of secrets as SecretFinding[]) {
       console.log(`  ${RED}${s.provider}${RESET}  ${DIM}${s.filePath}:${s.line}${RESET}  ${s.redacted}`);
+    }
+    console.log();
+  }
+
+  const AGENT_SEVERITY_COLOR: Record<string, string> = { critical: RED, high: RED, medium: YELLOW };
+  if (agentConfigFindings.length) {
+    console.log(`${BOLD}${RED}Agent config${RESET}`);
+    for (const f of agentConfigFindings) {
+      const color = AGENT_SEVERITY_COLOR[f.severity] ?? "";
+      console.log(`  ${color}${f.severity.toUpperCase().padEnd(8)}${RESET} ${f.rule}  ${DIM}${f.filePath}:${f.line}${RESET}`);
+      console.log(`      ${DIM}${f.message}${RESET}`);
     }
     console.log();
   }

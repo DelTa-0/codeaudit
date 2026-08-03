@@ -2,7 +2,7 @@
 type: reference
 title: "Decisions"
 created: 2026-07-17
-updated: 2026-07-17
+updated: 2026-08-03
 tags:
   - project/codeaudit
 status: evergreen
@@ -13,6 +13,80 @@ related:
 ---
 
 # Decisions (ADR-style log)
+
+## Agent config auditing: advisory-only scoring, path allow-list, no new dependencies (2026-08-03)
+
+CodeAudit's wedge is framing risk in AI terms rather than generic security
+terms. The gap that fit that wedge and wasn't covered by any named
+competitor (Socket.dev, Snyk, CodeScene, SonarQube) or by CodeAudit itself:
+the AI coding agent's own config — `CLAUDE.md`, `AGENTS.md`, `.cursorrules`,
+MCP server configs, permission/settings files, skill files — is a file the
+agent *trusts as instructions*, not just code it edits. Poisoning one
+hijacks every future agent session against the repo, not just one diff, and
+hidden Unicode characters make the attack invisible in an ordinary code
+review. New engine modules: `packages/engine/src/agentConfig.ts` (pure,
+sync, offline — hidden/invisible-character detection, injection-phrase
+matching, credential-exfiltration heuristics, unsafe MCP/permission config)
+and `packages/engine/src/agentPackages.ts` (recomposes the existing
+`verifyPackage` guardrail against packages an MCP config points at — zero
+new detection logic, same "recompose, don't invent" seam `verify.ts`
+documents for its own MCP use).
+
+**Path allow-list, not a content deny-list, is the false-positive control.**
+`classifyAgentSurface` only recognizes a fixed set of filenames/paths as an
+agent surface; everything else — including this engine's own `docs/`,
+which discusses prompt injection at length, and `agentConfig.ts` itself,
+which names every payload it detects — is simply never inspected. Two
+must-not-fire cases the design didn't anticipate until testing: a byte-order
+mark (U+FEFF) at a file's first byte is not an attack, and U+200D between
+two non-ASCII pictographs is an ordinary emoji ZWJ sequence (a family
+emoji), not a hidden character. Both are explicit carve-outs now, and both
+are proof the false-positive surface here isn't yet well understood — which
+is exactly why scoring stays advisory (see below).
+
+**Scoring: advisory-only this release — `score -= 0`.** Precedent
+(`docs/superpowers/specs/2026-07-31-phase1-signal-design.md`) scored secrets
+immediately because `AKIA`-prefixed patterns have a decade of industry
+false-positive data behind them, and made Phase-1a's advisories (deprecated/
+licence/duplicate) advisory-only for one release specifically because
+"adding penalties silently moves every repo's score and a merge gate
+configured at 70 could begin failing on unchanged code." These detectors
+have no such track record — they're written against a threat model
+published this year — and the failure mode is worse here than for Phase 1a:
+`server/src/routes/cliScans.ts` stores CLI-computed scores **verbatim, no
+server recompute**, so a penalty would drop every `npx codeorion` user's
+score the moment they upgrade, on completely unchanged repos, because their
+`.mcp.json` uses the standard `npx -y` install idiom. `counts.agentConfig`
+is threaded through `computeSummary` now (trailing optional param,
+default 0) so weighting it in later is a one-line change once real output
+has been observed — visibility (rank in Fix First, its own CLI/dashboard
+section, a PR-comment count row) carries the signal instead, in the
+meantime.
+
+**No new npm dependencies, no DB migration, no new HTTP requests beyond the
+existing per-package registry check.** Findings ride the existing
+`code_findings.detail JSONB` column (added by `004_finding_detail.sql` for
+exactly "finding types that do not fit the original dead-code-shaped
+columns" — a commit SHA was a genuinely new *dimension* requiring that
+migration; new keys in a bag built for new keys are not). `finding_type` is
+unconstrained `TEXT`, same precedent as the `vulnerable` status and
+`hardcoded_secret_history` reusing existing columns with zero schema
+change.
+
+**Redaction is stricter than the secrets precedent, and for a different
+reason.** `secrets.ts`'s `redact()` exists because a secrets scanner that
+stores secrets is a liability. `agentConfig.ts`'s `redactSnippet` exists
+because a prompt-injection scanner that echoes an injection payload's
+*mechanism* verbatim is itself a delivery vector — the destination is
+another LLM's context window (the MCP tool response, the dashboard, a PR
+comment read by bots and CI). `redactSnippet` converts every invisible/
+control character to a visible literal token and strips markdown-forgery
+characters, but deliberately does **not** hide ordinary visible text like a
+`curl` command or URL — the point of showing `evidence` is so a human can
+see what's dangerous; only the mechanism that would let it hide or execute
+gets neutralized. Verified end-to-end: no raw zero-width, bidi-override, or
+Unicode-tag byte reaches the CLI bundle, `--json`, `code_findings`, an
+`--upload` body, the MCP tool response, or a PR comment.
 
 ## Report export: browser print for PDF, Word-HTML for .doc — no new dependencies (2026-07-22)
 
