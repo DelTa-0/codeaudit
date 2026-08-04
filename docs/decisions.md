@@ -2,7 +2,7 @@
 type: reference
 title: "Decisions"
 created: 2026-07-17
-updated: 2026-08-03
+updated: 2026-08-04
 tags:
   - project/codeaudit
 status: evergreen
@@ -13,6 +13,54 @@ related:
 ---
 
 # Decisions (ADR-style log)
+
+## Distributing the agent-config skill: two copies, not one, plus real end-to-end verification (2026-08-04)
+
+The `codeorion-guardrails` skill (below) shipped first as a single file at
+`.claude/skills/codeorion-guardrails/SKILL.md` — but that only auto-loads
+for someone working *inside this monorepo*, which is nearly the opposite of
+the actual audience: a developer who installed `codeorion-mcp` in their own,
+unrelated project. A project-scoped skill dogfoods correctly but distributes
+to nobody.
+
+**Considered:** making `.claude/skills/codeorion-guardrails/` itself the
+plugin root, by nesting `.claude-plugin/plugin.json` inside it and pointing
+a repo-root `marketplace.json` at that path — zero file duplication.
+**Rejected**, confirmed by research against the actual plugin docs: a
+directory under `.claude/skills/` is *auto-discovered* as a local project
+skill; the same directory *also* being a registered marketplace plugin
+source creates two live registrations of the identical files
+(`codeorion-guardrails@skills-dir` and `codeorion-guardrails@codeaudit`) —
+confusing, and not how the mechanism is meant to be used.
+
+**Decision:** two deliberately separate copies — `.claude/skills/…` stays
+for local dogfooding, `plugins/codeorion-guardrails/` (with its own
+`.claude-plugin/plugin.json`) is the one a repo-root
+`.claude-plugin/marketplace.json` lists for external installation via
+`/plugin marketplace add DelTa-0/codeaudit` then `/plugin install
+codeorion-guardrails@codeaudit`. The duplication cost is one file; the
+alternative was structural confusion for every future reader.
+
+**This required `main` to actually be current.** The marketplace add
+command resolves against a repo's *default* branch unless told otherwise;
+this project's default branch is `main`, and all of this work — like most
+recent work — had only ever landed on `dev`. Verified directly (fetching
+`raw.githubusercontent.com/.../main/.claude-plugin/marketplace.json`, which
+404'd) before assuming anything: the marketplace file plainly did not exist
+on `main`. Fixed with a fast-forward (`main` was a strict git ancestor of
+`dev`, so this was conflict-free) and a push, re-verified the same way
+afterward.
+
+**Verification was real, not simulated**, for the parts that could be:
+a subagent-run RED/GREEN test proved the skill's *content* changes agent
+behavior (§ below), but proving the *distribution mechanism* itself needed
+an actual Claude Code CLI, which no available tool can drive — that part
+was done by the user, live, in a real terminal, and the exact command
+output (`Successfully added marketplace: codeaudit`, then `✓ Installed
+codeorion-guardrails. Plugin is now active.`) was read back rather than
+assumed from a green build. The first attempt failed silently
+(un-diagnosed, not a version issue) and a clean retry succeeded — recorded
+in [[roadmap]] rather than treated as proof the mechanism doesn't work.
 
 ## Agent config auditing: advisory-only scoring, path allow-list, no new dependencies (2026-08-03)
 

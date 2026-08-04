@@ -42,14 +42,39 @@ codeorion-mcp@1.1.0`), not local workspace resolution — an early check
 `npx`'d from inside this repo, resolved to the local build instead of the
 registry, and falsely reported the tool as already live.
 
-Also shipped: a new Claude Code skill,
-`.claude/skills/codeorion-guardrails/`, instructing an agent to call
+Also shipped: a new Claude Code skill instructing an agent to call
 `verify_package`/`scan_secrets`/`audit_agent_config` not just before
 installing or writing, but when merely *reading or editing near* an
 unverified package or an untrusted agent-config file — a real gap found by
 baseline-testing a subagent, which added an unrelated field to a
 `package.json` without ever checking a phantom-shaped dependency already
 sitting in it.
+
+The skill exists in two deliberately separate copies (see
+[[decisions#Distributing the agent-config skill]] for why): a
+project-scoped one at `.claude/skills/codeorion-guardrails/` (auto-loads
+for anyone working in this repo) and an installable-plugin one at
+`plugins/codeorion-guardrails/`, listed in a new repo-root
+`.claude-plugin/marketplace.json` so any developer, not just contributors
+to this monorepo, can get it:
+
+```
+/plugin marketplace add DelTa-0/codeaudit
+/plugin install codeorion-guardrails@codeaudit
+```
+
+**Verified working end-to-end against the real Claude Code CLI (v2.1.221)**
+after fast-forwarding `main` to `dev` and pushing — the marketplace add
+initially failed silently on the first attempt (vague confirmation, no
+error, marketplace absent from `/plugin marketplace list`); a clean retry
+of the same command succeeded (`Successfully added marketplace: codeaudit`),
+and `/plugin install codeorion-guardrails@codeaudit` reported `✓ Installed
+codeorion-guardrails. Plugin is now active.` The root cause of the first
+silent failure was never pinned down (not a version issue — 2.1.221 is well
+past the documented v2.1.196 GitHub-shorthand parsing fix); a retry
+resolved it cleanly, so it's recorded here rather than in
+[[known-issues]], which reserves entries for reproducible, root-caused
+problems.
 
 ## Second npm rename: `codematrix` → `codeorion` (2026-08-02)
 

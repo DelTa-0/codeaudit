@@ -180,9 +180,11 @@ sat committed-but-unpublished for days, so every CLI run audited stale code).
 lockfile analysis, LLM zombie review (including CLI bring-your-own-key
 review and hardcoded-secret detection), dashboard, CLI (published to npm as
 `codeorion`), MCP server (published to npm as `codeorion-mcp`, including
-agent-config auditing for prompt injection), GitHub webhooks → scan → PR
-comment (verified on a real PR), report export, org/RBAC, dev-mode plan
-switching.
+agent-config auditing for prompt injection), a companion `codeorion-guardrails`
+Claude Code skill installable via `/plugin marketplace add DelTa-0/codeaudit`
+(verified against a real Claude Code CLI, not just simulated), GitHub
+webhooks → scan → PR comment (verified on a real PR), report export,
+org/RBAC, dev-mode plan switching.
 
 **CLI/MCP publish status:** after two prior rejections (`codeaudit-scan` →
 `codematrix` 403'd for being too close to an existing `code-matrix`
