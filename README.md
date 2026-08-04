@@ -296,9 +296,13 @@ An MCP server your AI coding agent can call *before* installing a package,
 to check whether it's real, well-maintained, and free of known CVEs —
 catching hallucinated packages and typosquats at the moment an agent is
 about to install them, rather than in a scan after the fact. Also checks
-file content for hardcoded secrets before it's written. See
+file content for hardcoded secrets before it's written, and audits files an
+agent trusts as instructions (`CLAUDE.md`, MCP configs, permission
+settings) for prompt injection and unsafe config. See
 [`mcp/README.md`](mcp/README.md) for setup (Claude Code, Cursor, and any
-other MCP-compatible agent).
+other MCP-compatible agent) — Claude Code users can install the companion
+`codeorion-guardrails` skill as a one-command plugin so these checks fire
+on more than just installs and writes.
 
 ### CLI/CI upload tracking
 

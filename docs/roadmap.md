@@ -2,7 +2,7 @@
 type: reference
 title: "Roadmap"
 created: 2026-07-17
-updated: 2026-07-17
+updated: 2026-08-04
 tags:
   - project/codeaudit
 status: developing
@@ -12,6 +12,44 @@ related:
 ---
 
 # Roadmap
+
+## Agent config auditing shipped; `codeorion`/`codeorion-mcp` actually published (2026-08-02 – 2026-08-04)
+
+Real (non-dry-run) `npm publish` succeeded for both packages under the
+`codeorion` name: `codeorion@1.0.0` and `codeorion-mcp@1.0.0`, both
+2026-08-02 — closing out the publish uncertainty from the rename below (see
+[[known-issues#`codematrix` name rejected by npm]]).
+
+Added a new detector: `packages/engine/src/agentConfig.ts` +
+`agentPackages.ts` scan files an AI coding agent trusts as instructions
+(`CLAUDE.md`, `AGENTS.md`, `.cursorrules`, MCP server configs, permission
+settings, skill files) for hidden/invisible Unicode, prompt-injection
+phrasing, credential-exfiltration instructions, and unsafe MCP/permission
+config (`alwaysAllow`, raw shell commands, unpinned or phantom packages —
+the last reusing the existing `verifyPackage` guardrail, zero new detection
+logic). Wired into the worker pipeline, CLI (`Agent config` output section
++ `--json` key), a new MCP tool (`audit_agent_config`), the dashboard, PR
+comments, and exported reports. Advisory-only this release — `score -= 0`
+— matching the precedent set for Phase 1a's advisory findings: these
+detectors have no false-positive track record yet, and CLI-computed scores
+are stored verbatim with no server recompute, so a penalty would have
+silently dropped every existing user's score on upgrade. Full detail in
+[[decisions#Agent config auditing]].
+
+`codeorion-mcp` bumped to `1.1.0` (2026-08-04) to ship `audit_agent_config`
+to real users; verified against the actual published tarball (`npm pack
+codeorion-mcp@1.1.0`), not local workspace resolution — an early check
+`npx`'d from inside this repo, resolved to the local build instead of the
+registry, and falsely reported the tool as already live.
+
+Also shipped: a new Claude Code skill,
+`.claude/skills/codeorion-guardrails/`, instructing an agent to call
+`verify_package`/`scan_secrets`/`audit_agent_config` not just before
+installing or writing, but when merely *reading or editing near* an
+unverified package or an untrusted agent-config file — a real gap found by
+baseline-testing a subagent, which added an unrelated field to a
+`package.json` without ever checking a phantom-shaped dependency already
+sitting in it.
 
 ## Second npm rename: `codematrix` → `codeorion` (2026-08-02)
 

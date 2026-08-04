@@ -1,0 +1,14 @@
+{
+  "name": "codeaudit",
+  "owner": {
+    "name": "CodeAudit",
+    "url": "https://github.com/DelTa-0/codeaudit"
+  },
+  "plugins": [
+    {
+      "name": "codeorion-guardrails",
+      "source": "./plugins/codeorion-guardrails",
+      "description": "Enforces codeorion-mcp guardrail checks (verify_package, scan_secrets, audit_agent_config) at every trust decision, not just installs and writes."
+    }
+  ]
+}

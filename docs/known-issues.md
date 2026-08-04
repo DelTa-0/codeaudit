@@ -2,7 +2,7 @@
 type: reference
 title: "Known Issues"
 created: 2026-07-17
-updated: 2026-07-17
+updated: 2026-08-04
 tags:
   - project/codeaudit
 status: developing
@@ -14,7 +14,7 @@ related:
 
 # Known Issues
 
-## `codematrix` name rejected by npm — renamed to `codeorion`, real publish still pending (2026-08-02)
+## ~~`codematrix` name rejected by npm — renamed to `codeorion`, real publish still pending~~ — RESOLVED (2026-08-02)
 
 The real `npm publish` (not `--dry-run`) for `cli/` was rejected: `403
 Package name too similar to existing package code-matrix`. This is the
@@ -48,10 +48,16 @@ during the earlier rename.
 `npm view codeorion-mcp` both 404 (unclaimed). Full gate re-verified green
 post-rename: all 6 CLI/server/mcp test suites, typecheck, and the web build.
 
-**Still open, per the lesson this exact issue taught:** a clean dry-run is
-not proof of a name being accepted — only a real `npm publish` is. Neither
-package has actually been published under the new name yet; that step is
-still the user's to run.
+**Resolved.** Both real (non-dry-run) publishes succeeded under the new
+names: `codeorion@1.0.0` (2026-08-02T08:33:50Z) and `codeorion-mcp@1.0.0`
+(2026-08-02T08:34:16Z) — the lesson from the `codematrix` 403 stood: a clean
+dry-run is not proof of acceptance, only a real publish is, and this time
+the real publish went through clean. `codeorion-mcp` was bumped to `1.1.0`
+(2026-08-04T09:28:40Z) to ship the `audit_agent_config` tool (see
+[[roadmap#Agent config auditing]]); verified against the actual published
+tarball (`npm pack codeorion-mcp@1.1.0`, not local workspace resolution,
+which had produced a false positive during verification) rather than trusted
+from a version bump alone.
 
 `a2b9411` ("Fix Python analyzer false positives found by real-world FastAPI
 review") fixes exactly the false-positive classes documented in

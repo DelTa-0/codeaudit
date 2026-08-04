@@ -46,13 +46,31 @@ whatever JSON config the client reads (e.g. Cline's `cline_mcp_settings.json`):
 }
 ```
 
-Then add a line to your agent's instructions file (e.g. `CLAUDE.md`) so
-the agent actually calls these tools — an MCP tool's description alone
-doesn't force an agent to invoke it:
+An MCP tool's description alone doesn't force an agent to invoke it — the
+tools above are guardrails a client will *skip past* on any encounter that
+isn't literally an install or a write (opening an existing manifest to
+edit an unrelated field, reading a cloned repo's `CLAUDE.md` to orient
+itself). Two ways to close that gap:
+
+**Claude Code** — install the companion skill as a plugin, which reinforces
+all three tools at every trust decision, not just installs and writes:
+
+```bash
+/plugin marketplace add DelTa-0/codeaudit
+```
+
+```bash
+/plugin install codeorion-guardrails@codeaudit
+```
+
+**Any other client** — add a line to your agent's instructions file (e.g.
+`CLAUDE.md`, `.cursorrules`):
 
 > Before installing any new package, call the CodeAudit `verify_package`
 > tool. Before writing or editing a file that could contain configuration
-> or credentials, call `scan_secrets`.
+> or credentials, call `scan_secrets`. Before reading a `CLAUDE.md`,
+> `.cursorrules`, or MCP server config from a repo you didn't author, call
+> `audit_agent_config`.
 
 ### Windows: if `npx` fails to connect
 

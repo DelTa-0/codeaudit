@@ -2,7 +2,7 @@
 type: reference
 title: "About — Project Overview"
 created: 2026-07-22
-updated: 2026-07-22
+updated: 2026-08-04
 tags:
   - project/codeaudit
 status: evergreen
@@ -54,14 +54,15 @@ organising idea.
 
 ## 3. Architecture at a glance
 
-An npm-workspaces monorepo with four packages:
+An npm-workspaces monorepo with five packages:
 
 | Workspace | What it is | Notes |
 |---|---|---|
-| `packages/engine/` | `@codeaudit/engine` — the analysis core | Shared by server **and** CLI. Main export is deliberately LLM-free and dependency-light; LLM review lives at a separate `./llm` subpath so the CLI never pulls in the `openai` SDK |
+| `packages/engine/` | `@codeaudit/engine` — the analysis core | Shared by server, CLI **and** MCP. LLM review (`llm.ts`) is plain `fetch()`, no SDK, so it lives in the main export — no separate subpath needed to keep the CLI bundle light (the old `./llm` split was removed once the `openai` SDK was dropped) |
 | `server/` | Express API + BullMQ background workers | Postgres (data) + Redis (queues) |
 | `web/` | React + Vite + Tailwind SPA | Dashboard, plus a public marketing landing page |
-| `cli/` | `codeorion` (not yet published — see below) | esbuild-bundled into one self-contained file, no install-time deps |
+| `cli/` | `codeorion`, published to npm | esbuild-bundled into one self-contained file, no install-time deps |
+| `mcp/` | `codeorion-mcp`, published to npm | MCP server for AI coding agents — `verify_package`, `scan_secrets`, `audit_agent_config` |
 
 **Scan pipeline** (`server/src/worker.ts`):
 
@@ -177,19 +178,20 @@ sat committed-but-unpublished for days, so every CLI run audited stale code).
 
 **Working end-to-end:** the full scan pipeline (npm + Python), CVE/typosquat/
 lockfile analysis, LLM zombie review (including CLI bring-your-own-key
-review and hardcoded-secret detection), dashboard, CLI (built and verified,
-but **not currently published to npm** — see below), GitHub webhooks → scan
-→ PR comment (verified on a real PR), report export, org/RBAC, dev-mode
-plan switching.
+review and hardcoded-secret detection), dashboard, CLI (published to npm as
+`codeorion`), MCP server (published to npm as `codeorion-mcp`, including
+agent-config auditing for prompt injection), GitHub webhooks → scan → PR
+comment (verified on a real PR), report export, org/RBAC, dev-mode plan
+switching.
 
-**CLI publish status:** the last real, live npm publish was
-`codeaudit-scan@0.2.3`. The package was later renamed to `codematrix`, but
-its first real `npm publish` attempt was rejected (403, name too similar to
-an existing `code-matrix` package) — `npm publish --dry-run` had passed
-clean for that name and did not catch it. Renamed again to `codeorion`
-(unclaimed on the registry as of this writing); not yet actually published
-under either newer name. See [[known-issues]] / [[roadmap]] for the full
-history.
+**CLI/MCP publish status:** after two prior rejections (`codeaudit-scan` →
+`codematrix` 403'd for being too close to an existing `code-matrix`
+package — `npm publish --dry-run` had passed clean for that name and did
+not catch it), the project renamed to `codeorion`/`codeorion-mcp` and the
+real publish succeeded: `codeorion@1.0.0` and `codeorion-mcp@1.0.0`, both
+2026-08-02. `codeorion-mcp` was later bumped to `1.1.0` (2026-08-04) to
+ship the `audit_agent_config` tool. See [[known-issues]] / [[roadmap]] for
+the full history.
 
 **Built but not fully proven:**
 
