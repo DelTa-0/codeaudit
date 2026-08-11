@@ -15,6 +15,14 @@ jobs:
   build-and-test:
     name: Build & test
     runs-on: ubuntu-latest
+    # The server's config.ts fail-fasts on missing env at import time, and the
+    # test files transitively import it (plan-limits -> plans -> pool -> config).
+    # These throwaway values only let config load — the tests never open a DB
+    # connection or use a real secret (they read a constant / hit a mock server
+    # or the live public registries).
+    env:
+      DATABASE_URL: postgres://ci:ci@localhost:5432/ci
+      JWT_SECRET: ci-not-a-real-secret
     steps:
       - uses: actions/checkout@v4
 
