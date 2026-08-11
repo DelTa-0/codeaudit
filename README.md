@@ -1,5 +1,7 @@
 # CodeAudit
 
+[![CI](https://github.com/DelTa-0/codeaudit/actions/workflows/ci.yml/badge.svg)](https://github.com/DelTa-0/codeaudit/actions/workflows/ci.yml)
+
 AI Technical Debt Intelligence — a SaaS that audits GitHub repositories
 (**JS/TS + Python**, polyglot repos analyze both at once) for:
 
