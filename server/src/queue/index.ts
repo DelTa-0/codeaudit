@@ -4,6 +4,10 @@ import { config } from "../lib/config.js";
 
 export const redisConnection = new Redis(config.redisUrl, {
   maxRetriesPerRequest: null,
+  // ElastiCache in-transit encryption. ioredis auto-enables TLS for rediss://
+  // URLs, but ElastiCache presents an AWS-internal cert chain, so we relax CA
+  // pinning within the VPC. Only applied when TLS is actually requested.
+  ...(config.redisTls ? { tls: { rejectUnauthorized: false } } : {}),
 });
 
 export interface ScanJobData {

@@ -1,3 +1,4 @@
+import path from "node:path";
 import express from "express";
 import cors from "cors";
 import { config } from "./lib/config.js";
@@ -36,6 +37,19 @@ app.use("/api", githubRouter);
 app.use("/api", billingRouter);
 app.use("/api", badgeRouter);
 app.use("/api", cliTokenRouter);
+
+// Same-origin static hosting of the built React app. When WEB_DIST_DIR is set
+// (production single-container deploy), the API serves the web bundle and falls
+// back to index.html for client-side routes. Unset in local dev, where Vite
+// serves the web app on its own port and proxies /api here.
+if (config.webDistDir) {
+  app.use(express.static(config.webDistDir));
+  app.use((req, res, next) => {
+    // Never let the SPA fallback swallow API 404s or non-GET requests.
+    if (req.method !== "GET" || req.path.startsWith("/api/")) return next();
+    res.sendFile(path.join(config.webDistDir, "index.html"));
+  });
+}
 
 app.use((req, res) => res.status(404).json({ error: "Not found" }));
 

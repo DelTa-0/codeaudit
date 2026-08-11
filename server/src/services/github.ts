@@ -6,11 +6,16 @@ import { config } from "../lib/config.js";
 const GITHUB_API = "https://api.github.com";
 
 export function githubConfigured(): boolean {
-  return Boolean(config.github.appId && config.github.privateKeyPath);
+  return Boolean(config.github.appId && (config.github.privateKey || config.github.privateKeyPath));
+}
+
+/** PEM from the env var if supplied (Secrets Manager), else from the file path. */
+function githubPrivateKey(): string {
+  return config.github.privateKey || fs.readFileSync(config.github.privateKeyPath, "utf8");
 }
 
 function appJwt(): string {
-  const privateKey = fs.readFileSync(config.github.privateKeyPath, "utf8");
+  const privateKey = githubPrivateKey();
   const now = Math.floor(Date.now() / 1000);
   return jwt.sign({ iat: now - 60, exp: now + 9 * 60, iss: config.github.appId }, privateKey, {
     algorithm: "RS256",

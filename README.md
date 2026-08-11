@@ -387,6 +387,17 @@ started yet:
 - Server-sent events for live scan status (currently ~2s polling)
 - Slack/Discord notifications
 - Real email transport for org invites (currently logged to the server console in dev)
-- Deployment target / CI pipeline for the app itself
+- CI pipeline for the app itself
+
+## Deployment
+
+A production `Dockerfile` (repo root) builds a single image that runs the API
+(which also serves the built web app same-origin), the BullMQ worker, and the
+one-off migration task — selected by the container command. See
+[`deploy/README.md`](deploy/README.md) for the AWS ECR + ECS Fargate runbook,
+including RDS/ElastiCache TLS, Secrets Manager wiring, and the local
+`docker build` + `docker run` parity check. Production env additions
+(`DATABASE_SSL`, `REDIS_TLS`, `WEB_DIST_DIR`, `GITHUB_APP_PRIVATE_KEY`) are
+documented in `.env.example`.
 
 See [`docs/roadmap.md`](docs/roadmap.md) for the fuller, running list.

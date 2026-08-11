@@ -1,0 +1,46 @@
+{
+  "_comment": "Fargate task definition for the CodeOrion API service. Fill in <ACCOUNT_ID>, <REGION>, the ECR image tag, and the Secrets Manager ARNs, then register with: aws ecs register-task-definition --cli-input-json file://deploy/ecs-task-def.example.json. The worker and one-off migration reuse the SAME image with a different `command` (see deploy/README.md).",
+  "family": "codeorion-api",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/codeorionTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "api",
+      "image": "<ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/codeorion:latest",
+      "essential": true,
+      "command": ["node", "server/dist/index.js"],
+      "portMappings": [{ "containerPort": 4000, "protocol": "tcp" }],
+      "environment": [
+        { "name": "PORT", "value": "4000" },
+        { "name": "APP_URL", "value": "https://your-domain.example" },
+        { "name": "API_URL", "value": "https://your-domain.example" },
+        { "name": "DATABASE_SSL", "value": "require" },
+        { "name": "REDIS_TLS", "value": "true" }
+      ],
+      "secrets": [
+        { "name": "DATABASE_URL", "valueFrom": "arn:aws:secretsmanager:<REGION>:<ACCOUNT_ID>:secret:codeorion/DATABASE_URL" },
+        { "name": "REDIS_URL", "valueFrom": "arn:aws:secretsmanager:<REGION>:<ACCOUNT_ID>:secret:codeorion/REDIS_URL" },
+        { "name": "JWT_SECRET", "valueFrom": "arn:aws:secretsmanager:<REGION>:<ACCOUNT_ID>:secret:codeorion/JWT_SECRET" }
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "node -e \"fetch('http://localhost:4000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 15
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/codeorion",
+          "awslogs-region": "<REGION>",
+          "awslogs-stream-prefix": "api"
+        }
+      }
+    }
+  ]
+}
