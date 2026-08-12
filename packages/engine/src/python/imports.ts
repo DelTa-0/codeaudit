@@ -71,7 +71,14 @@ export function analyzePythonRepo(repoDir: string): RepoAnalysis {
     } catch {
       continue;
     }
-    const lines = source.split("\n");
+    // Split on CRLF as well as LF. Splitting on "\n" alone leaves a trailing
+    // "\r" on every line of a Windows checkout, and the plain-import pattern
+    // below is $-anchored — "." cannot match "\r", so `import requests` simply
+    // stopped matching while `from flask import Flask` (no $ anchor) kept
+    // working. The result was that every plainly-imported package was reported
+    // as an unused dependency, on CRLF checkouts only, which is why Linux CI
+    // never saw it.
+    const lines = source.split(/\r?\n/);
     const importLines: string[] = [];
     /** line numbers (1-based) where a symbol is *defined* in this file — its
      * own def line shouldn't count as a reference to itself */

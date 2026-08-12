@@ -5,6 +5,8 @@
 // calculate_legacy_discount + zombie_formatter flagged as dead-code
 // candidates, used_helper / main / ANSWER not flagged.
 // Run: npm run test:ground-truth-python
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -144,6 +146,47 @@ checks.push(
 // guard for this fix.
 const torchMeta = await checkPyPiPackage("torch");
 checks.push(["checkPyPiPackage(torch) resolves a non-null license (99-char expression)", torchMeta.meta?.license != null]);
+
+// --- CRLF checkouts (Windows) ---
+// The repo fixture's line endings depend on the checkout, so on Linux CI it is
+// always LF and this class of bug is invisible there. Build the CRLF case
+// explicitly so it is caught on every platform.
+//
+// Regression: `lines = source.split("\n")` left a trailing "\r", and the
+// plain-import pattern is $-anchored — "." cannot match "\r", so
+// `import requests` stopped matching while `from flask import Flask` (no $)
+// kept working. Every plainly-imported package was reported unused. The same
+// trailing "\r" defeated the $-anchored comment strip in the requirements
+// parser, folding a trailing comment into the version spec.
+{
+  const crlfDir = fs.mkdtempSync(path.join(os.tmpdir(), "codeaudit-crlf-"));
+  fs.writeFileSync(
+    path.join(crlfDir, "requirements.txt"),
+    "requests>=2.31\r\nrich>=13.0  # declared but never imported\r\n",
+  );
+  fs.writeFileSync(
+    path.join(crlfDir, "app.py"),
+    "import json\r\nimport requests\r\nfrom flask import Flask\r\n\r\n\r\ndef main():\r\n    return requests.get(\"https://example.com\")\r\n",
+  );
+
+  const crlfManifest = parsePythonManifest(crlfDir);
+  const crlfAnalysis = analyzePythonRepo(crlfDir);
+
+  checks.push([
+    "CRLF: plain `import requests` is detected",
+    crlfAnalysis.importedPackages.has("requests"),
+  ]);
+  checks.push([
+    "CRLF: `from flask import Flask` still detected",
+    crlfAnalysis.importedPackages.has("flask"),
+  ]);
+  checks.push([
+    "CRLF: a trailing comment does not leak into the version spec",
+    crlfManifest?.dependencies?.["rich"] === ">=13.0",
+  ]);
+
+  fs.rmSync(crlfDir, { recursive: true, force: true });
+}
 
 console.log("--- checks ---");
 let failed = 0;

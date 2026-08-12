@@ -31,7 +31,10 @@ function readRequirementsFile(filePath: string, deps: Record<string, string>, de
   } catch {
     return;
   }
-  for (const rawLine of content.split("\n")) {
+  // CRLF-safe: a trailing "\r" defeats the $-anchored comment strip in
+  // parseRequirementLine, which silently folds the comment into the version
+  // spec — `rich>=13.0  # unused` parsed as the spec ">=13.0  # unused".
+  for (const rawLine of content.split(/\r?\n/)) {
     const trimmed = rawLine.trim();
     // Follow one level of -r includes relative to the current file.
     const include = trimmed.match(/^(?:-r|--requirement[= ])\s*(.+)$/);
