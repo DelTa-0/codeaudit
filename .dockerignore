@@ -13,8 +13,16 @@ node_modules
 .vscode
 
 # Secrets and local env — never bake into an image.
+# The ** forms are load-bearing: a bare `.env` matches ONLY the repo root, so
+# `server/.env` (which exists in a normal dev checkout) was still being copied
+# in by `COPY . .` and shipped in the pushed image. Verified before the fix.
 .env
 .env.*
+**/.env
+**/.env.*
+!.env.example
+**/*.pem
+**/*.key
 
 # Docker + compose (not needed inside the build context)
 Dockerfile

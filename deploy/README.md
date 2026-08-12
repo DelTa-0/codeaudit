@@ -12,6 +12,19 @@ container **command**:
 The Dockerfile at the repo root builds this image. The React frontend is built
 into the image and served by the API — there is no separate web service.
 
+Three properties of the image that the task definitions have to cooperate with:
+
+- **It runs as the non-root `node` user (uid 1000).** Any volume or mount point
+  it must write to needs to be writable by that uid.
+- **It bakes in no init**, so every task definition sets
+  `linuxParameters.initProcessEnabled: true`. Without it node is PID 1, reaps
+  no zombies (the worker spawns a `git` child per scan), and misses the default
+  SIGTERM handling — ECS then kills tasks mid-job on deploy. Locally, use
+  `docker run --init`.
+- **It carries a `HEALTHCHECK` for the API run-mode only.** The worker serves no
+  HTTP; its task definition must drop `healthCheck` (see below), and plain
+  `docker run` of the worker wants `--no-healthcheck`.
+
 ## Prerequisites (provisioned once, outside this repo)
 
 These need your AWS account and are **not** created by anything in this repo:
@@ -104,11 +117,35 @@ returned JSON (the SPA fallback does not shadow the API). Reproduce locally:
 ```bash
 docker compose up -d
 docker build -t codeorion:local .
-docker run --rm -e DATABASE_URL="postgres://codeaudit:codeaudit@host.docker.internal:5433/codeaudit" \
+docker run --rm --init -e DATABASE_URL="postgres://codeaudit:codeaudit@host.docker.internal:5433/codeaudit" \
   -e JWT_SECRET=local codeorion:local node server/dist/db/migrate.js
-docker run -d --name codeorion-api -p 4100:4000 \
+docker run -d --name codeorion-api --init -p 4100:4000 \
   -e DATABASE_URL="postgres://codeaudit:codeaudit@host.docker.internal:5433/codeaudit" \
   -e REDIS_URL="redis://host.docker.internal:6380" \
   -e JWT_SECRET=local -e APP_URL="http://localhost:4100" codeorion:local
 curl http://localhost:4100/api/health
 ```
+
+The worker adds `--no-healthcheck` (it has no HTTP surface, so the image's
+API-oriented healthcheck would report a perfectly healthy worker as unhealthy):
+
+```bash
+docker run -d --name codeorion-worker --init --no-healthcheck \
+  -e DATABASE_URL="postgres://codeaudit:codeaudit@host.docker.internal:5433/codeaudit" \
+  -e REDIS_URL="redis://host.docker.internal:6380" \
+  -e JWT_SECRET=local codeorion:local node server/dist/worker.js
+```
+
+## A note on secrets in the image
+
+`.dockerignore` is a security control for this build, not housekeeping. The
+Dockerfile does `COPY . .`, so anything not ignored is baked into a layer and
+pushed to ECR, where it is readable by anyone who can pull the image.
+
+A bare `.env` line matches only the repo root. A normal dev checkout also has
+`server/.env`, which was therefore still being copied in — confirmed by
+inspecting a locally built image and finding `/app/server/.env` with live
+`JWT_SECRET`, `DATABASE_URL`, `XAI_API_KEY`, and `GITHUB_CLIENT_SECRET` values.
+The ignore file now uses `**/.env` and `**/.env.*` forms. **If an image built
+before that fix was ever pushed or shared, treat those credentials as disclosed
+and rotate them.**

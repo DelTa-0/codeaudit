@@ -14,6 +14,8 @@
       "essential": true,
       "command": ["node", "server/dist/index.js"],
       "portMappings": [{ "containerPort": 4000, "protocol": "tcp" }],
+      "_comment_init": "initProcessEnabled puts a real init at PID 1. The image does not bake one in, and without it node IS PID 1: it reaps no zombies (the worker spawns a git child per scan) and misses the default SIGTERM handling, so ECS kills tasks mid-job on deploy. Keep this true on the worker task definition especially.",
+      "linuxParameters": { "initProcessEnabled": true },
       "environment": [
         { "name": "PORT", "value": "4000" },
         { "name": "APP_URL", "value": "https://your-domain.example" },
