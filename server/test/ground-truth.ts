@@ -500,6 +500,39 @@ checks.push(
     "DOES scan a markdown file (docs are a real leak vector)",
     isSecretScannablePath("README.md"),
   ],
+  // --- precision regressions from a real scan of a Next.js + FastAPI repo
+  // (2026-08-12). That scan produced ~60 tier-2 findings from build output
+  // and flagged an error message as a CRITICAL credential, taking the score
+  // from an A to a 58.5 (D). Both classes are pinned here.
+  [
+    "does NOT scan Next.js build output",
+    !isSecretScannablePath("frontend/.next/dev/static/chunks/_0byg04l._.js"),
+  ],
+  [
+    "does NOT scan Next.js server chunks",
+    !isSecretScannablePath("frontend/.next/dev/server/chunks/ssr/src_00gpkp9._.js"),
+  ],
+  ["does NOT scan Nuxt build output", !isSecretScannablePath("app/.nuxt/entry.mjs")],
+  ["does NOT scan SvelteKit build output", !isSecretScannablePath("app/.svelte-kit/output/x.js")],
+  ["does NOT scan a Rust target dir", !isSecretScannablePath("crates/target/debug/build.rs")],
+  [
+    "DOES still scan ordinary frontend source next to a .next dir",
+    isSecretScannablePath("frontend/src/lib/session.ts"),
+  ],
+  // Entropy alone cannot reject prose: "Invalid credentials" clears both the
+  // per-char (~3.6) and total (~68 bits) floors. Whitespace is the discriminator.
+  [
+    "does NOT fire on an error message assigned to a credential-named constant",
+    fire(`CREDENTIALS_ERROR = "Invalid credentials provided"`, "backend/api/auth.py").length === 0,
+  ],
+  [
+    "does NOT fire on prose in a markdown plan",
+    fire(`the correlation token is "a stable request identifier"`, "docs/plan.md").length === 0,
+  ],
+  [
+    "STILL fires on a real high-entropy secret with no whitespace",
+    fire(`SECRET_KEY = "${GROQ}"`, "backend/settings.py").length === 1,
+  ],
 );
 
 // --- findSecrets: tracked-file gating (isTracked predicate) ---

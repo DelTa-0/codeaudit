@@ -67,6 +67,26 @@ const MIN_ENTROPY_BITS_PER_CHAR = 3;
 const MIN_TOTAL_ENTROPY_BITS = 60;
 
 /**
+ * Prose, not a credential.
+ *
+ * Shannon entropy over a character histogram measures alphabet variety, not
+ * word-likeness — it cannot tell English from randomness. "Invalid
+ * credentials" runs ~3.6 bits/char over 19 characters (~68 bits total) and
+ * clears BOTH floors above, so a line like
+ *
+ *     CREDENTIALS_ERROR = "Invalid credentials provided"
+ *
+ * was reported as a CRITICAL hardcoded credential. Whitespace is the cheap
+ * discriminator: generated credentials are drawn from base64/hex/urlsafe
+ * alphabets and effectively never contain a space, while error messages and
+ * documentation prose almost always do. Recall cost is negligible; precision
+ * win is large, because the tier-2 keyword list (`secret`, `token`,
+ * `credential`, `password`) is exactly the vocabulary of error messages about
+ * those things.
+ */
+const CONTAINS_WHITESPACE = /\s/;
+
+/**
  * Reading a value from the environment is the CORRECT pattern, not a finding.
  * Without this, every well-written config file lights up.
  */
@@ -128,8 +148,15 @@ const SCANNABLE_EXTENSIONS = new Set([
   ".py", ".rb", ".go", ".java", ".properties", ".xml", ".txt", ".md", ".env",
 ]);
 
+/**
+ * Generated output. Must stay in step with `SKIP_DIRS` in imports.ts — the two
+ * walkers drifting apart is not hypothetical: `.next` was listed there but not
+ * here, so scanning a Next.js app reported ~60 "generic credential" findings
+ * from minified chunks under `frontend/.next/`, drowning the three real ones
+ * and dragging the score from an A to a D.
+ */
 const EXCLUDED_PATH =
-  /(^|\/)(node_modules|dist|build|out|coverage|vendor|\.git|__pycache__|\.venv|venv)\//;
+  /(^|\/)(node_modules|dist|build|out|coverage|vendor|\.git|__pycache__|\.venv|venv|\.next|\.nuxt|\.svelte-kit|\.turbo|\.output|target)\//;
 const EXCLUDED_FIXTURE = /(^|\/)(tests?|__tests__|__mocks__|fixtures?|test-fixtures?)\//i;
 /** Integrity hashes are maximally high-entropy and would fire on every line. */
 const LOCKFILE =
@@ -202,6 +229,7 @@ export function scanTextForSecrets(text: string, filePath: string): SecretFindin
     while ((contextual = CONTEXTUAL_ASSIGNMENT.exec(line)) !== null) {
       const value = contextual[2];
       if (PLACEHOLDER.test(value)) continue;
+      if (CONTAINS_WHITESPACE.test(value)) continue;
       const bitsPerChar = shannonEntropy(value);
       if (bitsPerChar < MIN_ENTROPY_BITS_PER_CHAR) continue;
       if (bitsPerChar * value.length < MIN_TOTAL_ENTROPY_BITS) continue;

@@ -50,6 +50,9 @@ const YELLOW = "\x1b[33m";
 const GREEN = "\x1b[32m";
 const DIM = "\x1b[2m";
 
+/** Where the hosted dashboard actually lives. Referenced in the scan footer. */
+const DASHBOARD_URL = "codeaudit.madhavaryal.info.np";
+
 function usage(): never {
   console.log(`Usage: codeorion scan [dir] [options]
 
@@ -468,7 +471,10 @@ async function main() {
     else console.log(`${RED}✗ Upload failed: ${uploadResult.error}${RESET}`);
   }
 
-  console.log(`\n${DIM}→ Track trends, gate PRs, and get AI-reviewed findings: connect this repo at codeaudit.dev${RESET}\n`);
+  // NOT codeaudit.dev — that is an unrelated, competing code-scanning product.
+  // The URL was missed by the codeaudit -> codeorion rename sweep and shipped
+  // in codeorion@1.0.0, pointing every CLI user at a competitor's homepage.
+  console.log(`\n${DIM}→ Track trends, gate PRs, and get AI-reviewed findings: connect this repo at ${DASHBOARD_URL}${RESET}\n`);
   process.exit(exitCode);
 }
 
