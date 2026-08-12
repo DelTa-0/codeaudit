@@ -1,5 +1,11 @@
 # Deploying CodeOrion to AWS (ECR + ECS Fargate)
 
+> **Want the cheap path instead?** [`ec2.md`](ec2.md) deploys the same image to
+> a single EC2 box with `docker compose` for roughly $15-20/month, versus
+> $70-110 here. Same image, so moving up to Fargate later needs no rebuild.
+> This document is the production-grade option: rolling deploys, managed
+> Postgres and Redis, independently scaled workers.
+
 One Docker image runs all three server processes; they differ only by the
 container **command**:
 

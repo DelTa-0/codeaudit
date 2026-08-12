@@ -1,0 +1,82 @@
+# Production stack for a single EC2 host: the API, the scan worker, and their
+# Postgres and Redis. Copy this file and `.env` to the box; nothing else from
+# the repo is needed there, since the image is pulled from ECR.
+#
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Postgres and Redis deliberately publish NO host ports. They are reachable
+# only over this compose network, so they are not exposed to the internet even
+# though the instance is.
+
+name: codeorion
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: codeorion
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: codeorion
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U codeorion"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Append-only persistence: the queue survives a reboot instead of silently
+    # losing every job that was in flight.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    image: ${IMAGE:?set IMAGE to the ECR image URI in .env}
+    restart: unless-stopped
+    # A real init at PID 1. The image does not bake one in — see deploy/README.md.
+    init: true
+    env_file: [.env]
+    environment:
+      # Built from POSTGRES_PASSWORD so the credential lives in exactly one
+      # place. Plain postgres:// and redis:// are correct here: both hops stay
+      # inside the compose network, so DATABASE_SSL / REDIS_TLS stay off.
+      DATABASE_URL: postgres://codeorion:${POSTGRES_PASSWORD}@postgres:5432/codeorion
+      REDIS_URL: redis://redis:6379
+    ports:
+      # Host 80 -> container 4000. When you add Caddy for TLS, delete this
+      # block so only Caddy is reachable from outside.
+      - "80:4000"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  worker:
+    image: ${IMAGE:?set IMAGE to the ECR image URI in .env}
+    restart: unless-stopped
+    init: true
+    command: ["node", "server/dist/worker.js"]
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgres://codeorion:${POSTGRES_PASSWORD}@postgres:5432/codeorion
+      REDIS_URL: redis://redis:6379
+    # The image's healthcheck probes /api/health, which the worker does not
+    # serve. Left enabled it reports a perfectly healthy worker as unhealthy.
+    healthcheck:
+      disable: true
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+volumes:
+  pgdata:
+  redisdata:
