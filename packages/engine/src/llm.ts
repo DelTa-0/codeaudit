@@ -63,6 +63,31 @@ const ALTERNATIVES_BATCH_SIZE = 25;
  * retrying within one scan cannot succeed, so fail the batch immediately. */
 const MAX_RETRY_AFTER_SECONDS = 30;
 
+/**
+ * How long to wait before retrying a rate-limited or 5xx call.
+ *
+ * The provider tells us. Groq's token-per-minute bucket answers a 429 with
+ * `retry-after: 11`; the previous fixed backoff (2s, 4s, 8s) retried at 2s and
+ * again at 6s — both before the bucket had refilled — then gave up having
+ * waited only 6 of the 11 seconds required, and having spent three of the
+ * request quota on calls that could not have succeeded. Observed against a
+ * real repository: every batch reported `LLM request failed: 429` while
+ * `x-ratelimit-remaining-requests` sat at 986 of 1000, so requests were never
+ * the constraint — tokens were, and the wait was simply too short.
+ *
+ * Take the larger of the server's number and our backoff, so a provider that
+ * sends no header still gets exponential behaviour. The cushion avoids
+ * retrying on the exact boundary of the window.
+ */
+function retryDelayMs(err: unknown, attempt: number): number {
+  const backoffMs = 2 ** attempt * 2000;
+  const retryAfterSeconds = Number(
+    (err as { headers?: Record<string, string> }).headers?.["retry-after"] ?? 0,
+  );
+  if (!Number.isFinite(retryAfterSeconds) || retryAfterSeconds <= 0) return backoffMs;
+  return Math.max(backoffMs, retryAfterSeconds * 1000 + 250);
+}
+
 const SYSTEM_PROMPT = `You are a static-analysis assistant reviewing dead-code candidates found in a codebase.
 
 CRITICAL RULES:
@@ -191,7 +216,7 @@ ${candidateBlocks}`;
           (err as { headers?: Record<string, string> }).headers?.["retry-after"] ?? 0,
         );
         if (retryAfter > MAX_RETRY_AFTER_SECONDS) break;
-        await new Promise((r) => setTimeout(r, 2 ** attempt * 2000));
+        await new Promise((r) => setTimeout(r, retryDelayMs(err, attempt)));
         continue;
       }
       break; // non-retryable
@@ -344,7 +369,7 @@ async function suggestAlternativesBatch(
     } catch (err) {
       const status = (err as { status?: number }).status;
       if (attempt === 0 && (status === 429 || (status && status >= 500))) {
-        await new Promise((r) => setTimeout(r, 2000));
+        await new Promise((r) => setTimeout(r, retryDelayMs(err, attempt)));
         continue;
       }
       console.error("LLM alternative-suggestion batch failed:", err);

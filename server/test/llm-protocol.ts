@@ -3,7 +3,12 @@
 // mock HTTP server. This is NOT a model-quality test — no live API call.
 // Run: npm run test:llm-protocol
 import http from "node:http";
-import { callChatCompletion, type LlmConfig } from "@codeaudit/engine";
+import {
+  callChatCompletion,
+  reviewCandidatesWithLlm,
+  type LlmConfig,
+  type DeadCodeCandidate,
+} from "@codeaudit/engine";
 
 function startMockServer(
   handler: (req: http.IncomingMessage, res: http.ServerResponse) => void,
@@ -55,6 +60,67 @@ const checks: [string, boolean][] = [];
   checks.push([
     "429 response's retry-after header is readable off the caught error",
     caught !== null && caught.headers?.["retry-after"] === "5",
+  ]);
+  await mock.close();
+}
+
+// --- retry honours Retry-After, not just a fixed backoff ---
+// Regression: Groq answers a token-bucket 429 with e.g. "retry-after: 11" while
+// the retry slept a fixed 2s/4s/8s, so every attempt fired before the bucket
+// refilled and the batch failed with 986/1000 requests still available. Here
+// the server demands 4s; the first backoff would only have been 2s, so an
+// elapsed time at or above ~4s is what proves the header was obeyed.
+{
+  let calls = 0;
+  const mock = await startMockServer((_req, res) => {
+    calls += 1;
+    if (calls === 1) {
+      res.writeHead(429, { "retry-after": "4" });
+      res.end("rate limited");
+      return;
+    }
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(
+      JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify([
+                { symbol_name: "orphanHelper", verdict: "dead_code", confidence: 0.9, reasoning: "no refs" },
+              ]),
+            },
+          },
+        ],
+      }),
+    );
+  });
+
+  const candidates: DeadCodeCandidate[] = [
+    {
+      name: "orphanHelper",
+      filePath: "src/util.ts",
+      lineStart: 1,
+      lineEnd: 3,
+      exported: true,
+      kind: "function",
+      body: "export function orphanHelper() { return 1; }",
+      findingType: "dead_export",
+    },
+  ];
+  const config: LlmConfig = { apiKey: "test-key", baseUrl: mock.url, model: "test-model" };
+
+  const startedAt = Date.now();
+  const result = await reviewCandidatesWithLlm(candidates, { fileImportExports: new Map() }, config);
+  const elapsedMs = Date.now() - startedAt;
+
+  checks.push(["retry after a 429 eventually succeeds", calls === 2]);
+  checks.push([
+    `waits for Retry-After (4s) rather than the 2s backoff — waited ${elapsedMs}ms`,
+    elapsedMs >= 4000,
+  ]);
+  checks.push([
+    "a batch that succeeds on retry reports reviewStatus full",
+    result.reviewStatus === "full",
   ]);
   await mock.close();
 }
