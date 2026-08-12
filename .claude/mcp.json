@@ -1,8 +1,8 @@
 {
   "mcpServers": {
-    "codeaudit": {
+    "codeorion": {
       "command": "npx",
-      "args": ["-y", "codeorion-mcp@1.1.0"]
+      "args": ["-y", "codeorion-mcp@1.2.0"]
     }
   }
 }

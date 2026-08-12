@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createRequire } from "node:module";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -8,7 +9,13 @@ import { classifyAgentSurface, scanAgentText, auditAgentJson } from "@codeaudit/
 import { fetchHostedAlternatives } from "./hosted.js";
 
 const token = process.env.CODEAUDIT_TOKEN || null;
-const apiUrl = process.env.CODEAUDIT_API_URL || "https://api.codeaudit.dev";
+// NOT api.codeaudit.dev — that host belongs to an unrelated, competing product
+// and was missed by the codeaudit -> codeorion rename. It does not currently
+// resolve, so hosted enrichment has silently never worked for anyone using the
+// published package; worse, hosted.ts POSTs the user's CLI token alongside the
+// package list, so if that competitor ever created the subdomain those
+// credentials would start flowing to them.
+const apiUrl = process.env.CODEAUDIT_API_URL || "https://codeaudit.madhavaryal.info.np";
 const CONCURRENCY = 5;
 
 /**
@@ -69,7 +76,15 @@ async function enrichWithHostedAlternatives(results: PackageVerifyResult[]): Pro
 const TOOL_DESCRIPTION_PREFIX =
   "Call this before running an install command for any package the user did not explicitly name, and before adding a new entry to a manifest file. ";
 
-const server = new McpServer({ name: "codeorion-mcp", version: "1.0.0" });
+// Read from package.json rather than hardcoding: this string was still "1.0.0"
+// after the 1.1.0 release, so every client saw a version that did not match the
+// package it had actually installed — and MCP clients use serverInfo.version
+// for diagnostics and compatibility decisions.
+const { version: SERVER_VERSION } = createRequire(import.meta.url)("../package.json") as {
+  version: string;
+};
+
+const server = new McpServer({ name: "codeorion-mcp", version: SERVER_VERSION });
 
 server.registerTool(
   "verify_package",
