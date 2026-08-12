@@ -13,6 +13,7 @@ import {
   authenticatedCloneUrl,
   githubConfigured,
   createCheckRun,
+  warnIfGithubAppMisconfigured,
 } from "./services/github.js";
 import { query, queryOne } from "./db/pool.js";
 import { cloneRepoSandboxed, cleanupScanDir } from "./analysis/clone.js";
@@ -467,6 +468,8 @@ const worker = new Worker<ScanJobData>(
   async (job) => processScanJob(job.data.scanJobId),
   { connection: redisConnection, concurrency: 2 },
 );
+
+warnIfGithubAppMisconfigured();
 
 worker.on("ready", () => console.log("Scan worker ready"));
 worker.on("failed", (job, err) => console.error(`job ${job?.id} failed`, err));

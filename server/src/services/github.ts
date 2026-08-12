@@ -5,8 +5,48 @@ import { config } from "../lib/config.js";
 
 const GITHUB_API = "https://api.github.com";
 
+/**
+ * Whether GITHUB_APP_PRIVATE_KEY_PATH names a file we can actually read.
+ *
+ * A non-empty path used to be treated as proof the key was usable, so pointing
+ * the variable at the *directory* containing the .pem — an easy mistake, and
+ * one made in a real local setup — left githubConfigured() returning true while
+ * every App-authenticated call died on EISDIR at first use. The failure
+ * surfaced as a broken private clone or a silently missing PR comment, far from
+ * its cause.
+ */
+function privateKeyFileReadable(): boolean {
+  const keyPath = config.github.privateKeyPath;
+  if (!keyPath) return false;
+  try {
+    return fs.statSync(keyPath).isFile();
+  } catch {
+    return false;
+  }
+}
+
 export function githubConfigured(): boolean {
-  return Boolean(config.github.appId && (config.github.privateKey || config.github.privateKeyPath));
+  return Boolean(config.github.appId && (config.github.privateKey || privateKeyFileReadable()));
+}
+
+/**
+ * Complains once at startup when the App looks configured but its key is not
+ * loadable, so a misconfiguration is visible in the boot logs rather than at
+ * the first private clone. Deliberately does not throw: the GitHub App is
+ * optional, and email/password login plus public-repo scanning must keep
+ * working without it.
+ */
+export function warnIfGithubAppMisconfigured(): void {
+  if (!config.github.appId) return;
+  if (config.github.privateKey || privateKeyFileReadable()) return;
+  const keyPath = config.github.privateKeyPath;
+  console.warn(
+    keyPath
+      ? `[github] GITHUB_APP_ID is set but GITHUB_APP_PRIVATE_KEY_PATH (${keyPath}) is not a readable file — ` +
+          `point it at the .pem itself, not its directory. GitHub App features are disabled.`
+      : `[github] GITHUB_APP_ID is set but neither GITHUB_APP_PRIVATE_KEY nor GITHUB_APP_PRIVATE_KEY_PATH ` +
+          `is usable. GitHub App features are disabled.`,
+  );
 }
 
 /** PEM from the env var if supplied (Secrets Manager), else from the file path. */

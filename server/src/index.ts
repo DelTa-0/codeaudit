@@ -14,6 +14,7 @@ import { billingRouter, stripeWebhookRouter } from "./routes/billing.js";
 import { badgeRouter, publicBadgeRouter } from "./routes/badge.js";
 import { cliTokenRouter, cliUploadRouter } from "./routes/cliScans.js";
 import { mcpAlternativesRouter } from "./routes/mcpAlternatives.js";
+import { warnIfGithubAppMisconfigured } from "./services/github.js";
 
 const app = express();
 
@@ -72,6 +73,8 @@ app.use(
     res.status(500).json({ error: "Internal server error" });
   },
 );
+
+warnIfGithubAppMisconfigured();
 
 app.listen(config.port, () => {
   console.log(`CodeAudit API listening on :${config.port}`);
