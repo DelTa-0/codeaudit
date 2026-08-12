@@ -16,6 +16,16 @@ import { cliTokenRouter, cliUploadRouter } from "./routes/cliScans.js";
 import { mcpAlternativesRouter } from "./routes/mcpAlternatives.js";
 
 const app = express();
+
+// In production this sits behind exactly one reverse proxy (Caddy on the
+// single-EC2 deploy, the ALB on ECS). Without this, req.ip is the proxy's
+// address on every request, so every IP-keyed rate limiter shares a single
+// bucket and one noisy caller locks out everyone. The value is the number of
+// trusted hops: keep it exact rather than `true`, which would trust a
+// client-supplied X-Forwarded-For and let anyone forge their way around the
+// limiter.
+app.set("trust proxy", 1);
+
 app.use(cors({ origin: config.appUrl }));
 
 // Webhooks need the raw body for HMAC verification — mounted before express.json().

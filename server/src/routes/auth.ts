@@ -1,4 +1,5 @@
 import { Router } from "express";
+import rateLimit from "express-rate-limit";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { query, queryOne } from "../db/pool.js";
@@ -7,6 +8,21 @@ import { validateBody } from "../middleware/validate.js";
 import { badRequest, conflict, unauthorized } from "../lib/errors.js";
 
 export const authRouter = Router();
+
+// Credential endpoints are the one place an anonymous caller can guess a
+// secret, so they get a tighter budget than the scan routes. Keyed by IP —
+// which requires `trust proxy` to be set, or every request behind the reverse
+// proxy shares one bucket and the limit locks out all users at once.
+const credentialsLimiter = rateLimit({
+  windowMs: 15 * 60_000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Failed attempts are what we care about; a user logging in successfully
+  // several times should not burn through the allowance.
+  skipSuccessfulRequests: true,
+  message: { error: "Too many attempts. Try again in a few minutes." },
+});
 
 const credentialsSchema = z.object({
   email: z.string().email("Valid email required"),
@@ -24,7 +40,7 @@ function slugify(name: string): string {
   );
 }
 
-authRouter.post("/register", validateBody(credentialsSchema), async (req, res, next) => {
+authRouter.post("/register", credentialsLimiter, validateBody(credentialsSchema), async (req, res, next) => {
   try {
     const { email, password, name } = req.body as z.infer<typeof credentialsSchema>;
     const existing = await queryOne("SELECT id FROM users WHERE email = $1", [email]);
@@ -57,6 +73,7 @@ authRouter.post("/register", validateBody(credentialsSchema), async (req, res, n
 
 authRouter.post(
   "/login",
+  credentialsLimiter,
   validateBody(credentialsSchema.pick({ email: true, password: true })),
   async (req, res, next) => {
     try {

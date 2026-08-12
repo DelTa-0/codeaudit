@@ -485,7 +485,15 @@ const autofixWorker = new Worker<AutofixJobData>(
 );
 autofixWorker.on("failed", (job, err) => console.error(`autofix ${job?.id} failed`, err));
 
-process.on("SIGINT", async () => {
+// SIGTERM is what actually arrives in production — Docker, ECS and Render all
+// send it on stop, and only SIGINT was handled, so every deploy killed the
+// in-flight scan instead of letting BullMQ release it back to the queue.
+// SIGINT is kept for Ctrl-C in local dev.
+async function shutdown(signal: string) {
+  console.log(`${signal} received, draining workers…`);
   await Promise.all([worker.close(), prCommentWorker.close(), autofixWorker.close()]);
   process.exit(0);
-});
+}
+
+process.on("SIGINT", () => void shutdown("SIGINT"));
+process.on("SIGTERM", () => void shutdown("SIGTERM"));
