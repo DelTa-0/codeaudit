@@ -7,7 +7,8 @@ nothing leaves your machine unless you opt in with `--upload`.
 
 This is the CLI half of [CodeAudit](https://github.com/DelTa-0/codeaudit).
 It does static analysis by default — no scan history, no PR integration.
-Those stay platform-only at [codeaudit.dev](https://codeaudit.dev); the CLI
+Those stay platform-only at
+[codeaudit.madhavaryal.info.np](https://codeaudit.madhavaryal.info.np); the CLI
 is the free, offline way to try the core checks first. LLM-backed dead-code
 review is also available, bring-your-own-key — see
 [LLM review](#llm-review-optional-bring-your-own-key) below.
@@ -29,6 +30,13 @@ Prefer a permanent install? `npm install -g codeorion` then run
 `codeorion scan .` directly — same behavior, just skips npx's
 resolve-on-every-run step.
 
+> **Every command below uses flags, not environment variables**, so the same
+> line works unchanged in bash, zsh, PowerShell and cmd. The `VAR=value command`
+> prefix common in CLI docs is bash/zsh syntax — on PowerShell it fails with
+> `The term 'VAR=value' is not recognized`. If you prefer env vars, set them on
+> their own line first: `$env:GROQ_API_KEY="gsk_…"` in PowerShell,
+> `export GROQ_API_KEY=gsk_…` in bash.
+
 ## Usage
 
 ```
@@ -43,10 +51,10 @@ codeorion scan [dir] [options]
 | `--min-score N` | Exit `1` if the health score is below `N`                                                                                     |
 | `--upload`      | Send results to your CodeAudit dashboard (requires a token; see [Uploading results](#uploading-results))                      |
 | `--token T`     | Per-repo CLI token for `--upload` (or set `CODEAUDIT_TOKEN`)                                                                  |
-| `--api URL`     | API base URL for `--upload` (or set `CODEAUDIT_API_URL`; defaults to `http://localhost:4000`, only relevant if you self-host) |
-| `--key T`       | Your own LLM API key for real dead-code review (or set `GROQ_API_KEY` / `OPENAI_API_KEY` / `CODEAUDIT_LLM_KEY`; see [LLM review](#llm-review-optional-bring-your-own-key)) |
-| `--url URL`     | OpenAI-compatible base URL for `--key` (or set `CODEAUDIT_LLM_URL`; required alongside a bare `--key`)                        |
-| `--model M`     | Model name for `--url` (or set `CODEAUDIT_LLM_MODEL`; required alongside a custom `--url`)                                   |
+| `--api URL`     | API base URL for `--upload` (or set `CODEAUDIT_API_URL`). Defaults to `https://codeaudit.madhavaryal.info.np` — only set it if you self-host |
+| `--key K`       | Your own LLM API key for real dead-code review (or set `GROQ_API_KEY` / `OPENAI_API_KEY` / `CODEAUDIT_LLM_KEY`; see [LLM review](#llm-review-optional-bring-your-own-key)) |
+| `--url URL`     | OpenAI-compatible base URL (or set `CODEAUDIT_LLM_URL`). Only needed for providers other than Groq and OpenAI                 |
+| `--model M`     | Model name (or set `CODEAUDIT_LLM_MODEL`). Required with a custom `--url`; otherwise optional                                 |
 | `-h`, `--help`  | Show usage                                                                                                                    |
 
 ### Exit codes
@@ -94,7 +102,7 @@ npx codeorion scan . --min-score 80
   hand, not verdicts. Supply your own LLM API key (see
   [LLM review](#llm-review-optional-bring-your-own-key) below) and the CLI
   confirms or dismisses each one with a real confidence score, the same
-  review pass the hosted platform (codeaudit.dev) runs.
+  review pass the hosted platform (codeaudit.madhavaryal.info.np) runs.
 
 ## Example output
 
@@ -129,7 +137,7 @@ Dead-code candidates (static analysis only)
 Score: 66 (C)  · 50 files analyzed (npm)
 2 phantom dependencies — remove before shipping
 
-→ Track trends, gate PRs, and get AI-reviewed findings: connect this repo at codeaudit.dev
+→ Track trends, gate PRs, and get AI-reviewed findings: connect this repo at codeaudit.madhavaryal.info.np
 ```
 
 **Fix first** is the top of the output because a list of findings isn't much
@@ -159,8 +167,32 @@ token from the dashboard (**Settings → CLI / CI uploads → Get token**),
 then:
 
 ```bash
-CODEAUDIT_TOKEN=ca_xxxxx npx codeorion scan . --upload
+npx codeorion scan . --upload --token ca_YOUR_TOKEN
 ```
+
+That's the whole command — `--api` is only needed if you self-host, since the
+default already points at the hosted API.
+
+<details>
+<summary>Using an environment variable instead (CI)</summary>
+
+The token is read from `CODEAUDIT_TOKEN` when `--token` is absent, which is
+usually what you want in CI so the value lives in a secret store rather than a
+command line:
+
+```bash
+# bash / zsh / GitHub Actions
+export CODEAUDIT_TOKEN=ca_YOUR_TOKEN
+npx codeorion scan . --upload
+```
+
+```bash
+# PowerShell
+$env:CODEAUDIT_TOKEN="ca_YOUR_TOKEN"
+npx codeorion scan . --upload
+```
+
+</details>
 
 Treat the token like a password (CI secret store, not source control). On
 success the CLI prints the resulting dashboard URL; the run is tagged
@@ -171,25 +203,34 @@ success the CLI prints the resulting dashboard URL; the run is tagged
 By default, dead-code candidates are static analysis only — a fixed 0.5
 confidence and no verdict. Supply your own LLM API key and the CLI performs
 the same LLM-backed review the hosted dashboard does, entirely on your
-machine:
+machine.
+
+**Groq** — free tier, [get a key](https://console.groq.com):
 
 ```bash
-GROQ_API_KEY=gsk_xxxxx npx codeorion scan .
+npx codeorion scan . --key gsk_YOUR_KEY
 ```
 
-[Groq](https://console.groq.com) has a free tier and is the zero-config
-default. `OPENAI_API_KEY` also works out of the box. Any other
-OpenAI-compatible endpoint (a local Ollama, a self-hosted proxy, Anthropic
-via an OpenAI-compatible shim) works with `--key`/`--url`/`--model`:
+**OpenAI:**
 
 ```bash
-npx codeorion scan . --key sk-xxxxx --url https://api.openai.com/v1 --model gpt-4o-mini
+npx codeorion scan . --key sk-YOUR_KEY
 ```
 
-`--url` is required whenever `--key` isn't one of the two recognized env
-vars above — the CLI never guesses a provider it wasn't told about. Your key
-is used only in the request to the endpoint you configured: it is never
-included in `--json` output, never sent as part of `--upload`, and never
+That is the whole command in both cases. A `gsk_` or `sk-` prefix identifies
+its provider unambiguously, so the endpoint and a sensible default model are
+filled in for you. Add `--model` to override the default.
+
+**Anything else** — a local Ollama, a self-hosted proxy, Anthropic behind an
+OpenAI-compatible shim — needs the endpoint and model spelled out, because the
+CLI will not guess a provider you did not name:
+
+```bash
+npx codeorion scan . --key YOUR_KEY --url http://localhost:11434/v1 --model llama3
+```
+
+Your key is used only in the request to the endpoint you configured: it is
+never included in `--json` output, never sent as part of `--upload`, and never
 written to disk.
 
 With a key configured, dead-code candidates get real confidence scores and

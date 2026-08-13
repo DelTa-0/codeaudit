@@ -318,7 +318,7 @@ without GitHub webhooks):
 2. Run with `--upload`:
 
 ```bash
-CODEAUDIT_TOKEN=ca_xxxxx npx codeorion scan . --upload --api https://your-codeaudit-api.example
+npx codeorion scan . --upload --token ca_YOUR_TOKEN --api https://your-self-hosted-api.example
 ```
 
 On success the CLI prints the resulting dashboard URL. The upload lands in

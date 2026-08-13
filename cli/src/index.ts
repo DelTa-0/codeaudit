@@ -52,23 +52,51 @@ const DIM = "\x1b[2m";
 
 /** Where the hosted dashboard actually lives. Referenced in the scan footer. */
 const DASHBOARD_URL = "codeaudit.madhavaryal.info.np";
+const DEFAULT_API_URL = `https://${DASHBOARD_URL}`;
 
 function usage(): never {
   console.log(`Usage: codeorion scan [dir] [options]
 
+Scans for hallucinated dependencies, leaked secrets, poisoned agent configs and
+dead code. Runs locally; no account required.
+
+Copy-paste examples (identical in bash, zsh, PowerShell and cmd):
+
+  npx codeorion scan .
+      Scan this directory.
+
+  npx codeorion scan . --key gsk_YOUR_KEY
+      Add real LLM review of dead-code candidates. A Groq key (gsk_…) or an
+      OpenAI key (sk-…) needs nothing else — the endpoint is inferred.
+
+  npx codeorion scan . --upload --token ca_YOUR_TOKEN
+      Send the result to your dashboard. The token is per repository; copy it
+      from that repo's page. Uploads to ${DEFAULT_API_URL}
+      unless you pass --api.
+
+  npx codeorion scan . --min-score 80 --json
+      CI gate: machine-readable output, exit 1 below the threshold.
+
 Options:
   --json          machine-readable output (for CI)
   --min-score N   exit 1 if the score is below N
-  --upload        send results to your CodeAudit dashboard (requires a token)
+  --upload        send results to your dashboard (requires --token)
   --token T       per-repo CLI token (or set CODEAUDIT_TOKEN)
-  --api URL       API base URL (or set CODEAUDIT_API_URL, default http://localhost:4000)
-  --key T         your own LLM API key for real dead-code review (or set GROQ_API_KEY / OPENAI_API_KEY / CODEAUDIT_LLM_KEY)
-  --url URL       OpenAI-compatible base URL for --key (or set CODEAUDIT_LLM_URL; required with a bare --key)
-  --model M       model name for --url (or set CODEAUDIT_LLM_MODEL; required alongside a custom --url)
+  --api URL       API base URL (or set CODEAUDIT_API_URL)
+                  default: ${DEFAULT_API_URL}
+  --key K         your LLM key for dead-code review (or set GROQ_API_KEY /
+                  OPENAI_API_KEY / CODEAUDIT_LLM_KEY)
+  --url URL       OpenAI-compatible base URL — only needed for a provider
+                  other than Groq or OpenAI (or set CODEAUDIT_LLM_URL)
+  --model M       model name (or set CODEAUDIT_LLM_MODEL). Required with a
+                  custom --url; optional otherwise
   -h, --help      show this help
 
-Without a key, dead-code candidates are static-only (fixed confidence, no LLM verdict).
-Set GROQ_API_KEY for free LLM-backed review with zero other flags.
+Without a key the scan still runs — dead-code candidates are static-only, with
+a fixed confidence and no LLM verdict.
+
+Note: flags work in every shell. The VAR=value prefix used in many examples is
+bash/zsh only; in PowerShell set it first, e.g. $env:GROQ_API_KEY="gsk_…".
 
 Exit codes: 0 ok · 1 phantom deps found or score below --min-score · 2 usage/error`);
   process.exit(2);
@@ -94,7 +122,10 @@ function parseArgs(argv: string[]): CliArgs {
   let minScore: number | null = null;
   let upload = false;
   let token: string | null = process.env.CODEAUDIT_TOKEN ?? null;
-  let apiUrl = process.env.CODEAUDIT_API_URL ?? "http://localhost:4000";
+  // Defaults to the hosted API, not localhost. A published CLI defaulting to
+  // http://localhost:4000 meant `--upload` without `--api` posted to a port on
+  // the user's own machine with nothing listening, and the upload just failed.
+  let apiUrl = process.env.CODEAUDIT_API_URL ?? DEFAULT_API_URL;
   let key: string | null = null;
   let url: string | null = null;
   let model: string | null = null;

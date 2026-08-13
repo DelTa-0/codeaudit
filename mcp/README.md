@@ -111,5 +111,5 @@ future versions instead of `npx` always fetching latest.
 
 A `CODEAUDIT_TOKEN` is the same per-repo token used by `codeorion
 --upload` — generate one from your repository's settings page at
-[codeaudit.dev](https://codeaudit.dev), or via `POST
+[codeaudit.madhavaryal.info.np](https://codeaudit.madhavaryal.info.np), or via `POST
 /repos/:repoId/cli-token` if self-hosting.

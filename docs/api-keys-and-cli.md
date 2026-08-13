@@ -17,7 +17,7 @@ related:
 A single reference for every key, token, and credential CodeAudit uses,
 across all three ways of running it: the **CLI** (`npx codeorion`), the
 **MCP server** (`codeorion-mcp`), and the **hosted dashboard**
-([codeaudit.dev](https://codeaudit.dev)). If you only remember one thing:
+([codeaudit.madhavaryal.info.np](https://codeaudit.madhavaryal.info.np)). If you only remember one thing:
 **nothing leaves your machine unless you pass `--upload` or set an LLM
 key** — everything else is local, static analysis.
 
@@ -37,7 +37,7 @@ key** — everything else is local, static analysis.
   - [Optional token for real-alternative suggestions](#optional-token-for-real-alternative-suggestions)
   - [Tools exposed](#tools-exposed)
   - [Windows npx workaround](#windows-npx-workaround)
-- [3. Dashboard — codeaudit.dev](#3-dashboard--codeauditdev)
+- [3. Dashboard — codeaudit.madhavaryal.info.np](#3-dashboard--codeauditdev)
   - [Account + repo setup](#account--repo-setup)
   - [Getting a CLI/CI upload token](#getting-a-clici-upload-token)
   - [Server-side LLM key (self-hosting only)](#server-side-llm-key-self-hosting-only)
@@ -55,7 +55,7 @@ key** — everything else is local, static analysis.
 | **`CODEAUDIT_TOKEN`** (per-repo upload/MCP token) | Lets a CLI/CI run or MCP server report results into your dashboard, and unlocks LLM-suggested real alternatives in the MCP server | CLI (`--upload`), MCP | Dashboard → repo **Settings → CLI / CI uploads → Get token** |
 | **Server LLM key** (`XAI_API_KEY` env var) | Powers dead-code review for scans run *by the hosted dashboard itself* (webhook/manual scans) | Server only (self-hosted deploys) | Same Groq/OpenAI account as above, set once in `server/.env` |
 
-If you're just using the hosted [codeaudit.dev](https://codeaudit.dev)
+If you're just using the hosted [codeaudit.madhavaryal.info.np](https://codeaudit.madhavaryal.info.np)
 dashboard as a normal user, you never touch the server LLM key — that's
 an operator concern. You only ever deal with the first two rows.
 
@@ -88,15 +88,16 @@ the hosted dashboard does — entirely on your machine, nothing uploaded.
 
 ```bash
 # Groq (free tier, zero-config default)
-GROQ_API_KEY=gsk_xxxxx npx codeorion scan .
+npx codeorion scan . --key gsk_YOUR_KEY
 
 # OpenAI
-OPENAI_API_KEY=sk-xxxxx npx codeorion scan .
+npx codeorion scan . --key sk-YOUR_KEY
 
 # Any other OpenAI-compatible endpoint (local Ollama, self-hosted proxy,
-# Anthropic via an OpenAI-compatible shim) — --url is required whenever
-# the key isn't one of the two recognized env vars above
-npx codeorion scan . --key sk-xxxxx --url https://api.openai.com/v1 --model gpt-4o-mini
+# Anthropic via an OpenAI-compatible shim). --url and --model are required
+# here: a gsk_/sk- prefix names its provider, anything else does not, and the
+# CLI will not guess an endpoint you did not give it.
+npx codeorion scan . --key YOUR_KEY --url http://localhost:11434/v1 --model llama3
 ```
 
 Your key is used only in the request to the endpoint you configured — it
@@ -114,14 +115,14 @@ for GitLab CI, Jenkins, or any pipeline without GitHub webhooks):
 2. Run with `--upload`:
 
 ```bash
-CODEAUDIT_TOKEN=ca_xxxxx npx codeorion scan . --upload
+npx codeorion scan . --upload --token ca_YOUR_TOKEN
 ```
 
-If you're pointing at a self-hosted API instead of codeaudit.dev, also
+If you're pointing at a self-hosted API instead of codeaudit.madhavaryal.info.np, also
 pass `--api`:
 
 ```bash
-CODEAUDIT_TOKEN=ca_xxxxx npx codeorion scan . --upload --api https://your-codeaudit-api.example
+npx codeorion scan . --upload --token ca_YOUR_TOKEN --api https://your-self-hosted-api.example
 ```
 
 On success the CLI prints the resulting dashboard URL. The run is tagged
@@ -244,7 +245,7 @@ getting latest via `npx`.
 
 ---
 
-## 3. Dashboard — codeaudit.dev
+## 3. Dashboard — codeaudit.madhavaryal.info.np
 
 The hosted SaaS: scan history, trend charts, GitHub App integration
 (PR comments, merge gates, auto-fix PRs), and LLM-reviewed findings —
@@ -269,13 +270,13 @@ This is the token both the CLI's `--upload` and the MCP server's
 3. Treat it like a password: put it in your CI's secret store, not
    source control, not a shared doc.
 
-If self-hosting instead of using codeaudit.dev, the same token can be
+If self-hosting instead of using codeaudit.madhavaryal.info.np, the same token can be
 generated via `POST /repos/:repoId/cli-token`.
 
 ### Server-side LLM key (self-hosting only)
 
 If you're running your own instance of the server (not using
-codeaudit.dev), scans triggered *by the dashboard itself* (manual scan
+codeaudit.madhavaryal.info.np), scans triggered *by the dashboard itself* (manual scan
 button, GitHub webhook auto-scans) use a server-configured LLM key, set
 once in `server/.env`:
 
@@ -287,7 +288,7 @@ once in `server/.env`:
 
 Get a free Groq key at [console.groq.com](https://console.groq.com). This
 is a one-time operator setup, not something individual dashboard users
-configure per-account. Regular users of codeaudit.dev don't need this at
+configure per-account. Regular users of codeaudit.madhavaryal.info.np don't need this at
 all — it's already configured server-side.
 
 ### GitHub App credentials (self-hosting only)
@@ -331,7 +332,7 @@ lives in the [root README's GitHub App section](../README.md#github-app-integrat
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | CLI dead-code candidates all say "LLM review skipped" | No LLM key set | Set `GROQ_API_KEY`/`OPENAI_API_KEY`, or pass `--key`/`--url`/`--model` |
-| `--upload` fails with an auth error | Wrong or expired `CODEAUDIT_TOKEN`, or missing `--api` when self-hosting | Regenerate the token from the repo's Settings card; pass `--api` if not using codeaudit.dev |
+| `--upload` fails with an auth error | Wrong or expired `CODEAUDIT_TOKEN`, or missing `--api` when self-hosting | Regenerate the token from the repo's Settings card; pass `--api` if not using codeaudit.madhavaryal.info.np |
 | MCP server "Failed to connect" on Windows | Windows `npx` bin-shim bug | See [Windows npx workaround](#windows-npx-workaround) |
 | Dashboard scans never get LLM verdicts (self-hosted) | `XAI_API_KEY` unset in `server/.env` | Set it and restart the worker — see [Server-side LLM key](#server-side-llm-key-self-hosting-only) |
 | GitHub-dependent endpoints return `501 Not configured` (self-hosted) | GitHub App env vars unset | See [GitHub App credentials](#github-app-credentials-self-hosting-only) |

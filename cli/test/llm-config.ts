@@ -63,8 +63,54 @@ const checks: [string, boolean][] = [];
 {
   const r = resolveLlmConfig({ key: "flag-key", url: null, model: null }, {});
   checks.push([
-    "bare --key with no --url and no recognized env var exits with the documented message",
-    r.ok === false && r.error === "codeaudit: --key requires --url (or set GROQ_API_KEY / OPENAI_API_KEY instead)",
+    "an unrecognised bare --key still refuses to guess an endpoint",
+    r.ok === false && r.error.includes("--key needs --url and --model"),
+  ]);
+  checks.push([
+    "…and the error shows a copyable example for each provider",
+    r.ok === false && r.error.includes("--key gsk_YOUR_KEY") && r.error.includes("--key sk-YOUR_KEY"),
+  ]);
+}
+
+// A gsk_/sk- prefix names its provider unambiguously, so `--key` alone should
+// work exactly as the matching env var already did. Previously the flag form
+// hard-errored while the env form succeeded, which is the asymmetry that made
+// BYOK confusing — especially on PowerShell, where `VAR=x cmd` is not valid.
+{
+  const r = resolveLlmConfig({ key: "gsk_abc123", url: null, model: null }, {});
+  checks.push([
+    "--key gsk_… alone resolves to Groq with its default model",
+    r.ok === true &&
+      r.config?.source === "groq" &&
+      r.config.baseUrl === "https://api.groq.com/openai/v1" &&
+      r.config.model === "llama-3.3-70b-versatile",
+  ]);
+}
+
+{
+  const r = resolveLlmConfig({ key: "sk-abc123", url: null, model: null }, {});
+  checks.push([
+    "--key sk-… alone resolves to OpenAI with its default model",
+    r.ok === true && r.config?.source === "openai" && r.config.baseUrl === "https://api.openai.com/v1",
+  ]);
+}
+
+{
+  const r = resolveLlmConfig({ key: "gsk_abc123", url: null, model: "llama-3.1-8b-instant" }, {});
+  checks.push([
+    "--model still overrides the inferred provider's default",
+    r.ok === true && r.config?.source === "groq" && r.config.model === "llama-3.1-8b-instant",
+  ]);
+}
+
+{
+  const r = resolveLlmConfig(
+    { key: "gsk_abc123", url: "https://proxy.internal/v1", model: "custom-model" },
+    {},
+  );
+  checks.push([
+    "an explicit --url still wins over prefix inference",
+    r.ok === true && r.config?.source === "custom" && r.config.baseUrl === "https://proxy.internal/v1",
   ]);
 }
 
