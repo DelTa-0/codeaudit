@@ -25,10 +25,16 @@ function iconStyleFor(name: string) {
  * configured on this deployment" (501) from "no installation linked yet" (404)
  * from "installed, here are the repos".
  */
+interface ClaimableInstallation {
+  installationId: number;
+  accountLogin: string | null;
+  repositorySelection: string | null;
+}
+
 type GithubState =
   | { kind: "loading" }
   | { kind: "unconfigured" } // no GITHUB_APP_ID on the server
-  | { kind: "not-installed"; installUrl: string | null }
+  | { kind: "not-installed"; installUrl: string | null; claimable: ClaimableInstallation[] }
   | { kind: "ready"; repos: GithubRepoOption[] };
 
 export function Dashboard() {
@@ -62,7 +68,35 @@ export function Dashboard() {
       } catch {
         // App not configured on this deployment — fall through with no link.
       }
-      setGithub({ kind: "not-installed", installUrl });
+      // An App installed straight from GitHub — or installed before this flow
+      // existed — leaves an installation nobody has claimed. Offer it instead
+      // of telling someone to install what they already installed.
+      let claimable: ClaimableInstallation[] = [];
+      try {
+        claimable = await api<ClaimableInstallation[]>(
+          `/api/orgs/${org.id}/claimable-installations`,
+        );
+      } catch {
+        // Older server, or no linked GitHub identity — just offer the install.
+      }
+      setGithub({ kind: "not-installed", installUrl, claimable });
+    }
+  };
+
+  const claimInstallation = async (installationId: number) => {
+    if (!org) return;
+    setError(null);
+    setConnecting(installationId);
+    try {
+      await api(`/api/orgs/${org.id}/installations`, {
+        method: "POST",
+        body: { installationId },
+      });
+      await Promise.all([load(), loadGithub()]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not link that installation");
+    } finally {
+      setConnecting(null);
     }
   };
 
@@ -144,7 +178,38 @@ export function Dashboard() {
         </Card>
       )}
 
-      {github.kind === "not-installed" && (
+      {github.kind === "not-installed" && github.claimable.length > 0 && (
+        <Card>
+          <h2 className="text-sm font-semibold">Finish connecting GitHub</h2>
+          <p className="mt-1 text-sm text-muted">
+            The App is already installed on your GitHub account — it just isn't linked to this
+            workspace yet. Link it and your repositories appear below.
+          </p>
+          <ul className="mt-3 divide-y divide-border">
+            {github.claimable.map((i) => (
+              <li key={i.installationId} className="flex items-center gap-3 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-mono text-sm">@{i.accountLogin ?? "your account"}</div>
+                  <div className="mt-0.5 text-xs text-muted">
+                    {i.repositorySelection === "all"
+                      ? "All repositories"
+                      : "Selected repositories only"}
+                  </div>
+                </div>
+                <Button
+                  onClick={() => void claimInstallation(i.installationId)}
+                  disabled={connecting !== null}
+                >
+                  {connecting === i.installationId ? "Linking…" : "Link"}
+                </Button>
+              </li>
+            ))}
+          </ul>
+          {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+        </Card>
+      )}
+
+      {github.kind === "not-installed" && github.claimable.length === 0 && (
         <Card>
           <h2 className="text-sm font-semibold">Connect your GitHub account</h2>
           <p className="mt-1 text-sm text-muted">

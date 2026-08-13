@@ -87,6 +87,32 @@ export async function getInstallationToken(installationId: number): Promise<stri
   return data.token;
 }
 
+/**
+ * Every installation of this App, as the App itself sees them.
+ *
+ * Used to rescue installations that exist on GitHub but were never linked to
+ * an org — which is every installation made before the Setup URL existed, and
+ * any made directly from GitHub rather than from the dashboard. The caller
+ * MUST filter these by the signed-in user's github_user_id before offering
+ * them: this list is App-wide, so returning it unfiltered would let any user
+ * claim another account's installation.
+ */
+export async function listAppInstallations(): Promise<
+  { installationId: number; accountId: number | null; accountLogin: string | null; repositorySelection: string | null }[]
+> {
+  const data = (await githubFetch("/app/installations?per_page=100", appJwt())) as {
+    id: number;
+    account?: { id?: number; login?: string };
+    repository_selection?: string;
+  }[];
+  return (Array.isArray(data) ? data : []).map((i) => ({
+    installationId: i.id,
+    accountId: i.account?.id ?? null,
+    accountLogin: i.account?.login ?? null,
+    repositorySelection: i.repository_selection ?? null,
+  }));
+}
+
 export async function listInstallationRepos(installationId: number) {
   const token = await getInstallationToken(installationId);
   const data = (await githubFetch(`/installation/repositories?per_page=100`, token)) as {

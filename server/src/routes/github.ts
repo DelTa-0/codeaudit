@@ -5,7 +5,7 @@ import { requireAuth, requireOrgRole } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
 import { badRequest, notFound } from "../lib/errors.js";
 import { config } from "../lib/config.js";
-import { githubConfigured, listInstallationRepos } from "../services/github.js";
+import { githubConfigured, listInstallationRepos, listAppInstallations } from "../services/github.js";
 import { assertCanAddRepo, getOrgPlan } from "../services/plans.js";
 import { logAudit } from "../services/audit.js";
 import { paymentRequired } from "../lib/errors.js";
@@ -27,6 +27,51 @@ githubRouter.get("/github/install-url", (_req, res) => {
   // After install GitHub redirects back with installation_id.
   res.json({ url: `https://github.com/apps/${config.github.slug}/installations/new` });
 });
+
+/**
+ * Installations this user could claim but hasn't linked yet.
+ *
+ * Installing the App on GitHub creates nothing on our side — the install
+ * carries no CodeAudit identity, so an org owner has to claim it. Before the
+ * Setup URL existed there was no way to do that at all, which stranded every
+ * installation made up to that point; installing straight from GitHub still
+ * strands one today.
+ *
+ * The filter is the security boundary: only installations whose GitHub account
+ * id equals the caller's own github_user_id are offered, so claiming requires
+ * having proved control of that account through OAuth. Matching on account
+ * *login* would be wrong — logins are renameable and can be re-registered.
+ */
+githubRouter.get(
+  "/orgs/:orgId/claimable-installations",
+  requireOrgRole("admin"),
+  async (req, res, next) => {
+    try {
+      if (!githubConfigured()) return res.json([]);
+      const me = await queryOne<{ github_user_id: string | null }>(
+        "SELECT github_user_id FROM users WHERE id = $1",
+        [req.user!.id],
+      );
+      // No linked GitHub identity means nothing is provably theirs to claim.
+      if (!me?.github_user_id) return res.json([]);
+
+      const [all, linked] = await Promise.all([
+        listAppInstallations(),
+        query<{ installation_id: string }>("SELECT installation_id FROM github_installations", []),
+      ]);
+      const alreadyLinked = new Set(linked.map((r) => String(r.installation_id)));
+      const mine = all.filter(
+        (i) =>
+          i.accountId !== null &&
+          String(i.accountId) === String(me.github_user_id) &&
+          !alreadyLinked.has(String(i.installationId)),
+      );
+      res.json(mine);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 const linkSchema = z.object({ installationId: z.number().int().positive() });
 
