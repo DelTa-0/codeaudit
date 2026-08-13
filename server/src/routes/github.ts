@@ -16,8 +16,16 @@ githubRouter.use(requireAuth);
 githubRouter.get("/github/install-url", (_req, res) => {
   if (!config.github.appId)
     return res.status(501).json({ error: "GitHub App is not configured (set GITHUB_APP_ID)" });
-  // App slug install page; after install GitHub redirects back with installation_id.
-  res.json({ url: `https://github.com/apps/codeaudit/installations/new` });
+  // The slug was hardcoded to "codeaudit", which the codeaudit -> codeorion
+  // rename left pointing at an app that does not exist — the install button
+  // rendered fine and landed the user on a GitHub 404. It cannot be derived
+  // from the App ID, so it has to be configured.
+  if (!config.github.slug)
+    return res
+      .status(501)
+      .json({ error: "GitHub App slug is not configured (set GITHUB_APP_SLUG)" });
+  // After install GitHub redirects back with installation_id.
+  res.json({ url: `https://github.com/apps/${config.github.slug}/installations/new` });
 });
 
 const linkSchema = z.object({ installationId: z.number().int().positive() });

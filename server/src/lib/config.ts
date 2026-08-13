@@ -34,6 +34,11 @@ export const config = {
   },
   github: {
     appId: process.env.GITHUB_APP_ID ?? "",
+    // The App's URL slug, used to build the install link. Not derivable from
+    // the App ID, and not the same as the App's display name — read it out of
+    // the address bar at github.com/settings/apps/<slug>. Hardcoding it is how
+    // the install link came to point at a slug that 404s.
+    slug: process.env.GITHUB_APP_SLUG ?? "",
     privateKeyPath: process.env.GITHUB_APP_PRIVATE_KEY_PATH ?? "",
     // PEM contents supplied directly (e.g. from AWS Secrets Manager as an env
     // var). Takes precedence over the file path when set. Literal "\n" escapes
