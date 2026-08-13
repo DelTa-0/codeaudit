@@ -50,6 +50,14 @@ export interface Org {
   role: string;
 }
 
+/** A repo the org's GitHub App installation can see but has not connected yet. */
+export interface GithubRepoOption {
+  githubRepoId: number;
+  fullName: string;
+  private: boolean;
+  defaultBranch: string;
+}
+
 export interface Repo {
   id: string;
   full_name: string;
