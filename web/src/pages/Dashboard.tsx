@@ -47,6 +47,9 @@ export function Dashboard() {
   const [github, setGithub] = useState<GithubState>({ kind: "loading" });
   const [filter, setFilter] = useState("");
   const [connecting, setConnecting] = useState<number | null>(null);
+  // null = follow the default (open only when the list is short enough to be
+  // worth showing outright); a boolean once the user has expressed a choice.
+  const [pickerOpen, setPickerOpen] = useState<boolean | null>(null);
 
   const load = async () => {
     if (!org) return;
@@ -141,6 +144,18 @@ export function Dashboard() {
       .filter((r) => !q || r.fullName.toLowerCase().includes(q));
   }, [github, connectedNames, filter]);
 
+  // Unconnected repos, ignoring the filter — the honest total for the header,
+  // so collapsing does not appear to change how many repositories you have.
+  const totalAvailable = useMemo(() => {
+    if (github.kind !== "ready") return 0;
+    return github.repos.filter((r) => !connectedNames.has(r.fullName.toLowerCase())).length;
+  }, [github, connectedNames]);
+
+  // Short lists are more useful open than folded; long ones would push the
+  // repositories you already connected off the screen entirely.
+  const AUTO_OPEN_LIMIT = 6;
+  const isPickerOpen = pickerOpen ?? totalAvailable <= AUTO_OPEN_LIMIT;
+
   const connect = async (e: FormEvent) => {
     e.preventDefault();
     if (!org) return;
@@ -232,13 +247,35 @@ export function Dashboard() {
       {github.kind === "ready" && (
         <Card>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold">
+            <button
+              type="button"
+              onClick={() => setPickerOpen(!isPickerOpen)}
+              aria-expanded={isPickerOpen}
+              aria-controls="github-repo-picker"
+              // Negative margins cancel the padding so the extra tap area does
+              // not shift the header; py-3 takes it to 44px on touch screens.
+              className="-mx-2 -my-3 flex cursor-pointer items-center gap-2 rounded-lg px-2 py-3 text-sm font-semibold transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 sm:-my-2 sm:py-2"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+                className={`shrink-0 text-muted transition-transform duration-200 ${isPickerOpen ? "rotate-90" : ""}`}
+              >
+                <path d="m9 18 6-6-6-6" />
+              </svg>
               From GitHub
-              <span className="ml-2 font-normal text-muted">
-                {available.length} available
+              <span className="font-normal text-muted">
+                {totalAvailable} available
               </span>
-            </h2>
-            {github.repos.length > 6 && (
+            </button>
+            {isPickerOpen && github.repos.length > AUTO_OPEN_LIMIT && (
               <Input
                 placeholder="Filter repositories…"
                 value={filter}
@@ -249,7 +286,7 @@ export function Dashboard() {
             )}
           </div>
 
-          {available.length === 0 ? (
+          {!isPickerOpen ? null : available.length === 0 ? (
             <p className="mt-3 text-sm text-muted">
               {github.repos.length === 0
                 ? "The App is installed but has no repositories selected yet. Grant it access to a repository on GitHub, then reload."
@@ -258,7 +295,12 @@ export function Dashboard() {
                   : "Every repository the App can see is already connected."}
             </p>
           ) : (
-            <ul className="mt-3 divide-y divide-border">
+            // Capped so a long list scrolls within the card instead of pushing
+            // the repositories you already connected off the page.
+            <ul
+              id="github-repo-picker"
+              className="mt-3 max-h-80 divide-y divide-border overflow-y-auto"
+            >
               {available.map((r) => (
                 <li key={r.githubRepoId} className="flex items-center gap-3 py-2.5">
                   <div className="min-w-0 flex-1">
