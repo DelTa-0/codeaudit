@@ -85,8 +85,9 @@ export function Hero() {
           textWrap: "pretty",
         }}
       >
-        CodeAudit continuously audits your GitHub repos for AI-generated technical debt — with a
-        health score, PR comments, and merge gates. You stay in control.
+        CodeAudit continuously audits your GitHub repos for hallucinated packages, leaked secrets,
+        poisoned agent configs and AI-generated debt — across npm and PyPI, with a health score, PR
+        comments, and merge gates. You stay in control.
       </p>
       <div
         style={{

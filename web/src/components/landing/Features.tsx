@@ -5,15 +5,50 @@ const FEATURES = [
     tag: "REGISTRY-VERIFIED",
     tagFg: "#c2452d",
     tagBg: "#fdeae5",
-    title: "Phantom dependency detection",
-    body: "Every import checked against the live npm registry. Hallucinated packages flagged before an attacker can slopsquat them.",
+    title: "Phantom & typosquat detection",
+    body: "Every dependency checked against the live npm and PyPI registries. Hallucinated packages are flagged before an attacker can slopsquat them, and near-miss names get a “did you mean” against the real package.",
+  },
+  {
+    tag: "REDACTED BY DEFAULT",
+    tagFg: "#c2452d",
+    tagBg: "#fdeae5",
+    title: "Hardcoded secret detection",
+    body: "API keys, tokens and connection strings found in your source — and in your git history, where deleting the line never actually removed them. Values are redacted at the boundary: findings show a fingerprint, never the secret.",
+  },
+  {
+    tag: "AGENT SURFACE",
+    tagFg: "#c2452d",
+    tagBg: "#fdeae5",
+    title: "Agent-config auditing",
+    body: "The files your coding agent obeys — CLAUDE.md, AGENTS.md, .cursorrules, copilot-instructions, MCP server configs — audited for prompt injection, over-broad permissions, and MCP servers pointed at packages that don't exist on the registry.",
+  },
+  {
+    tag: "OSV.DEV",
+    tagFg: "#b07d1e",
+    tagBg: "#fdf3dd",
+    title: "Known vulnerabilities",
+    body: "Every resolved version, direct and transitive, checked against the OSV advisory database with severity and a link to the advisory.",
   },
   {
     tag: "AI-REVIEWED",
     tagFg: "#b07d1e",
     tagBg: "#fdf3dd",
     title: "Zombie & dead-code detection",
-    body: "Static analysis finds unreferenced code; an LLM pass assigns a confidence score so you only see credible candidates.",
+    body: "Static analysis finds unreferenced code; an LLM pass assigns a confidence score so you only see credible candidates. Bring your own key, or run it without one and get the raw static candidates.",
+  },
+  {
+    tag: "SUPPLY CHAIN",
+    tagFg: "#b07d1e",
+    tagBg: "#fdf3dd",
+    title: "Licence & duplicate audit",
+    body: "Copyleft licences that conflict with your project's, and three libraries doing the same job — the kind of drift that accumulates when every prompt picks its own favourite.",
+  },
+  {
+    tag: "RANKED",
+    tagFg: "#565b51",
+    tagBg: "#efede6",
+    title: "Fix-first ordering",
+    body: "Findings ranked by severity, confidence and effort, so the report opens with the handful that actually matter instead of a wall of everything.",
   },
   {
     tag: "GITHUB CHECK",
@@ -28,6 +63,13 @@ const FEATURES = [
     tagBg: "#e4f7ec",
     title: "Auto-fix PRs",
     body: "The bot opens PRs that remove unused dependencies. You review and merge — it never merges itself.",
+  },
+  {
+    tag: "AGENT-TIME",
+    tagFg: "#127a4f",
+    tagBg: "#e4f7ec",
+    title: "MCP server & CLI",
+    body: "Check a package before your agent installs it, not after review. codeorion-mcp exposes the same verification as tools your agent can call; the CLI runs the whole scan offline in CI.",
   },
   {
     tag: "METRICS",
@@ -63,7 +105,9 @@ export function Features() {
             textWrap: "balance",
           }}
         >
-          Six things it does today. Not a roadmap.
+          {/* Derived from the array so the claim cannot drift out of date the
+              way "Six things" did once the list grew to twelve. */}
+          {FEATURES.length} things it does today. Not a roadmap.
         </h2>
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : isCompact ? "repeat(2,1fr)" : "repeat(3,1fr)", gap: 20, marginTop: 44 }}>
           {FEATURES.map((f) => (
