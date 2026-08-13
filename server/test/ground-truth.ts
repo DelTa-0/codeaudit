@@ -533,6 +533,45 @@ checks.push(
     "STILL fires on a real high-entropy secret with no whitespace",
     fire(`SECRET_KEY = "${GROQ}"`, "backend/settings.py").length === 1,
   ],
+  // Real gap found scanning a user's repo (2026-08-13): `_DEV_ENCRYPTION_KEY`
+  // held a live-looking value next to a `_DEV_SECRET_KEY` that WAS flagged —
+  // "secret" matched, "encryption_key" did not, because bare `key` was never
+  // a recognised keyword. Fixed with a narrow allowlist of crypto-specific
+  // `_key` compounds rather than bare `key`, so both directions are pinned
+  // here: the compounds that should now fire, and the everyday `_KEY`
+  // identifiers that must keep NOT firing.
+  [
+    "DOES fire on an encryption key that isn't named *_secret_*",
+    fire(`_DEV_ENCRYPTION_KEY = "dev-encryption-key-32-bytes-minimum!!"`, "backend/settings.py").length === 1,
+  ],
+  [
+    "DOES fire on a signing key",
+    fire(`SIGNING_KEY = "${GROQ}"`, "backend/settings.py").length === 1,
+  ],
+  [
+    "DOES fire on a JWT key",
+    fire(`JWT_KEY = "${GROQ}"`, "backend/settings.py").length === 1,
+  ],
+  [
+    "does NOT fire on PRIMARY_KEY (a database identifier, not a secret)",
+    fire(`PRIMARY_KEY = "customer_id_v2_composite_index"`, "backend/models.py").length === 0,
+  ],
+  [
+    "does NOT fire on FOREIGN_KEY",
+    fire(`FOREIGN_KEY = "orders.customer_id_reference"`, "backend/models.py").length === 0,
+  ],
+  [
+    "does NOT fire on STORAGE_KEY (a localStorage key NAME, same class as TOKEN_KEY)",
+    fire(`STORAGE_KEY = "myapp_user_preferences_v2"`, "frontend/src/storage.ts").length === 0,
+  ],
+  [
+    "does NOT fire on CACHE_KEY",
+    fire(`CACHE_KEY = "dashboard_widget_layout_cache"`, "backend/cache.py").length === 0,
+  ],
+  [
+    "does NOT fire on ROUTING_KEY (a message-queue concept, not a secret)",
+    fire(`ROUTING_KEY = "orders.created.v2.high_priority"`, "backend/queue.py").length === 0,
+  ],
 );
 
 // --- findSecrets: tracked-file gating (isTracked predicate) ---

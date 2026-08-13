@@ -49,9 +49,19 @@ const PROVIDER_PATTERNS: { provider: string; pattern: RegExp }[] = [
  * measured 676ms to reject; bounded, the same line measured 8ms (~85x). This
  * regex runs over arbitrary user repositories on a hosted worker, so a cheap
  * line is a cheap way to burn a worker slot.
+ *
+ * Deliberately NOT a bare `key` alternative. `_KEY` is at least as often an
+ * identifier as a secret — STORAGE_KEY, CACHE_KEY, QUERY_KEY, PRIMARY_KEY,
+ * ROUTING_KEY, SHARD_KEY are all common and none of them hold cryptographic
+ * material. Matching bare `key` and denylisting the false positives as they
+ * turn up is the same shape of mistake as flagging `TOKEN_KEY` (a storage key
+ * *name*, not a token) — the denylist never stops growing because "key" means
+ * "identifier" in code far more often than "cryptographic secret". Instead,
+ * the *specific* compounds below name cryptographic material directly, so
+ * each one added is a precision decision, not a coverage sweep.
  */
 const CONTEXTUAL_ASSIGNMENT =
-  /['"]?([A-Za-z0-9_.-]{0,64}(?:api[_-]?key|secret|token|password|passwd|credential|private[_-]?key)[A-Za-z0-9_.-]{0,64})['"]?\s*[:=]\s*['"]([^'"\n]{16,})['"]/gi;
+  /['"]?([A-Za-z0-9_.-]{0,64}(?:api[_-]?key|secret|token|password|passwd|credential|private[_-]?key|encryption[_-]?key|signing[_-]?key|cipher[_-]?key|crypto[_-]?key|hmac[_-]?key|jwt[_-]?key|master[_-]?key|aes[_-]?key|rsa[_-]?key)[A-Za-z0-9_.-]{0,64})['"]?\s*[:=]\s*['"]([^'"\n]{16,})['"]/gi;
 
 /**
  * Per-character entropy alone is really a test of alphabet size: hex tops out
