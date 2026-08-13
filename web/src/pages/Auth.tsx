@@ -15,12 +15,20 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
   const { login } = useAuth();
   const navigate = useNavigate();
 
+  // Where to land after signing in. RequireAuth sets ?next when it bounces an
+  // unauthenticated visitor, which is what carries /github/setup's
+  // installation_id through the login detour instead of losing it.
+  // Only same-site paths are honoured, so ?next cannot be used to bounce a
+  // freshly-signed-in user to an attacker's URL.
+  const rawNext = new URLSearchParams(window.location.search).get("next");
+  const next = rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/dashboard";
+
   // GitHub OAuth callback hands the JWT back via URL fragment.
   useEffect(() => {
     const match = window.location.hash.match(/token=([^&]+)/);
     if (match) {
-      window.history.replaceState(null, "", window.location.pathname);
-      void login(match[1]).then(() => navigate("/dashboard"));
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      void login(match[1]).then(() => navigate(next));
     }
   }, []);
 
@@ -32,7 +40,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
       const body = mode === "register" ? { email, password, name: name || undefined } : { email, password };
       const data = await api<{ token: string }>(`/api/auth/${mode}`, { method: "POST", body });
       await login(data.token);
-      navigate("/dashboard");
+      navigate(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
