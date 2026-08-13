@@ -1,9 +1,13 @@
+import { useIsMobile, useIsCompact } from "../../lib/useMediaQuery";
+
 import { LogoMark } from "../Logo";
 
 export function Footer() {
+  const isMobile = useIsMobile();
+  const isCompact = useIsCompact();
   return (
-    <footer style={{ background: "#0b0f0c", borderTop: "1px solid #1c231d", padding: "56px 48px 40px" }}>
-      <div style={{ maxWidth: 1024, margin: "0 auto", display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr", gap: 40 }}>
+    <footer style={{ background: "#0b0f0c", borderTop: "1px solid #1c231d", padding: isMobile ? "40px 20px 32px" : "56px 48px 40px" }}>
+      <div style={{ maxWidth: 1024, margin: "0 auto", display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : isCompact ? "1.4fr 1fr 1fr" : "1.4fr 1fr 1fr 1fr", gap: isMobile ? 28 : 40 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
             <div
@@ -29,13 +33,13 @@ export function Footer() {
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10, font: "400 13px Geist,sans-serif" }}>
           <span style={{ font: "600 11px 'JetBrains Mono',monospace", color: "#5d675e", letterSpacing: ".08em" }}>PRODUCT</span>
-          <a href="#how" style={{ color: "#c9cfc9" }}>How it works</a>
-          <a href="#features" style={{ color: "#c9cfc9" }}>Features</a>
-          <a href="#pricing" style={{ color: "#c9cfc9" }}>Pricing</a>
+          <a href="#how" style={{ color: "#c9cfc9", display: "flex", alignItems: "center", minHeight: isMobile ? 44 : undefined }}>How it works</a>
+          <a href="#features" style={{ color: "#c9cfc9", display: "flex", alignItems: "center", minHeight: isMobile ? 44 : undefined }}>Features</a>
+          <a href="#pricing" style={{ color: "#c9cfc9", display: "flex", alignItems: "center", minHeight: isMobile ? 44 : undefined }}>Pricing</a>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10, font: "400 13px Geist,sans-serif" }}>
           <span style={{ font: "600 11px 'JetBrains Mono',monospace", color: "#5d675e", letterSpacing: ".08em" }}>DEVELOPERS</span>
-          <a href="#cli" style={{ color: "#c9cfc9" }}>CLI</a>
+          <a href="#cli" style={{ color: "#c9cfc9", display: "flex", alignItems: "center", minHeight: isMobile ? 44 : undefined }}>CLI</a>
           <span style={{ color: "#c9cfc9" }}>Docs</span>
           <span style={{ color: "#c9cfc9" }}>GitHub App</span>
         </div>

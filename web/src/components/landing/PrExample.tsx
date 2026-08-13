@@ -1,3 +1,5 @@
+import { useIsMobile, useIsCompact } from "../../lib/useMediaQuery";
+
 const FINDINGS = [
   { type: "PHANTOM", tc: "#c2452d", finding: "currency-format-pro not on npm", sev: "CRITICAL", conf: "1.00" },
   { type: "PHANTOM", tc: "#c2452d", finding: "react-hooks-utils2 not on npm", sev: "CRITICAL", conf: "1.00" },
@@ -6,15 +8,20 @@ const FINDINGS = [
 ];
 
 export function PrExample() {
+  const isMobile = useIsMobile();
+  const isCompact = useIsCompact();
+
   return (
-    <section style={{ borderTop: "1px solid #e6e4dc", padding: "96px 48px" }}>
+    <section
+      style={{ borderTop: "1px solid #e6e4dc", padding: isMobile ? "56px 20px" : "96px 48px" }}
+    >
       <div
         style={{
           maxWidth: 1024,
           margin: "0 auto",
           display: "grid",
-          gridTemplateColumns: "0.8fr 1.2fr",
-          gap: 56,
+          gridTemplateColumns: isCompact ? "1fr" : "0.8fr 1.2fr",
+          gap: isCompact ? 28 : 56,
           alignItems: "start",
         }}
       >
@@ -23,8 +30,10 @@ export function PrExample() {
             display: "flex",
             flexDirection: "column",
             alignItems: "flex-start",
-            position: "sticky",
-            top: 96,
+            // Sticky only makes sense beside a scrolling column. Once stacked,
+            // it would pin the heading over the content below it.
+            position: isCompact ? "static" : "sticky",
+            top: isCompact ? undefined : 96,
           }}
         >
           <span
@@ -40,7 +49,7 @@ export function PrExample() {
           <h2
             style={{
               margin: 0,
-              font: "600 40px/1.12 Geist,sans-serif",
+              font: isMobile ? "600 26px/1.2 Geist,sans-serif" : "600 40px/1.12 Geist,sans-serif",
               letterSpacing: "-.02em",
               textWrap: "balance",
             }}
@@ -59,7 +68,18 @@ export function PrExample() {
             and findings. This is a real comment from a real PR.
           </p>
         </div>
-        <div style={{ background: "#fff", border: "1px solid #e6e4dc", borderRadius: 12, overflow: "hidden" }}>
+        {/* minWidth:0 is load-bearing. A grid item defaults to min-width:auto,
+            so this card would size itself to the 460px findings table and drag
+            the page wide no matter what overflow the inner box declares. */}
+        <div
+          style={{
+            background: "#fff",
+            border: "1px solid #e6e4dc",
+            borderRadius: 12,
+            overflow: "hidden",
+            minWidth: 0,
+          }}
+        >
           <div
             style={{
               display: "flex",
@@ -115,11 +135,23 @@ export function PrExample() {
                 82/100 ▲ +6
               </span>
             </div>
-            <div style={{ border: "1px solid #efede6", borderRadius: 8, overflow: "hidden" }}>
+            {/* Four columns of monospace findings need ~460px to stay aligned
+                and readable. Rather than crush them to ~84px each on a phone,
+                the table keeps its shape and scrolls inside this box. */}
+            <div
+              style={{
+                border: "1px solid #efede6",
+                borderRadius: 8,
+                overflow: "hidden",
+                overflowX: isMobile ? "auto" : "hidden",
+                WebkitOverflowScrolling: "touch",
+              }}
+            >
               <div
                 style={{
                   display: "grid",
                   gridTemplateColumns: "0.9fr 2fr 0.8fr 0.8fr",
+                  minWidth: isMobile ? 460 : undefined,
                   padding: "9px 14px",
                   background: "#faf9f5",
                   font: "600 11px 'JetBrains Mono',monospace",
@@ -138,6 +170,7 @@ export function PrExample() {
                   style={{
                     display: "grid",
                     gridTemplateColumns: "0.9fr 2fr 0.8fr 0.8fr",
+                    minWidth: isMobile ? 460 : undefined,
                     padding: "10px 14px",
                     borderTop: "1px solid #f3f1ea",
                     font: "400 12.5px 'JetBrains Mono',monospace",

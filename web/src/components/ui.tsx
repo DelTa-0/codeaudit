@@ -31,7 +31,10 @@ export function Button({
   }[variant];
   return (
     <button
-      className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50 ${styles} ${className}`}
+      // py-3 on phones takes every button to the 44px minimum tap target;
+      // desktop keeps its original 2.5 so nothing shifts there. Changing it
+      // here lifts every button in the app at once.
+      className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50 sm:py-2.5 ${styles} ${className}`}
       {...props}
     />
   );
@@ -41,7 +44,9 @@ export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className={`w-full rounded-xl border border-border bg-surface-2 px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 ${props.className ?? ""}`}
+      // Matching the button: a 44px field is also what stops iOS Safari from
+      // zooming when the input takes focus.
+      className={`w-full rounded-xl border border-border bg-surface-2 px-3.5 py-3 text-sm text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 sm:py-2.5 ${props.className ?? ""}`}
     />
   );
 }

@@ -1,11 +1,15 @@
+import { useIsMobile, useIsCompact } from "../../lib/useMediaQuery";
+
 export function Problem() {
+  const isMobile = useIsMobile();
+  const isCompact = useIsCompact();
   return (
     <section
       style={{
         borderTop: "1px solid #e6e4dc",
-        padding: "96px 48px",
+        padding: isMobile ? "56px 20px" : "96px 48px",
         display: "grid",
-        gridTemplateColumns: "1fr 1fr",
+        gridTemplateColumns: isCompact ? "1fr" : "1fr 1fr",
         gap: 64,
         alignItems: "center",
         maxWidth: 1120,
@@ -27,7 +31,7 @@ export function Problem() {
         <h2
           style={{
             margin: 0,
-            font: "600 40px/1.12 Geist,sans-serif",
+            font: isMobile ? "600 26px/1.2 Geist,sans-serif" : "600 40px/1.12 Geist,sans-serif",
             letterSpacing: "-.02em",
             textWrap: "balance",
           }}

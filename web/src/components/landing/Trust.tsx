@@ -1,3 +1,5 @@
+import { useIsMobile, useIsCompact } from "../../lib/useMediaQuery";
+
 const OPT_INS = [
   { title: "Webhook auto-scan", body: "Scan automatically on every push", bg: "#12b673", bd: "#0e9b60", side: "flex-end" as const },
   { title: "Merge gate", body: "Block PRs below your score threshold", bg: "#e0ddd2", bd: "#cfccc0", side: "flex-start" as const },
@@ -5,14 +7,16 @@ const OPT_INS = [
 ];
 
 export function Trust() {
+  const isMobile = useIsMobile();
+  const isCompact = useIsCompact();
   return (
-    <section style={{ background: "#d9f4e3", padding: "96px 48px" }}>
+    <section style={{ background: "#d9f4e3", padding: isMobile ? "56px 20px" : "96px 48px" }}>
       <div
         style={{
           maxWidth: 1024,
           margin: "0 auto",
           display: "grid",
-          gridTemplateColumns: "1fr 1fr",
+          gridTemplateColumns: isCompact ? "1fr" : "1fr 1fr",
           gap: 64,
           alignItems: "center",
         }}
@@ -31,7 +35,7 @@ export function Trust() {
           <h2
             style={{
               margin: 0,
-              font: "600 44px/1.1 Geist,sans-serif",
+              font: isMobile ? "600 27px/1.2 Geist,sans-serif" : "600 44px/1.1 Geist,sans-serif",
               letterSpacing: "-.02em",
               color: "#0c2a1c",
               textWrap: "balance",

@@ -90,7 +90,8 @@ export function ScanReport() {
 
       {s && (
         <Section title="Summary">
-          <table className="report-table w-full text-sm">
+          <div className="-mx-1 overflow-x-auto px-1 print:overflow-visible print:mx-0 print:px-0">
+          <table className="report-table w-full min-w-[520px] text-sm sm:min-w-0 print:min-w-0">
             <tbody>
               {(
                 [
@@ -111,12 +112,14 @@ export function ScanReport() {
               ))}
             </tbody>
           </table>
+          </div>
         </Section>
       )}
 
       {vulnerable.length > 0 && (
         <Section title={`Known vulnerabilities (${vulnerable.length})`}>
-          <table className="report-table w-full text-sm">
+          <div className="-mx-1 overflow-x-auto px-1 print:overflow-visible print:mx-0 print:px-0">
+          <table className="report-table w-full min-w-[520px] text-sm sm:min-w-0 print:min-w-0">
             <thead>
               <tr className="border-b border-border text-left text-xs text-muted">
                 <th className="pb-1 font-medium">Package</th>
@@ -138,11 +141,13 @@ export function ScanReport() {
               ))}
             </tbody>
           </table>
+          </div>
         </Section>
       )}
 
       <Section title={`Dependencies (${dependencies.length})`}>
-        <table className="report-table w-full text-sm">
+        <div className="-mx-1 overflow-x-auto px-1 print:overflow-visible print:mx-0 print:px-0">
+          <table className="report-table w-full min-w-[520px] text-sm sm:min-w-0 print:min-w-0">
           <thead>
             <tr className="border-b border-border text-left text-xs text-muted">
               <th className="pb-1 font-medium">Package</th>
@@ -168,11 +173,13 @@ export function ScanReport() {
             })}
           </tbody>
         </table>
+          </div>
       </Section>
 
       {secretFindings.length > 0 && (
         <Section title={`Hardcoded secrets (${secretFindings.length})`}>
-          <table className="report-table w-full text-sm">
+          <div className="-mx-1 overflow-x-auto px-1 print:overflow-visible print:mx-0 print:px-0">
+          <table className="report-table w-full min-w-[520px] text-sm sm:min-w-0 print:min-w-0">
             <thead>
               <tr className="border-b border-border text-left text-xs text-muted">
                 <th className="pb-1 font-medium">Provider</th>
@@ -200,12 +207,14 @@ export function ScanReport() {
               })}
             </tbody>
           </table>
+          </div>
         </Section>
       )}
 
       {agentConfigFindings.length > 0 && (
         <Section title={`Agent config risks (${agentConfigFindings.length})`}>
-          <table className="report-table w-full text-sm">
+          <div className="-mx-1 overflow-x-auto px-1 print:overflow-visible print:mx-0 print:px-0">
+          <table className="report-table w-full min-w-[520px] text-sm sm:min-w-0 print:min-w-0">
             <thead>
               <tr className="border-b border-border text-left text-xs text-muted">
                 <th className="pb-1 font-medium">Rule</th>
@@ -231,6 +240,7 @@ export function ScanReport() {
               })}
             </tbody>
           </table>
+          </div>
         </Section>
       )}
 
@@ -238,7 +248,8 @@ export function ScanReport() {
         {deadCodeFindings.length === 0 ? (
           <p className="text-sm text-muted">None detected.</p>
         ) : (
-          <table className="report-table w-full text-sm">
+          <div className="-mx-1 overflow-x-auto px-1 print:overflow-visible print:mx-0 print:px-0">
+          <table className="report-table w-full min-w-[520px] text-sm sm:min-w-0 print:min-w-0">
             <thead>
               <tr className="border-b border-border text-left text-xs text-muted">
                 <th className="pb-1 font-medium">Symbol</th>
@@ -265,6 +276,7 @@ export function ScanReport() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </Section>
 

@@ -1,3 +1,5 @@
+import { useIsMobile, useIsCompact } from "../../lib/useMediaQuery";
+
 const DEPS = [
   { name: "currency-format-pro", status: "PHANTOM", sc: "#ff8a70", meta: "not on npm" },
   { name: "react-hooks-utils2", status: "PHANTOM", sc: "#ff8a70", meta: "not on npm" },
@@ -8,8 +10,17 @@ const DEPS = [
 const TREND = [58, 61, 60, 66, 70, 73, 76, 82];
 
 export function DashboardPreview() {
+  const isMobile = useIsMobile();
+  const isCompact = useIsCompact();
+
   return (
-    <section style={{ borderTop: "1px solid #e6e4dc", background: "#f2f1ea", padding: "96px 48px" }}>
+    <section
+      style={{
+        borderTop: "1px solid #e6e4dc",
+        background: "#f2f1ea",
+        padding: isMobile ? "56px 20px" : "96px 48px",
+      }}
+    >
       <div
         style={{
           maxWidth: 1024,
@@ -26,7 +37,7 @@ export function DashboardPreview() {
         <h2
           style={{
             margin: "16px 0 0",
-            font: "600 40px/1.12 Geist,sans-serif",
+            font: isMobile ? "600 26px/1.2 Geist,sans-serif" : "600 40px/1.12 Geist,sans-serif",
             letterSpacing: "-.02em",
             maxWidth: 560,
             textWrap: "balance",
@@ -79,7 +90,18 @@ export function DashboardPreview() {
               LAST SCAN 2 MIN AGO · WEBHOOK
             </span>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "0.9fr 1.4fr 1fr", gap: 1, background: "#1c2029" }}>
+          {/* Three panels side by side leave ~110px each at 375px, which the
+              score dial and the 8-week trend chart cannot shrink into — this
+              was the last thing dragging the document past the viewport.
+              Stacked, each panel gets the full width and stays legible. */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: isCompact ? "1fr" : "0.9fr 1.4fr 1fr",
+              gap: 1,
+              background: "#1c2029",
+            }}
+          >
             <div
               style={{
                 background: "#0a0c12",

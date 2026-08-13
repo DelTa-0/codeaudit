@@ -1,3 +1,5 @@
+import { useIsMobile, useIsCompact } from "../../lib/useMediaQuery";
+
 const STEPS = [
   { n: "01", title: "Push or scan", body: "A webhook fires on push, or you run the CLI. No agent installed in your repo.", highlight: false },
   { n: "02", title: "Clone & parse", body: "We clone the repo, walk the tree, and build the full dependency and import graph.", highlight: false },
@@ -7,10 +9,17 @@ const STEPS = [
 ];
 
 export function HowItWorks() {
+  const isMobile = useIsMobile();
+  const isCompact = useIsCompact();
+
   return (
     <section
       id="how"
-      style={{ borderTop: "1px solid #e6e4dc", background: "#f2f1ea", padding: "96px 48px" }}
+      style={{
+        borderTop: "1px solid #e6e4dc",
+        background: "#f2f1ea",
+        padding: isMobile ? "56px 20px" : "96px 48px",
+      }}
     >
       <div style={{ maxWidth: 1024, margin: "0 auto" }}>
         <span style={{ font: "500 12px 'JetBrains Mono',monospace", color: "#127a4f", letterSpacing: ".08em" }}>
@@ -18,8 +27,8 @@ export function HowItWorks() {
         </span>
         <h2
           style={{
-            margin: "16px 0 0",
-            font: "600 40px/1.12 Geist,sans-serif",
+            margin: isMobile ? "12px 0 0" : "16px 0 0",
+            font: isMobile ? "600 26px/1.2 Geist,sans-serif" : "600 40px/1.12 Geist,sans-serif",
             letterSpacing: "-.02em",
             maxWidth: 560,
             textWrap: "balance",
@@ -30,13 +39,15 @@ export function HowItWorks() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(5,1fr)",
+            // Five columns at 375px gives each step ~66px — narrower than one
+            // word. One column on phones, a 2x3 arrangement on small tablets.
+            gridTemplateColumns: isMobile ? "1fr" : isCompact ? "repeat(2,1fr)" : "repeat(5,1fr)",
             gap: 1,
             background: "#ddd9cf",
             border: "1px solid #ddd9cf",
             borderRadius: 12,
             overflow: "hidden",
-            marginTop: 44,
+            marginTop: isMobile ? 28 : 44,
           }}
         >
           {STEPS.map((s) => (

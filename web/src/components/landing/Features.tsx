@@ -1,3 +1,5 @@
+import { useIsMobile, useIsCompact } from "../../lib/useMediaQuery";
+
 const FEATURES = [
   {
     tag: "REGISTRY-VERIFIED",
@@ -44,8 +46,10 @@ const FEATURES = [
 ];
 
 export function Features() {
+  const isMobile = useIsMobile();
+  const isCompact = useIsCompact();
   return (
-    <section id="features" style={{ borderTop: "1px solid #e6e4dc", padding: "96px 48px" }}>
+    <section id="features" style={{ borderTop: "1px solid #e6e4dc", padding: isMobile ? "56px 20px" : "96px 48px" }}>
       <div style={{ maxWidth: 1024, margin: "0 auto" }}>
         <span style={{ font: "500 12px 'JetBrains Mono',monospace", color: "#127a4f", letterSpacing: ".08em" }}>
           FEATURES
@@ -53,7 +57,7 @@ export function Features() {
         <h2
           style={{
             margin: "16px 0 0",
-            font: "600 40px/1.12 Geist,sans-serif",
+            font: isMobile ? "600 26px/1.2 Geist,sans-serif" : "600 40px/1.12 Geist,sans-serif",
             letterSpacing: "-.02em",
             maxWidth: 520,
             textWrap: "balance",
@@ -61,7 +65,7 @@ export function Features() {
         >
           Six things it does today. Not a roadmap.
         </h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20, marginTop: 44 }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : isCompact ? "repeat(2,1fr)" : "repeat(3,1fr)", gap: 20, marginTop: 44 }}>
           {FEATURES.map((f) => (
             <div
               key={f.title}

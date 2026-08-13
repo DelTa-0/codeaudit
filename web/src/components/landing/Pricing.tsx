@@ -1,8 +1,12 @@
+import { useIsMobile, useIsCompact } from "../../lib/useMediaQuery";
+
 import { Link } from "react-router-dom";
 
 export function Pricing() {
+  const isMobile = useIsMobile();
+  const isCompact = useIsCompact();
   return (
-    <section id="pricing" style={{ borderTop: "1px solid #e6e4dc", padding: "96px 48px" }}>
+    <section id="pricing" style={{ borderTop: "1px solid #e6e4dc", padding: isMobile ? "56px 20px" : "96px 48px" }}>
       <div style={{ maxWidth: 1024, margin: "0 auto", display: "flex", flexDirection: "column", alignItems: "center" }}>
         <span style={{ font: "500 12px 'JetBrains Mono',monospace", color: "#127a4f", letterSpacing: ".08em" }}>
           PRICING
@@ -10,7 +14,7 @@ export function Pricing() {
         <h2
           style={{
             margin: "16px 0 0",
-            font: "600 40px/1.12 Geist,sans-serif",
+            font: isMobile ? "600 26px/1.2 Geist,sans-serif" : "600 40px/1.12 Geist,sans-serif",
             letterSpacing: "-.02em",
             textAlign: "center",
             textWrap: "balance",
@@ -18,7 +22,7 @@ export function Pricing() {
         >
           Start free. The CLI is free forever.
         </h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20, marginTop: 44, width: "100%" }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : isCompact ? "repeat(2,1fr)" : "repeat(3,1fr)", gap: 20, marginTop: 44, width: "100%" }}>
           <div style={{ background: "#fff", border: "1px solid #e6e4dc", borderRadius: 14, padding: 28, display: "flex", flexDirection: "column", gap: 18 }}>
             <span style={{ font: "600 15px 'JetBrains Mono',monospace", color: "#565b51" }}>FREE</span>
             <span style={{ font: "600 40px Geist,sans-serif", letterSpacing: "-.02em" }}>$0</span>
@@ -76,7 +80,7 @@ export function Pricing() {
                 font: "500 14px Geist,sans-serif",
                 background: "#b9f0cf",
                 color: "#0c2a1c",
-                padding: "12px 0",
+                padding: isMobile ? "14px 0" : "12px 0",
                 borderRadius: 99,
                 textAlign: "center",
               }}

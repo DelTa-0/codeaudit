@@ -544,7 +544,11 @@ export function ScanDetail() {
             (() => {
               const polyglot = new Set(deps.map((d) => d.ecosystem)).size > 1;
               return (
-                <table className="w-full text-sm">
+                // Package rows carry up to five columns of names and versions.
+                // Below ~560px they stop fitting, so the table keeps its shape
+                // and scrolls inside this wrapper instead of widening the page.
+                <div className="-mx-1 overflow-x-auto px-1">
+                <table className="w-full min-w-[560px] text-sm sm:min-w-0">
                   <thead>
                     <tr className="border-b border-border text-left text-xs text-muted">
                       <th className="pb-2 font-medium">Package</th>
@@ -606,6 +610,7 @@ export function ScanDetail() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               );
             })()
           )}

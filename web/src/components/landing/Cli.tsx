@@ -1,17 +1,23 @@
 import { useCopyCommand } from "../../lib/useScanDemo";
+import { useIsMobile, useIsCompact } from "../../lib/useMediaQuery";
 
 export function Cli() {
   const { copied, copy } = useCopyCommand();
+  const isMobile = useIsMobile();
+  const isCompact = useIsCompact();
 
   return (
-    <section id="cli" style={{ background: "#101512", padding: "96px 48px" }}>
+    <section
+      id="cli"
+      style={{ background: "#101512", padding: isMobile ? "56px 20px" : "96px 48px" }}
+    >
       <div
         style={{
           maxWidth: 1024,
           margin: "0 auto",
           display: "grid",
-          gridTemplateColumns: "0.85fr 1.15fr",
-          gap: 56,
+          gridTemplateColumns: isCompact ? "1fr" : "0.85fr 1.15fr",
+          gap: isCompact ? 28 : 56,
           alignItems: "center",
         }}
       >
@@ -67,13 +73,24 @@ export function Cli() {
             $ npx codeorion scan . <span style={{ color: "#5d675e", fontSize: 12 }}>{copied ? "✓ copied" : "⧉"}</span>
           </span>
         </div>
+        {/* Terminal output is fixed-width by nature — the aligned columns are
+            the point, so shrinking the type would defeat it. Instead the block
+            scrolls horizontally within itself, which keeps the page body from
+            scrolling. minWidth:0 is required: a grid item defaults to
+            min-width:auto and would otherwise refuse to shrink below its
+            content, pushing the whole grid wide. */}
         <div
           style={{
             background: "#0b0f0c",
             border: "1px solid #232a24",
             borderRadius: 12,
-            padding: "20px 22px",
-            font: "400 13px/1.75 'JetBrains Mono',monospace",
+            padding: isMobile ? "16px 16px" : "20px 22px",
+            font: isMobile
+              ? "400 11.5px/1.7 'JetBrains Mono',monospace"
+              : "400 13px/1.75 'JetBrains Mono',monospace",
+            minWidth: 0,
+            overflowX: "auto",
+            WebkitOverflowScrolling: "touch",
           }}
         >
           <div><span style={{ color: "#7b857c" }}>~/vibe/codeaudit ›</span> <span style={{ color: "#f0c064" }}>npx</span> <span style={{ color: "#e8ede8" }}>codeorion scan</span></div>
