@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { api, ApiError, type GithubRepoOption, type Repo } from "../lib/api";
+import {
+  api,
+  ApiError,
+  type GithubInstallation,
+  type GithubReposResponse,
+  type GithubRepoOption,
+  type Repo,
+} from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { Button, Card, Input, Badge, EmptyState, Spinner } from "../components/ui";
 
@@ -35,7 +42,13 @@ type GithubState =
   | { kind: "loading" }
   | { kind: "unconfigured" } // no GITHUB_APP_ID on the server
   | { kind: "not-installed"; installUrl: string | null; claimable: ClaimableInstallation[] }
-  | { kind: "ready"; repos: GithubRepoOption[] };
+  | {
+      kind: "ready";
+      repos: GithubRepoOption[];
+      installations: GithubInstallation[];
+      // Also the "change which repositories the App can see" URL — see loadGithub.
+      installUrl: string | null;
+    };
 
 export function Dashboard() {
   const { orgs } = useAuth();
@@ -47,6 +60,7 @@ export function Dashboard() {
   const [github, setGithub] = useState<GithubState>({ kind: "loading" });
   const [filter, setFilter] = useState("");
   const [connecting, setConnecting] = useState<number | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   // null = follow the default (open only when the list is short enough to be
   // worth showing outright); a boolean once the user has expressed a choice.
   const [pickerOpen, setPickerOpen] = useState<boolean | null>(null);
@@ -58,19 +72,27 @@ export function Dashboard() {
 
   const loadGithub = async () => {
     if (!org) return;
+    // Fetched in both states, not just before the first install: GitHub shows
+    // an account that already has the App the same configure screen, so this
+    // URL doubles as "add more repositories" once installed — and returns
+    // through the Setup URL with setup_action=update, which re-links and
+    // reloads this list.
+    const installUrlPromise = api<{ url: string }>("/api/github/install-url")
+      .then((r) => r.url)
+      .catch(() => null); // App not configured on this deployment — no link.
     try {
-      const list = await api<GithubRepoOption[]>(`/api/orgs/${org.id}/github-repos`);
-      setGithub({ kind: "ready", repos: list });
+      const data = await api<GithubReposResponse>(`/api/orgs/${org.id}/github-repos`);
+      setGithub({
+        kind: "ready",
+        repos: data.repos,
+        installations: data.installations,
+        installUrl: await installUrlPromise,
+      });
     } catch (err) {
       const status = err instanceof ApiError ? err.status : 0;
       if (status === 501) return setGithub({ kind: "unconfigured" });
       // 404 is the documented "no installation linked to this org" case.
-      let installUrl: string | null = null;
-      try {
-        installUrl = (await api<{ url: string }>("/api/github/install-url")).url;
-      } catch {
-        // App not configured on this deployment — fall through with no link.
-      }
+      const installUrl = await installUrlPromise;
       // An App installed straight from GitHub — or installed before this flow
       // existed — leaves an installation nobody has claimed. Offer it instead
       // of telling someone to install what they already installed.
@@ -108,6 +130,19 @@ export function Dashboard() {
     void loadGithub();
   }, [org?.id]);
 
+  // Changing repository access on GitHub normally returns through the Setup
+  // URL, which reloads this page — but not if the user got to GitHub some
+  // other way, or dismissed the redirect. This is the manual way back in sync.
+  const refreshGithub = async () => {
+    setRefreshing(true);
+    setError(null);
+    try {
+      await Promise.all([load(), loadGithub()]);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const connectFromGithub = async (repo: GithubRepoOption) => {
     if (!org) return;
     setError(null);
@@ -120,6 +155,7 @@ export function Dashboard() {
           fullName: repo.fullName,
           private: repo.private,
           defaultBranch: repo.defaultBranch,
+          installationId: repo.installationId,
         },
       });
       await Promise.all([load(), loadGithub()]);
@@ -150,6 +186,16 @@ export function Dashboard() {
     if (github.kind !== "ready") return 0;
     return github.repos.filter((r) => !connectedNames.has(r.fullName.toLowerCase())).length;
   }, [github, connectedNames]);
+
+  // "selected" means the App was granted a hand-picked list rather than the
+  // whole account, so a repository can be missing from the picker because it
+  // was never ticked — a state only fixable back on GitHub.
+  const selectedOnly = useMemo(
+    () =>
+      github.kind === "ready" &&
+      github.installations.some((i) => i.repositorySelection === "selected"),
+    [github],
+  );
 
   // Short lists are more useful open than folded; long ones would push the
   // repositories you already connected off the screen entirely.
@@ -275,24 +321,66 @@ export function Dashboard() {
                 {totalAvailable} available
               </span>
             </button>
-            {isPickerOpen && github.repos.length > AUTO_OPEN_LIMIT && (
-              <Input
-                placeholder="Filter repositories…"
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                className="w-full sm:w-64"
-                aria-label="Filter repositories"
-              />
-            )}
+            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+              {isPickerOpen && github.repos.length > AUTO_OPEN_LIMIT && (
+                <Input
+                  placeholder="Filter repositories…"
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                  className="w-full sm:w-64"
+                  aria-label="Filter repositories"
+                />
+              )}
+              {/* Deliberately same-tab: GitHub returns here through the Setup
+                  URL with the new selection, and a new tab would strand that
+                  redirect where the user is not looking. */}
+              {github.installUrl && (
+                <a
+                  href={github.installUrl}
+                  className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-border px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 sm:py-2.5"
+                >
+                  Add repositories
+                </a>
+              )}
+              <Button
+                variant="ghost"
+                onClick={() => void refreshGithub()}
+                disabled={refreshing}
+                aria-label="Refresh the repository list from GitHub"
+              >
+                {refreshing ? "Refreshing…" : "Refresh"}
+              </Button>
+            </div>
           </div>
+
+          {selectedOnly && (
+            <p className="mt-2 text-xs text-muted">
+              The App can only see the repositories you picked when installing it. Use “Add
+              repositories” to grant it more — or to switch it to all of them.
+            </p>
+          )}
 
           {!isPickerOpen ? null : available.length === 0 ? (
             <p className="mt-3 text-sm text-muted">
-              {github.repos.length === 0
-                ? "The App is installed but has no repositories selected yet. Grant it access to a repository on GitHub, then reload."
-                : filter
-                  ? "No repositories match that filter."
-                  : "Every repository the App can see is already connected."}
+              {github.repos.length === 0 ? (
+                <>
+                  The App is installed but has no repositories selected yet.{" "}
+                  {github.installUrl ? (
+                    <a
+                      href={github.installUrl}
+                      className="font-medium text-primary underline underline-offset-2"
+                    >
+                      Choose repositories on GitHub
+                    </a>
+                  ) : (
+                    "Grant it access to a repository on GitHub, then refresh."
+                  )}
+                </>
+              ) : filter ? (
+                "No repositories match that filter."
+              ) : (
+                "Every repository the App can see is already connected."
+              )}
             </p>
           ) : (
             // Capped so a long list scrolls within the card instead of pushing

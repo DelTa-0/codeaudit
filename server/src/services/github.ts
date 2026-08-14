@@ -113,6 +113,28 @@ export async function listAppInstallations(): Promise<
   }));
 }
 
+/**
+ * One installation, as the App sees it.
+ *
+ * Read when an installation is linked so we record which account it belongs to
+ * and whether it was granted the whole account or a hand-picked list. The
+ * second case is the one that strands people: a repository is missing because
+ * they did not tick it, which is only fixable back on GitHub.
+ */
+export async function getInstallation(installationId: number): Promise<{
+  accountLogin: string | null;
+  repositorySelection: string | null;
+}> {
+  const data = (await githubFetch(`/app/installations/${installationId}`, appJwt())) as {
+    account?: { login?: string };
+    repository_selection?: string;
+  };
+  return {
+    accountLogin: data.account?.login ?? null,
+    repositorySelection: data.repository_selection ?? null,
+  };
+}
+
 export async function listInstallationRepos(installationId: number) {
   const token = await getInstallationToken(installationId);
   const data = (await githubFetch(`/installation/repositories?per_page=100`, token)) as {

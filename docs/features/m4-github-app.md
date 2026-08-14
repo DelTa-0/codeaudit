@@ -32,10 +32,15 @@ scans, and PR sticky comments.
   `GET /api/auth/github/callback` (exchanges code, links/creates user by
   `github_user_id` or matching email, redirects to the SPA with the JWT in a
   URL fragment)
-- `routes/github.ts` — install-URL endpoint, installation linking, repo
-  picker (`GET /orgs/:orgId/github-repos`), connecting a picked repo
-  (private-capable, plan-limit checked), per-repo webhook enable/disable
-  toggle (gated to the Pro+ plan)
+- `routes/github.ts` — install-URL endpoint, installation linking (records
+  `account_login` + `repository_selection` from `GET /app/installations/:id`,
+  refreshed on every re-link so a `setup_action=update` round trip keeps them
+  current), repo picker (`GET /orgs/:orgId/github-repos` → `{ installations,
+  repos }`, merged across *every* installation the org owns and deduped by
+  repo id, tolerating one failed installation), connecting a picked repo
+  (private-capable, plan-limit checked, stamped with the installation the
+  picker sourced it from), per-repo webhook enable/disable toggle (gated to
+  the Pro+ plan)
 - `routes/webhooks.ts` — `POST /api/webhooks/github`, raw-body mounted
   before `express.json()` for HMAC verification. Handles `push`,
   `pull_request` (opened/synchronize/reopened), `installation` (deleted).
@@ -48,6 +53,14 @@ scans, and PR sticky comments.
   on completion
 - Frontend: "Continue with GitHub" button (`Auth.tsx`), fragment-token
   pickup on redirect back, webhook enable/disable toggle (`RepoDetail.tsx`)
+- Frontend, changing access after the fact (`Dashboard.tsx`): an installation
+  granted "Only select repositories" can otherwise never be widened from the
+  app — the install URL was rendered only in the not-installed state, so once
+  linked there was no way back to GitHub's picker. The same
+  `/apps/<slug>/installations/new` URL is now also an "Add repositories"
+  action on the installed card (same tab, so GitHub's Setup-URL redirect
+  returns with `setup_action=update` and re-links), with a "Refresh" fallback
+  for when the user changes access on GitHub without coming back through it
 
 ## Getting GitHub App credentials
 

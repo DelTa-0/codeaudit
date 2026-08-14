@@ -5,7 +5,12 @@ import { requireAuth, requireOrgRole } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
 import { badRequest, notFound } from "../lib/errors.js";
 import { config } from "../lib/config.js";
-import { githubConfigured, listInstallationRepos, listAppInstallations } from "../services/github.js";
+import {
+  githubConfigured,
+  listInstallationRepos,
+  listAppInstallations,
+  getInstallation,
+} from "../services/github.js";
 import { assertCanAddRepo, getOrgPlan } from "../services/plans.js";
 import { logAudit } from "../services/audit.js";
 import { paymentRequired } from "../lib/errors.js";
@@ -84,12 +89,30 @@ githubRouter.post(
     try {
       if (!githubConfigured()) throw badRequest("GitHub App is not configured on this server");
       const { installationId } = req.body as z.infer<typeof linkSchema>;
+      // Best-effort: the metadata only drives dashboard copy, so a GitHub API
+      // blip must not stop the installation from being linked.
+      let meta: { accountLogin: string | null; repositorySelection: string | null } = {
+        accountLogin: null,
+        repositorySelection: null,
+      };
+      try {
+        meta = await getInstallation(installationId);
+      } catch (err) {
+        console.error(`[github] could not read installation ${installationId}:`, err);
+      }
+      // This endpoint is also the landing point for setup_action=update — the
+      // user coming back after changing which repositories the App can see —
+      // so the columns are refreshed on conflict, not just on first insert.
+      // COALESCE keeps previously recorded values when the lookup above failed.
       const [row] = await query(
-        `INSERT INTO github_installations (org_id, installation_id)
-         VALUES ($1, $2)
-         ON CONFLICT (installation_id) DO UPDATE SET org_id = EXCLUDED.org_id
-         RETURNING id, installation_id, account_login`,
-        [req.params.orgId, installationId],
+        `INSERT INTO github_installations (org_id, installation_id, account_login, repository_selection)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (installation_id) DO UPDATE SET org_id = EXCLUDED.org_id,
+           account_login = COALESCE(EXCLUDED.account_login, github_installations.account_login),
+           repository_selection =
+             COALESCE(EXCLUDED.repository_selection, github_installations.repository_selection)
+         RETURNING id, installation_id, account_login, repository_selection`,
+        [req.params.orgId, installationId, meta.accountLogin, meta.repositorySelection],
       );
       await logAudit(req.params.orgId, req.user!.id, "github.installation_linked", String(installationId));
       res.status(201).json(row);
@@ -99,19 +122,66 @@ githubRouter.post(
   },
 );
 
-/** Repo picker: lists repos accessible to the org's installation. */
+/**
+ * Repo picker: every repo the org's installations can see, plus what those
+ * installations are.
+ *
+ * Reconfiguring repository access sends the user through the same GitHub
+ * screen as a first install, which also lets them install on a *second*
+ * account. Listing a single installation — which is what this did, with no
+ * ORDER BY, so "single" meant "whichever row Postgres returned first" — would
+ * then hide the other account's repositories with no hint as to why.
+ */
 githubRouter.get(
   "/orgs/:orgId/github-repos",
   requireOrgRole("developer"),
   async (req, res, next) => {
     try {
-      const inst = await queryOne<{ id: string; installation_id: string }>(
-        "SELECT id, installation_id FROM github_installations WHERE org_id = $1",
+      const installs = await query<{
+        installation_id: string;
+        account_login: string | null;
+        repository_selection: string | null;
+      }>(
+        `SELECT installation_id, account_login, repository_selection
+         FROM github_installations WHERE org_id = $1 ORDER BY created_at`,
         [req.params.orgId],
       );
-      if (!inst) throw notFound("No GitHub App installation linked to this organization");
-      const repos = await listInstallationRepos(Number(inst.installation_id));
-      res.json(repos);
+      if (installs.length === 0)
+        throw notFound("No GitHub App installation linked to this organization");
+
+      const perInstall = await Promise.all(
+        installs.map(async (inst) => {
+          const installationId = Number(inst.installation_id);
+          try {
+            const repos = await listInstallationRepos(installationId);
+            return repos.map((r) => ({ ...r, installationId }));
+          } catch (err) {
+            // One revoked or suspended installation must not blank the picker
+            // for the others — the same tolerance repos.ts already applies.
+            console.error(`[github] listing repos for installation ${installationId} failed:`, err);
+            return [];
+          }
+        }),
+      );
+
+      // The same repo can be reachable through two installations (a user
+      // install and an org install); the first one wins so the list has one
+      // row per repository.
+      const seen = new Set<number>();
+      const repos = perInstall.flat().filter((r) => {
+        if (seen.has(r.githubRepoId)) return false;
+        seen.add(r.githubRepoId);
+        return true;
+      });
+
+      res.json({
+        installations: installs.map((i) => ({
+          installationId: Number(i.installation_id),
+          accountLogin: i.account_login,
+          repositorySelection: i.repository_selection,
+        })),
+        repos,
+      });
     } catch (err) {
       next(err);
     }
@@ -123,6 +193,10 @@ const connectGithubSchema = z.object({
   fullName: z.string().min(3).max(200).regex(/^[\w.-]+\/[\w.-]+$/),
   private: z.boolean(),
   defaultBranch: z.string().min(1).max(100),
+  // Which installation the picker sourced this repo from. Optional so a tab
+  // loaded before this field existed keeps working; scoped to the org below,
+  // so it cannot be used to borrow another org's installation.
+  installationId: z.number().int().positive().optional(),
 });
 
 /** Connects an installation repo (incl. private) to the org. */
@@ -133,10 +207,15 @@ githubRouter.post(
   async (req, res, next) => {
     try {
       const body = req.body as z.infer<typeof connectGithubSchema>;
-      const inst = await queryOne<{ id: string }>(
-        "SELECT id FROM github_installations WHERE org_id = $1",
-        [req.params.orgId],
-      );
+      const inst = body.installationId
+        ? await queryOne<{ id: string }>(
+            "SELECT id FROM github_installations WHERE org_id = $1 AND installation_id = $2",
+            [req.params.orgId, body.installationId],
+          )
+        : await queryOne<{ id: string }>(
+            "SELECT id FROM github_installations WHERE org_id = $1 ORDER BY created_at",
+            [req.params.orgId],
+          );
       if (!inst) throw notFound("No GitHub App installation linked to this organization");
       await assertCanAddRepo(req.params.orgId, body.private);
       const [repo] = await query(

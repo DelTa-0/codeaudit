@@ -56,6 +56,20 @@ export interface GithubRepoOption {
   fullName: string;
   private: boolean;
   defaultBranch: string;
+  /** Which installation surfaced it — an org can have more than one. */
+  installationId: number;
+}
+
+/** A linked App installation. `repositorySelection` is "all" | "selected". */
+export interface GithubInstallation {
+  installationId: number;
+  accountLogin: string | null;
+  repositorySelection: string | null;
+}
+
+export interface GithubReposResponse {
+  installations: GithubInstallation[];
+  repos: GithubRepoOption[];
 }
 
 export interface Repo {
