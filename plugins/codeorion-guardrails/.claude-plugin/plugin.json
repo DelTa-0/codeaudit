@@ -1,7 +1,7 @@
 {
   "name": "codeorion-guardrails",
   "description": "Reminds an AI coding agent to call codeorion-mcp's verify_package, scan_secrets, and audit_agent_config tools before trusting a package, a file it's about to write, or a file it's about to read as instructions — including passive encounters, not just installs/writes.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": {
     "name": "CodeAudit"
   },

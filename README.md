@@ -302,9 +302,10 @@ file content for hardcoded secrets before it's written, and audits files an
 agent trusts as instructions (`CLAUDE.md`, MCP configs, permission
 settings) for prompt injection and unsafe config. See
 [`mcp/README.md`](mcp/README.md) for setup (Claude Code, Cursor, and any
-other MCP-compatible agent) — Claude Code users can install the companion
-`codeorion-guardrails` skill as a one-command plugin so these checks fire
-on more than just installs and writes.
+other MCP-compatible agent). Setup is two steps — connect the server, then
+install the companion `codeorion-guardrails` plugin so the checks fire on
+more than just installs and writes. The plugin carries the skill only, not
+the server, so neither step works alone.
 
 ### CLI/CI upload tracking
 

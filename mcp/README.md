@@ -4,8 +4,13 @@ An MCP server that lets AI coding agents (Claude Code, Cursor, Cline, and
 other MCP-compatible tools) check whether a package is real and
 trustworthy **before** installing it — catching hallucinated ("phantom")
 packages, typosquats, and known CVEs at the moment an agent is about to
-`npm install`/`pip install` something — and check content for hardcoded
-secrets before it's written to a file.
+`npm install`/`pip install` something. It also checks content for hardcoded
+secrets before it's written to a file, and audits files an agent is about to
+trust *as instructions* (`CLAUDE.md`, MCP configs, permission settings) for
+prompt injection and unsafe configuration.
+
+Four tools, three kinds of trust decision — installing a package, writing
+something that could be a credential, and treating a file as instructions.
 
 Runs fully offline by default (no account needed) — same registry/CVE
 checks as `npx codeorion`. Set `CODEAUDIT_TOKEN` to additionally get
@@ -14,15 +19,76 @@ simple typo of anything popular (e.g. `fastimagepro` → Pillow/imageio).
 
 ## Setup
 
-**Claude Code** — one command, no file editing:
+Two steps, and **both are required**: connect the server, then install the
+skill that makes your agent call it. They work hand in hand — see "Neither
+half works alone" below for what each one does without the other.
+
+The whole thing, for Claude Code, if you just want to paste and go:
+
+```bash
+npm install -g codeorion-mcp
+claude mcp add codeaudit -- codeorion-mcp
+```
+
+Restart your session, then:
+
+```bash
+/plugin marketplace add DelTa-0/codeaudit
+/plugin install codeorion-guardrails@codeaudit
+```
+
+That's it. `/mcp` should now list four tools under `codeaudit`. The rest of
+this section covers the variations: `npx` instead of a global install, other
+clients, and putting the skill in a repo instead of on one machine.
+
+### 1. Connect the server
+
+**Claude Code, macOS / Linux** — one command, no file editing:
 
 ```bash
 claude mcp add codeaudit -- npx -y codeorion-mcp
 ```
 
-(Add `-e CODEAUDIT_TOKEN=your-token` before `--` if you have one. Use
-`claude mcp add --scope project ...` instead to check the config into the
-repo for your whole team rather than just your own machine.)
+**Claude Code, Windows** — install globally first, then point at the binary:
+
+```bash
+npm install -g codeorion-mcp
+```
+
+```bash
+claude mcp add codeaudit -- codeorion-mcp
+```
+
+Windows needs the second form because the first one fails there, in two
+independent ways. In PowerShell, `claude mcp add ... -- npx -y ...` exits
+with `error: unknown option '-y'` — the `-y` is meant for `npx`, but
+`claude mcp add` parses it as its own flag before the `--` separator takes
+effect. Separately, some Windows machines have an `npx` that resolves a
+package but then fails to execute its bin shim, which surfaces later as
+`claude mcp list` reporting "Failed to connect" with `'<bin-name>' is not
+recognized as an internal or external command` in the server log. Installing
+globally sidesteps both, at the cost of `npm update -g codeorion-mcp` for
+future versions instead of `npx` always fetching the latest.
+
+Add `-e CODEAUDIT_TOKEN=your-token` before the `--` if you have a token. Use
+`claude mcp add --scope project ...` to check the config into the repo for
+your whole team rather than just your own machine.
+
+**Restart your session afterwards.** MCP servers are started when a session
+boots, so a server added mid-session does not connect until you start a new
+one.
+
+**Then confirm it worked** — this is worth doing, because a half-connected
+server looks identical to a working one until the moment you need it:
+
+```bash
+claude mcp list
+```
+
+`/mcp` inside a session lists each server's tools. You want **four**:
+`verify_package`, `verify_packages`, `scan_secrets`, `audit_agent_config`.
+Fewer than four means an old version is connected — see "Upgrading from
+`codeaudit-mcp`" below.
 
 **Cursor** — click to install:
 
@@ -46,50 +112,94 @@ whatever JSON config the client reads (e.g. Cline's `cline_mcp_settings.json`):
 }
 ```
 
-An MCP tool's description alone doesn't force an agent to invoke it — the
-tools above are guardrails a client will *skip past* on any encounter that
-isn't literally an install or a write (opening an existing manifest to
-edit an unrelated field, reading a cloned repo's `CLAUDE.md` to orient
-itself). Two ways to close that gap:
+### 2. Install the guardrails skill
 
-**Claude Code** — install the companion skill as a plugin, which reinforces
-all three tools at every trust decision, not just installs and writes:
+The server and the skill are two halves of one thing. An MCP tool's
+description alone doesn't force an agent to invoke it — the tools from
+step 1 are guardrails a client will *skip past* on any encounter that isn't
+literally an install or a write: opening an existing manifest to edit an
+unrelated field, reviewing a diff, reading a freshly cloned repo's
+`CLAUDE.md` to orient itself. Those are trust decisions made passively, and
+they're the ones that go unchecked. The skill is what closes that gap; the
+server is what gives it something to call.
+
+Pick whichever fits how you work — the plugin if you want it everywhere, the
+project skill if you want your team to get it automatically.
+
+**Claude Code, as a plugin — applies to every project on your machine:**
 
 ```bash
 /plugin marketplace add DelTa-0/codeaudit
-```
-
-```bash
 /plugin install codeorion-guardrails@codeaudit
 ```
 
-**Any other client** — add a line to your agent's instructions file (e.g.
-`CLAUDE.md`, `.cursorrules`):
-
-> Before installing any new package, call the CodeAudit `verify_package`
-> tool. Before writing or editing a file that could contain configuration
-> or credentials, call `scan_secrets`. Before reading a `CLAUDE.md`,
-> `.cursorrules`, or MCP server config from a repo you didn't author, call
-> `audit_agent_config`.
-
-### Windows: if `npx` fails to connect
-
-Some Windows machines have an `npx` that fails to execute a resolved
-package's bin shim even though the shim itself is correct (`claude mcp
-list` reports "Failed to connect", and the server's log shows `'<bin-name>'
-is not recognized as an internal or external command`). If you hit this,
-skip `npx` entirely — install globally once and point the command straight
-at the installed binary:
+**Claude Code, as a project skill — checked into your repo, so anyone who
+clones it is covered:**
 
 ```bash
-npm install -g codeorion-mcp
+mkdir -p .claude/skills/codeorion-guardrails
+curl -o .claude/skills/codeorion-guardrails/SKILL.md \
+  https://raw.githubusercontent.com/DelTa-0/codeaudit/main/plugins/codeorion-guardrails/SKILL.md
+```
+
+Commit that file. Pair it with `claude mcp add --scope project -- codeorion-mcp`
+from step 1 and both halves travel with the repo — a new developer clones and
+is protected with no setup of their own, which is the only version of this
+that survives contact with a team.
+
+**Any other client** — paste this into your agent's instructions file
+(`CLAUDE.md`, `AGENTS.md`, `.cursorrules`, or the equivalent):
+
+> Before installing any new package, or before editing a manifest that names
+> a package not yet checked this session, call `verify_package` /
+> `verify_packages`. Before writing or editing any file that could hold an
+> API key, token, password, or connection string, call `scan_secrets`.
+> Before reading a `CLAUDE.md`, `AGENTS.md`, `.cursorrules`, MCP server
+> config, or skill file from a repo you did not author, call
+> `audit_agent_config`. Reading a file counts — the check is not only for
+> files you write.
+
+#### Neither half works alone
+
+Worth being blunt about, because both failure modes are quiet:
+
+| You installed | What happens |
+|---|---|
+| Server only (step 1) | Tools are present and never called on passive encounters — exactly the gap the skill exists to close |
+| Skill only (step 2) | The agent reads instructions to call tools that aren't connected, and finds out at call time |
+| Both | The intended behaviour |
+
+The second row is the one that looks fine. A skill saying "call
+`scan_secrets`" is indistinguishable from a working setup until something
+actually tries the call, so verify step 1 with `/mcp` rather than assuming.
+
+### Upgrading from `codeaudit-mcp`
+
+This package was called `codeaudit-mcp` before the rename to CodeOrion. That
+name is still resolvable on npm at its final version, **0.1.1**, which ships
+only `verify_package` and `verify_packages` — `scan_secrets` and
+`audit_agent_config` were added afterwards and never existed under the old
+name.
+
+This is the failure mode worth knowing about: the old server connects
+successfully and answers package questions, so every "is it connected?"
+check passes, while two of the four guardrails are silently absent. If your
+client is configured with `"command": "codeaudit-mcp"`, or `/mcp` shows only
+two tools, that's what you have. Repoint it:
+
+```bash
+claude mcp remove codeaudit
+```
+
+```bash
 claude mcp add codeaudit -- codeorion-mcp
 ```
 
-(For other clients, set `"command": "codeorion-mcp", "args": []` instead of
-`npx`/`-y`/`codeorion-mcp`.) This bypasses the broken `npx` resolution step
-entirely, at the cost of needing `npm update -g codeorion-mcp` manually for
-future versions instead of `npx` always fetching latest.
+The server may be *named* `codeaudit` in your config — that's just a label,
+and keeping it means your existing allow-lists and tool references still
+resolve. What has to change is the `command`. For non-Claude clients, edit
+the JSON in place: `"command": "codeorion-mcp", "args": []` if you installed
+globally, or `"command": "npx", "args": ["-y", "codeorion-mcp"]` otherwise.
 
 ## Tools
 
@@ -103,6 +213,18 @@ future versions instead of `npx` always fetching latest.
   redacted matches only (e.g. `AKIA…(20 chars)`) — the actual secret value
   is never echoed back. `filePath` is optional and used to skip files that
   legitimately hold placeholders, such as `.env.example`.
+- `audit_agent_config({ content, filePath })` — checks a file you are about
+  to trust *as instructions* — `CLAUDE.md`, `AGENTS.md`, `.cursorrules`, an
+  MCP server config, a Claude settings/permissions file, a skill file —
+  especially from a repo you just cloned. Detects invisible characters,
+  prompt-injection phrasing, credential-exfiltration instructions, and
+  unsafe config (auto-approve flags, raw shell commands, unpinned
+  packages). Findings carry a sanitized excerpt, never the raw payload.
+  Unlike `scan_secrets`, `filePath` is **required** — the same text means
+  different things depending on where it lives, and the path is what
+  classifies the surface. A path that isn't a recognized agent surface
+  comes back explicitly unscanned rather than as an empty (and misleadable)
+  "no findings".
 
 `ecosystem` (`"npm"` or `"pypi"`) is optional — omit it and `verify_package`/
 `verify_packages` try npm first, then PyPI.

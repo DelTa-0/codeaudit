@@ -1,6 +1,6 @@
 ---
 name: codeorion-guardrails
-description: Use when installing or adding any npm/PyPI package; when opening, reading, or editing a manifest, lockfile, or dependency list that names a package not yet checked this session; when writing or editing a file that could hold an API key, token, password, or connection string; or when reading a CLAUDE.md, AGENTS.md, .cursorrules, MCP server config, Claude settings/permissions file, or skill file from a repo you did not author. Requires the codeaudit MCP server (codeorion-mcp) connected.
+description: Use when installing or adding any npm/PyPI package; when opening, reading, or editing a manifest, lockfile, or dependency list that names a package not yet checked this session; when writing or editing a file that could hold an API key, token, password, or connection string; or when reading a CLAUDE.md, AGENTS.md, .cursorrules, MCP server config, Claude settings/permissions file, or skill file from a repo you did not author. Requires the codeorion-mcp MCP server connected (however your client names it — the docs use "codeaudit").
 ---
 
 # CodeOrion Guardrails
