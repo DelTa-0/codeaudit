@@ -1,0 +1,26 @@
+# For users of the `pre-commit` framework (https://pre-commit.com):
+#
+#   repos:
+#     - repo: https://github.com/DelTa-0/codeaudit
+#       rev: v1.2.0            # any tag or commit sha
+#       hooks:
+#         - id: codeorion
+#
+# Users not on that framework want `npx codeorion install-hook` instead, which
+# writes .git/hooks/pre-commit directly and needs no Python tooling.
+- id: codeorion
+  name: CodeOrion staged scan
+  description: >-
+    Blocks a commit that stages a secret, a poisoned agent-config file, or a
+    dependency that does not exist on the registry.
+  # `language: system` rather than `node`: the node language would install THIS
+  # repository as the hook's package, and this repo's root package.json is a
+  # private workspace root with no bin. Going through npx runs the published
+  # `codeorion` package, which is what the hook actually needs.
+  entry: npx --yes codeorion scan --staged
+  language: system
+  # The scan reads the git index itself, so it needs the whole staged set, not
+  # the per-file batches pre-commit would otherwise pass as arguments — and a
+  # batched invocation would re-check the same manifest once per file.
+  pass_filenames: false
+  always_run: true

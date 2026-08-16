@@ -47,6 +47,7 @@ codeorion scan [dir] [options]
 
 | Option          | Description                                                                                                                   |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `--staged`      | Pre-commit mode — scan only what is staged for commit (see [Pre-commit hook](#pre-commit-hook))                               |
 | `--json`        | Machine-readable output — one JSON object on stdout, for CI parsing                                                           |
 | `--min-score N` | Exit `1` if the health score is below `N`                                                                                     |
 | `--upload`      | Send results to your CodeAudit dashboard (requires a token; see [Uploading results](#uploading-results))                      |
@@ -69,6 +70,54 @@ Use the exit code directly as a CI gate:
 
 ```bash
 npx codeorion scan . --min-score 80
+```
+
+## Pre-commit hook
+
+```bash
+npx codeorion install-hook
+```
+
+That writes `.git/hooks/pre-commit`, which runs `codeorion scan --staged` and
+blocks the commit on anything it finds. Bypass a single commit the usual way,
+with `git commit --no-verify`.
+
+`--staged` is not a full scan, by design. A hook that runs on every commit has
+a budget of a couple of seconds; a whole-repo scan resolves lock trees, queries
+OSV for every dependency and may call an LLM. So it checks only what is both
+fast and irreversible once committed:
+
+| Checked at commit time | Why |
+| --- | --- |
+| Secrets in staged content | A committed credential is compromised even if the next commit removes it |
+| Agent-config poisoning (`CLAUDE.md`, `.mcp.json`, skills, permissions) | No network needed, and these are read as instructions by your own tooling |
+| Dependencies **this commit adds** | Bounded network cost — only the additions are checked, not the whole tree |
+
+Dead code, license conflicts and duplicate libraries are deliberately left to
+the full scan: they need whole-repo context, none of them are urgent at the
+commit boundary, and blocking a commit on a dead-code *candidate* is how a
+hook earns a permanent `--no-verify`.
+
+It reads **the staged content**, not the working tree. Staging a file and then
+editing it — or the reverse — is routine, and a hook that read the working tree
+would be judging content that isn't being committed.
+
+```bash
+npx codeorion scan --staged           # run it directly
+npx codeorion scan --staged --json    # machine-readable
+```
+
+`install-hook` will not overwrite a `pre-commit` hook it didn't write; it
+prints the single line to add to yours instead. If you use the
+[pre-commit framework](https://pre-commit.com), reference the repository
+directly rather than using `install-hook`:
+
+```yaml
+repos:
+  - repo: https://github.com/DelTa-0/codeaudit
+    rev: v1.2.0
+    hooks:
+      - id: codeorion
 ```
 
 ## What it checks

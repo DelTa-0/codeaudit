@@ -292,6 +292,30 @@ npx codeorion scan . --min-score 80   # exit 1 if score is below 80
 Exit codes: `0` clean, `1` phantom dependencies found or below
 `--min-score`, `2` usage/runtime error.
 
+#### Pre-commit hook (`--staged`)
+
+```bash
+npx codeorion install-hook            # writes .git/hooks/pre-commit
+npx codeorion scan --staged           # what that hook runs
+```
+
+`--staged` is a deliberately narrow scan sized for a commit prompt: it checks
+**the staged content itself**, not the working tree — staging a clean file and
+then editing it (or the reverse) is routine, and judging the working tree
+would audit content that isn't being committed.
+
+It reports three things and blocks on them: secrets, agent-config poisoning,
+and dependencies *this commit adds* that don't exist or carry a known
+vulnerability. Dead code, license conflicts and duplicate libraries are
+deliberately excluded — they need whole-repo context, none are urgent at the
+commit boundary, and a hook that takes half a minute to block a commit on a
+dead-code candidate is a hook that gets a permanent `--no-verify`.
+
+`install-hook` refuses to overwrite a pre-commit hook it didn't write, and
+prints the one line to add instead. Users of the
+[pre-commit framework](https://pre-commit.com) can reference this repo
+directly — see [`.pre-commit-hooks.yaml`](.pre-commit-hooks.yaml).
+
 ### Guardrails for AI coding agents (`codeorion-mcp`)
 
 An MCP server your AI coding agent can call *before* installing a package,

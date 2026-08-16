@@ -185,18 +185,12 @@ export function analyzePythonRepo(repoDir: string): RepoAnalysis {
     fileImportExports.set(rel, importLines.slice(0, 40));
   }
 
-  // Same-file usage is liveness. Unlike JS, Python has no export keyword —
-  // every top-level name *could* be imported elsewhere, so the analyzer
-  // marks non-underscore symbols "exported", which would bypass the shared
-  // candidate filter's same-file rescue and flag internal helpers that are
-  // only called within their own module (the dominant false-positive class
-  // in real FastAPI-style codebases). Downgrade any symbol referenced in
-  // its own file to non-exported so that rescue applies.
-  for (const sym of symbols) {
-    if (sym.exported && references.get(sym.name)?.has(sym.filePath)) {
-      sym.exported = false;
-    }
-  }
-
+  // NOTE: there used to be a pass here downgrading `exported` to false for any
+  // symbol referenced in its own file, on the belief that deadcode.ts's
+  // same-file rescue only applied to non-exported symbols. It does not — that
+  // rescue is unconditional, so the downgrade fired on exactly the symbols the
+  // rescue already caught and could never change an outcome. Removed rather
+  // than kept as harmless, because its comment asserted a behaviour of the
+  // shared filter that was never true and would mislead the next reader.
   return { importedPackages, symbols, references, fileCount: files.length, fileImportExports };
 }

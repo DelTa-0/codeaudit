@@ -6,6 +6,7 @@
 // the CodeAudit platform.
 import path from "node:path";
 import fs from "node:fs";
+import { execFileSync } from "node:child_process";
 import {
   parseManifest,
   analyzeRepo,
@@ -42,6 +43,7 @@ import {
   type AgentConfigFinding,
 } from "@codeaudit/engine";
 import { resolveLlmConfig, type LlmFlags } from "./llmConfig.js";
+import { scanStaged, isGitRepo } from "./staged.js";
 
 const RESET = "\x1b[0m";
 const BOLD = "\x1b[1m";
@@ -77,7 +79,13 @@ Copy-paste examples (identical in bash, zsh, PowerShell and cmd):
   npx codeorion scan . --min-score 80 --json
       CI gate: machine-readable output, exit 1 below the threshold.
 
+  npx codeorion scan --staged
+      Pre-commit mode: check only what is staged for commit. Seconds, not
+      minutes — secrets, poisoned agent configs, and dependencies this
+      commit adds. See --staged below.
+
 Options:
+  --staged        scan staged content only, for use as a git pre-commit hook
   --json          machine-readable output (for CI)
   --min-score N   exit 1 if the score is below N
   --upload        send results to your dashboard (requires --token)
@@ -95,6 +103,16 @@ Options:
 Without a key the scan still runs — dead-code candidates are static-only, with
 a fixed confidence and no LLM verdict.
 
+--staged is a deliberately narrow scan of the staged content itself (not the
+working tree, which can differ). It reports secrets, agent-config poisoning
+and newly added dependencies, and skips dead code and license checks: those
+need whole-repo context and are not urgent at the commit boundary. Install it
+as a hook with:
+
+  npx codeorion install-hook
+
+"git commit --no-verify" bypasses it, as with any hook.
+
 Note: flags work in every shell. The VAR=value prefix used in many examples is
 bash/zsh only; in PowerShell set it first, e.g. $env:GROQ_API_KEY="gsk_…".
 
@@ -105,6 +123,7 @@ Exit codes: 0 ok · 1 phantom deps found or score below --min-score · 2 usage/e
 interface CliArgs {
   dir: string;
   json: boolean;
+  staged: boolean;
   minScore: number | null;
   upload: boolean;
   token: string | null;
@@ -115,10 +134,12 @@ interface CliArgs {
 function parseArgs(argv: string[]): CliArgs {
   const args = [...argv];
   const command = args.shift();
+  if (command === "install-hook") installHook(); // never returns
   if (command !== "scan" || args.includes("-h") || args.includes("--help")) usage();
 
   let dir = ".";
   let json = false;
+  let staged = false;
   let minScore: number | null = null;
   let upload = false;
   let token: string | null = process.env.CODEAUDIT_TOKEN ?? null;
@@ -132,6 +153,7 @@ function parseArgs(argv: string[]): CliArgs {
   while (args.length) {
     const arg = args.shift()!;
     if (arg === "--json") json = true;
+    else if (arg === "--staged") staged = true;
     else if (arg === "--upload") upload = true;
     else if (arg === "--token") token = args.shift() ?? null;
     else if (arg === "--api") apiUrl = args.shift() ?? apiUrl;
@@ -145,7 +167,51 @@ function parseArgs(argv: string[]): CliArgs {
     } else if (!arg.startsWith("-")) dir = arg;
     else usage();
   }
-  return { dir: path.resolve(dir), json, minScore, upload, token, apiUrl, llmFlags: { key, url, model } };
+  return { dir: path.resolve(dir), json, staged, minScore, upload, token, apiUrl, llmFlags: { key, url, model } };
+}
+
+/**
+ * Writes .git/hooks/pre-commit. Refuses to clobber an existing hook — someone
+ * else's hook is not ours to overwrite, and silently replacing it would
+ * disable whatever checks that project already relies on.
+ */
+function installHook(): never {
+  let hooksDir: string;
+  try {
+    hooksDir = path.join(
+      execFileSync("git", ["rev-parse", "--git-dir"], { encoding: "utf8" }).trim(),
+      "hooks",
+    );
+  } catch {
+    console.error("codeorion: not a git repository — run this from inside one.");
+    process.exit(2);
+  }
+  const hookPath = path.join(hooksDir, "pre-commit");
+  if (fs.existsSync(hookPath)) {
+    const existing = fs.readFileSync(hookPath, "utf8");
+    if (existing.includes("codeorion scan --staged")) {
+      console.log(`codeorion: hook already installed at ${hookPath}`);
+      process.exit(0);
+    }
+    console.error(
+      `codeorion: ${hookPath} already exists and is not ours — not overwriting.\n` +
+        `Add this line to it yourself:\n\n  npx codeorion scan --staged || exit 1\n`,
+    );
+    process.exit(2);
+  }
+  fs.mkdirSync(hooksDir, { recursive: true });
+  fs.writeFileSync(
+    hookPath,
+    `#!/bin/sh\n# Installed by \`codeorion install-hook\`. Bypass once with \`git commit --no-verify\`.\nnpx codeorion scan --staged || exit 1\n`,
+  );
+  // No-op on Windows, required everywhere else.
+  try {
+    fs.chmodSync(hookPath, 0o755);
+  } catch {
+    /* best effort */
+  }
+  console.log(`codeorion: installed pre-commit hook at ${hookPath}`);
+  process.exit(0);
 }
 
 async function uploadResults(
@@ -211,8 +277,89 @@ const statusColor: Record<string, string> = {
   healthy: GREEN,
 };
 
+/**
+ * Pre-commit output. Separate from the full-scan renderer on purpose: at a
+ * commit prompt the only useful information is what is blocking and where,
+ * and a scan that finds nothing should say so in one line rather than
+ * printing a report nobody reads on every commit.
+ */
+async function runStaged(json: boolean): Promise<never> {
+  if (!isGitRepo()) {
+    console.error("codeorion: --staged needs a git repository.");
+    process.exit(2);
+  }
+  const report = await scanStaged();
+  const blocking =
+    report.secrets.length +
+    report.agentConfig.filter((f) => f.severity === "critical" || f.severity === "high").length +
+    report.newDependencies.filter((d) => d.status === "phantom" || d.status === "vulnerable").length;
+  const exitCode = blocking > 0 ? 1 : 0;
+
+  if (json) {
+    console.log(
+      JSON.stringify(
+        {
+          staged: true,
+          fileCount: report.fileCount,
+          // `fingerprint` is dedup-internal and never leaves the process — same
+          // rule as the full scan's JSON output.
+          secrets: report.secrets.map(({ fingerprint: _fingerprint, ...s }) => s),
+          agentConfig: report.agentConfig,
+          newDependencies: report.newDependencies,
+          dependenciesNotChecked: report.dependenciesNotChecked,
+          blocking,
+          exitCode,
+        },
+        null,
+        2,
+      ),
+    );
+    process.exit(exitCode);
+  }
+
+  if (!report.fileCount) {
+    console.log(`${DIM}codeorion: nothing staged.${RESET}`);
+    process.exit(0);
+  }
+
+  for (const s of report.secrets) {
+    console.log(`${RED}secret${RESET}   ${s.provider}  ${DIM}${s.filePath}:${s.line}${RESET}  ${s.redacted}`);
+  }
+  for (const f of report.agentConfig) {
+    const color = f.severity === "critical" || f.severity === "high" ? RED : YELLOW;
+    console.log(`${color}agent${RESET}    ${f.rule}  ${DIM}${f.filePath}:${f.line}${RESET}`);
+    console.log(`         ${DIM}${f.message}${RESET}`);
+  }
+  for (const d of report.newDependencies) {
+    const color = d.status === "phantom" || d.status === "vulnerable" ? RED : YELLOW;
+    console.log(`${color}${d.status.padEnd(9)}${RESET}${d.name} ${DIM}(${d.ecosystem}, added by this commit)${RESET}`);
+    console.log(`         ${DIM}${d.reason}${RESET}`);
+  }
+  if (report.dependenciesNotChecked > 0) {
+    console.log(
+      `${DIM}         ${report.dependenciesNotChecked} further added dependencies not checked (cap reached) — run a full scan.${RESET}`,
+    );
+  }
+
+  if (exitCode === 0) {
+    const warned = report.agentConfig.length + report.newDependencies.length + report.secrets.length;
+    console.log(
+      warned > 0
+        ? `${DIM}codeorion: ${report.fileCount} staged file(s), nothing blocking.${RESET}`
+        : `${GREEN}codeorion${RESET} ${DIM}${report.fileCount} staged file(s) clean.${RESET}`,
+    );
+  } else {
+    console.log(
+      `\n${RED}codeorion: commit blocked${RESET} ${DIM}— ${blocking} blocking finding(s). ` +
+        `Fix them, or bypass with \`git commit --no-verify\`.${RESET}`,
+    );
+  }
+  process.exit(exitCode);
+}
+
 async function main() {
-  const { dir, json, minScore, upload, token, apiUrl, llmFlags } = parseArgs(process.argv.slice(2));
+  const { dir, json, staged, minScore, upload, token, apiUrl, llmFlags } = parseArgs(process.argv.slice(2));
+  if (staged) await runStaged(json);
   const llmResolution = resolveLlmConfig(llmFlags, process.env);
   if (!llmResolution.ok) {
     console.error(llmResolution.error);
