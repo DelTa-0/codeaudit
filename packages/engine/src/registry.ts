@@ -16,7 +16,9 @@ export interface AlternativeSuggestion {
   name: string;
   reason: string;
   confidence: number;
-  source: "fuzzy" | "ai";
+  /** "corpus" is a curated known-hallucination mapping, not a guess — see
+   *  data/hallucinatedNames.ts. */
+  source: "fuzzy" | "ai" | "corpus";
 }
 
 export interface DependencyVerdict {

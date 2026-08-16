@@ -29,6 +29,7 @@ import {
   findSecrets,
   findAgentConfigIssues,
   findMcpPackageRefs,
+  findMcpDrift,
   verifyAgentConfigPackages,
   reviewCandidatesWithLlm,
   suggestAlternatives,
@@ -466,6 +467,9 @@ async function main() {
     licenseConflicts = checkLicenseConflicts(deps, readProjectLicense(dir));
     secrets = findSecrets(dir);
     agentConfigFindings = findAgentConfigIssues(dir);
+    // Needs git history, so it is a no-op on an exported tarball. Grouped with
+    // the other advisory work because a missing .git must not fail the scan.
+    agentConfigFindings = [...agentConfigFindings, ...findMcpDrift(dir)];
   } catch (err) {
     console.error(
       "codeaudit: advisory analysis failed (continuing without it):",

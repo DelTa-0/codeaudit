@@ -81,3 +81,14 @@ export {
   type McpPackageRef,
 } from "./agentConfig.js";
 export { verifyAgentConfigPackages } from "./agentPackages.js";
+export {
+  extractMcpServers,
+  diffMcpServers,
+  findMcpDrift,
+  type McpServerSpec,
+} from "./mcpDrift.js";
+export {
+  HALLUCINATED_NAMES,
+  lookupHallucinatedName,
+  type HallucinatedName,
+} from "./data/hallucinatedNames.js";

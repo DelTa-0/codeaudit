@@ -29,6 +29,7 @@ import {
   parseManifest,
   parsePythonManifest,
   verifyPackage,
+  diffMcpServers,
   type SecretFinding,
   type AgentConfigFinding,
   type Ecosystem,
@@ -152,6 +153,12 @@ export async function scanStaged(): Promise<StagedReport> {
           ? auditAgentJson(content, file, surface)
           : scanAgentText(content, file, surface)),
       );
+      // The commit boundary is the exact point where an MCP redefinition is
+      // still catchable: HEAD is what the team already approved, the staged
+      // blob is what they are about to trust instead.
+      if (surface === "mcp_config") {
+        agentConfig.push(...diffMcpServers(headBlob(file), content, file));
+      }
     }
 
     if (MANIFEST_RE.test(file)) {

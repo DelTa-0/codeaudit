@@ -205,7 +205,12 @@ export interface DependencyFinding {
     typosquatOf?: string;
     typosquatDistance?: number;
     transitive?: boolean;
-    alternatives?: { name: string; reason: string; confidence: number; source: "fuzzy" | "ai" }[];
+    alternatives?: {
+      name: string;
+      reason: string;
+      confidence: number;
+      source: "fuzzy" | "ai" | "corpus";
+    }[];
     deprecated?: string | null;
   } | null;
 }

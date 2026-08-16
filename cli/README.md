@@ -130,6 +130,22 @@ repos:
 - **Suspicious dependencies** — packages that exist but look like a
   typosquat of something popular (near-name match, near-zero downloads,
   or very recently published).
+- **Known-hallucinated names** — names LLMs are documented to invent, checked
+  against a curated corpus even when the package *does* exist. This is the
+  case every other signal reads backwards: once someone registers a
+  hallucinated name, "it's on the registry" stops being reassurance, and
+  downloads and age become attacker-controlled. `express-mongoose` is the
+  worked example — a real npm package, 15 years old, 54 weekly downloads, and
+  a documented conflation of two real packages. Every heuristic here rated it
+  healthy; the corpus is what flags it. A name in the corpus is never
+  reported healthy.
+- **MCP server redefinition** — an MCP server whose `command` changed after it
+  was introduced, found by walking the config file's git history. Approval in
+  every MCP client binds to the server *name*, not to what that name runs, so
+  landing an innocuous server, waiting for approval, and swapping the command
+  later executes on every teammate's machine with no second prompt. No single
+  revision of the file looks wrong, which is why only the change is evidence.
+  Needs git history; silently skipped on an exported tarball.
 - **Unused dependencies** — declared in `package.json` /
   `requirements.txt` / `pyproject.toml` but never imported anywhere in
   the repo.

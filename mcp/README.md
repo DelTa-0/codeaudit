@@ -205,7 +205,12 @@ globally, or `"command": "npx", "args": ["-y", "codeorion-mcp"]` otherwise.
 
 - `verify_package({ name, ecosystem?, version? })` — checks one package.
   `version` is optional — when given, known-vulnerability checks run
-  against that version instead of the registry's latest.
+  against that version instead of the registry's latest. Also matches the
+  name against a curated corpus of names LLMs are documented to invent, and
+  says so in the result (`hallucinated`). That check matters most when the
+  package **does** exist: registering a hallucinated name is the attack, so
+  once it is registered, existence, download counts and age all stop being
+  evidence of anything. A name in the corpus is never returned as healthy.
 - `verify_packages({ packages: [{ name, ecosystem? }] })` — checks several
   at once (e.g. every new line in a manifest diff).
 - `scan_secrets({ content, filePath? })` — checks file content for

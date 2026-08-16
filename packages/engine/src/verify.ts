@@ -10,6 +10,7 @@ import { checkPyPiPackage } from "./python/registry.js";
 import { normalizePyPiName } from "./python/aliases.js";
 import { checkTyposquat, fuzzyAlternative } from "./typosquat.js";
 import { checkVulnerabilities, type VulnAdvisory, type VulnSeverity } from "./vulns.js";
+import { lookupHallucinatedName, type HallucinatedName } from "./data/hallucinatedNames.js";
 
 export interface PackageVerifyResult {
   name: string;
@@ -25,6 +26,8 @@ export interface PackageVerifyResult {
   typosquatDistance?: number;
   alternatives?: AlternativeSuggestion[];
   vulnerabilities?: VulnAdvisory[];
+  /** Present when the name is in the known-hallucination corpus. */
+  hallucinated?: HallucinatedName;
   maxSeverity?: VulnSeverity;
 }
 
@@ -51,11 +54,19 @@ export async function verifyPackage(
   const name = ecosystem === "pypi" ? normalizePyPiName(rawName) : rawName;
   const { exists, meta } = ecosystem === "npm" ? await checkNpmPackage(name) : await checkPyPiPackage(name);
 
+  const hallucinated = lookupHallucinatedName(name, ecosystem);
+
   if (!exists) {
     const alternative = fuzzyAlternative(name, ecosystem);
-    const reason = alternative
+    let reason = alternative
       ? `Package "${name}" does not exist on ${ecosystem}. It looks like a typo of "${alternative.name}".`
       : `Package "${name}" does not exist on ${ecosystem}.`;
+    if (hallucinated) {
+      reason +=
+        ` It is a documented LLM hallucination` +
+        (hallucinated.confusedWith ? ` of "${hallucinated.confusedWith}"` : "") +
+        ` — if an AI assistant suggested it, that is where it came from.`;
+    }
     return {
       name,
       ecosystem,
@@ -66,7 +77,19 @@ export async function verifyPackage(
       downloadsPeriod: DEFAULT_DOWNLOADS_PERIOD[ecosystem],
       ageDays: null,
       latestVersion: null,
-      alternatives: alternative ? [alternative] : undefined,
+      hallucinated: hallucinated ?? undefined,
+      alternatives: alternative
+        ? [alternative]
+        : hallucinated?.confusedWith
+          ? [
+              {
+                name: hallucinated.confusedWith,
+                reason: "the real package this name is hallucinated from",
+                confidence: 1,
+                source: "corpus" as const,
+              },
+            ]
+          : undefined,
     };
   }
 
@@ -103,6 +126,34 @@ export async function verifyPackage(
     result.typosquatOf = squat.suspectedTarget;
     result.typosquatDistance = squat.distance;
     result.reason = `Package "${name}" exists on ${ecosystem} but is suspiciously close to the popular package "${squat.suspectedTarget}" (edit distance ${squat.distance}) — possible typosquat.`;
+  }
+
+  // A hallucinated name that EXISTS is the dangerous direction, and the one
+  // every other signal here reads backwards: registration is the attack, so
+  // "it's on the registry" is not reassurance, and downloads and age are then
+  // attacker-controlled and farmable. Never leave such a name "healthy".
+  if (hallucinated) {
+    result.hallucinated = hallucinated;
+    if (result.status === "healthy" || result.status === "suspicious") {
+      result.status = "suspicious";
+      result.reason =
+        `Package "${name}" exists on ${ecosystem}, but the name is a documented LLM hallucination` +
+        (hallucinated.confusedWith ? ` of "${hallucinated.confusedWith}"` : "") +
+        `. Someone registered a name that AI assistants invent — verify you meant this package` +
+        (hallucinated.confusedWith ? ` and not "${hallucinated.confusedWith}"` : "") +
+        ` before installing.`;
+      if (hallucinated.confusedWith) {
+        result.alternatives = [
+          {
+            name: hallucinated.confusedWith,
+            reason: "the real package this name is hallucinated from",
+            confidence: 1,
+            source: "corpus" as const,
+          },
+          ...(result.alternatives ?? []),
+        ];
+      }
+    }
   }
 
   const versionToCheck = version ?? result.latestVersion;
