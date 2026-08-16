@@ -97,7 +97,7 @@ were fixed the same session. `cli/package.json`'s `prepublishOnly` now runs
 both ground-truth suites before any publish can proceed, so this specific
 "fix committed but never published" failure mode can't recur silently.
 
-## GitHub OAuth email permission (active, unresolved)
+## ~~GitHub OAuth email permission~~ — RESOLVED
 
 `POST /api/auth/github/callback` → `exchangeOauthCode()` calls
 `GET /user/emails` when the user's primary email isn't public on `/user`.
@@ -122,11 +122,32 @@ exception — so the failure mode is a clean `400 "Your GitHub account has no
 accessible email address"` rather than a 500 crash. Email/password login and
 the rest of the app are unaffected.
 
-**Next step when resuming**: verify the Account permission is genuinely
-saved, confirm the OAuth consent screen shows an email-related permission
-request on the next login attempt (if it doesn't, the App-level change
-hasn't propagated), and as a fallback, consider having the user set a public
-email on their GitHub profile as a workaround.
+**Resolved.** Verified against production: every GitHub-linked user has an
+email, none missing.
+
+```sql
+SELECT count(*) AS github_users, count(email) AS with_email,
+       count(*) FILTER (WHERE email IS NULL) AS missing_email
+FROM users WHERE github_user_id IS NOT NULL;
+-- github_users | with_email | missing_email
+--            4 |          4 |             0
+```
+
+That is the check worth re-running if this ever looks broken again — it
+distinguishes "the 403 is back" from "this particular user genuinely has no
+accessible address", which the error message alone cannot.
+
+The two things the debugging above was circling remain the things to check
+first, since both fail silently: the **Account** permission (Permissions &
+events → Account permissions, a separate section from Repository
+permissions) has to be saved with the button at the bottom of the page, and
+an existing user authorization has to be revoked at
+`github.com/settings/apps/authorizations` for the new permission to appear
+on the consent screen. A permission that is set but not re-consented behaves
+exactly like one that was never set.
+
+The mitigation below stays in place regardless — a user with no accessible
+address at all is a legitimate outcome, not a bug.
 
 ## ~~Local webhook testing requires a public tunnel~~ — RESOLVED
 

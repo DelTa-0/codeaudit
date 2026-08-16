@@ -656,7 +656,9 @@ one actually contains.
      be misflagged. Either port the same downgrade into the JS analyzer or,
      better, move the rescue into the shared `deadcode.ts` filter so both
      languages get it from one fix instead of two.
-1. **Finish debugging GitHub OAuth email 403** — see [[known-issues#GitHub OAuth email permission]]
+1. ~~**Finish debugging GitHub OAuth email 403**~~ — **DONE**: verified in
+   production, every GitHub-linked user now has an email and none are
+   missing. See [[known-issues#~~GitHub OAuth email permission~~ — RESOLVED]]
 2. ~~Set up the ngrok tunnel and register the real webhook URL~~ — **DONE**: real push → webhook → scan confirmed working end-to-end. ~~Confirm pull_request → sticky PR comment~~ — **DONE**: opened a real PR (`DelTa-0/codeaudit#1`), webhook fired, scan ran with `pr_number` set, comment posted (`[pr-comment] posted on DelTa-0/codeaudit#1`). One gotcha hit along the way — see [[known-issues#Repo connected via URL paste has no linked installation → PR comment silently no-ops]]
 3. **Connect a real Stripe test-mode account** — set `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`/price IDs, run an actual test-mode checkout to confirm the full redirect + webhook flow (not just a signed fake payload). Currently moot for testing — plan limits are temporarily disabled, see [[decisions#Plan-limit gate temporarily disabled for testing]]
 4. **Install the GitHub App on a real private repo** and confirm private-repo cloning via installation token works end-to-end

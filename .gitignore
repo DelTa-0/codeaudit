@@ -6,3 +6,6 @@ dist/
 *.log
 .tmp/
 coverage/
+
+# Personal defense/presentation materials — never shipped, never reviewed
+/defense/
