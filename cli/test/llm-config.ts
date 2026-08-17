@@ -14,7 +14,7 @@ const checks: [string, boolean][] = [];
   const r = resolveLlmConfig({ key: null, url: null, model: null }, { GROQ_API_KEY: "groq-secret" });
   checks.push([
     "GROQ_API_KEY alone resolves to the groq provider",
-    r.ok === true && r.config?.source === "groq" && r.config.apiKey === "groq-secret" && r.config.model === "llama-3.3-70b-versatile",
+    r.ok === true && r.config?.source === "groq" && r.config.apiKey === "groq-secret" && r.config.model === "openai/gpt-oss-120b",
   ]);
 }
 
@@ -83,7 +83,7 @@ const checks: [string, boolean][] = [];
     r.ok === true &&
       r.config?.source === "groq" &&
       r.config.baseUrl === "https://api.groq.com/openai/v1" &&
-      r.config.model === "llama-3.3-70b-versatile",
+      r.config.model === "openai/gpt-oss-120b",
   ]);
 }
 

@@ -30,7 +30,7 @@ export const config = {
   llm: {
     apiKey: process.env.XAI_API_KEY ?? "",
     baseUrl: process.env.XAI_BASE_URL ?? "https://api.x.ai/v1",
-    model: process.env.XAI_MODEL ?? "grok-3-mini",
+    model: process.env.XAI_MODEL ?? "openai/gpt-oss-120b",
   },
   github: {
     appId: process.env.GITHUB_APP_ID ?? "",

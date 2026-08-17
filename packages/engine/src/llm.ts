@@ -111,10 +111,20 @@ function truncateBody(body: string): string {
 }
 
 function stripFences(text: string): string {
-  return text
-    .replace(/^\s*```(?:json)?\s*/i, "")
-    .replace(/\s*```\s*$/, "")
-    .trim();
+  return (
+    text
+      // Reasoning models emit their chain of thought before the answer, and
+      // the system prompt's "no preamble" instruction does not suppress it —
+      // it is emitted by the serving layer, not the completion. Measured:
+      // qwen/qwen3.6-27b on Groq fails JSON.parse on every dead-code batch
+      // without this, which surfaces as reviewStatus "partial" and unfiltered
+      // static candidates rather than as an error anyone would notice.
+      // Non-greedy and tolerant of an unclosed tag from a truncated response.
+      .replace(/^\s*<think>[\s\S]*?(?:<\/think>|$)/i, "")
+      .replace(/^\s*```(?:json)?\s*/i, "")
+      .replace(/\s*```\s*$/, "")
+      .trim()
+  );
 }
 
 interface LlmVerdict {

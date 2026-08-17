@@ -24,7 +24,7 @@ export type ResolveLlmConfigResult =
   | { ok: false; error: string };
 
 const GROQ_BASE_URL = "https://api.groq.com/openai/v1";
-const GROQ_MODEL = "llama-3.3-70b-versatile";
+const GROQ_MODEL = "openai/gpt-oss-120b";
 const OPENAI_BASE_URL = "https://api.openai.com/v1";
 const OPENAI_MODEL = "gpt-4o-mini";
 

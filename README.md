@@ -103,7 +103,7 @@ secrets; `.env.example` at the repo root is the template).
 |---|---|
 | `XAI_API_KEY` | leave empty to skip LLM review entirely — dead-code candidates are still reported from static analysis alone, at fixed confidence 0.5, with reasoning `"LLM review skipped (no API key configured)"` |
 | `XAI_BASE_URL` | OpenAI-compatible base URL. Default assumes **Groq** (`https://api.groq.com/openai/v1`), not xAI, despite the `XAI_*` naming (legacy from early planning — see [`docs/decisions.md`](docs/decisions.md#llm-provider)) |
-| `XAI_MODEL` | e.g. `llama-3.3-70b-versatile` on Groq. Any OpenAI-compatible chat-completions model works if you point `XAI_BASE_URL` elsewhere (including real xAI's `api.x.ai/v1`) |
+| `XAI_MODEL` | e.g. `openai/gpt-oss-120b` on Groq. Any OpenAI-compatible chat-completions model works if you point `XAI_BASE_URL` elsewhere (including real xAI's `api.x.ai/v1`) |
 
 Get a free Groq key at [console.groq.com](https://console.groq.com).
 

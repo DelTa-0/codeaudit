@@ -36,7 +36,7 @@ related:
 
 **AI**
 - Groq (`api.groq.com/openai/v1`, OpenAI-compatible), model
-  `llama-3.3-70b-versatile`. Called via the `openai` npm SDK with a custom
+  `openai/gpt-oss-120b`. Called via the `openai` npm SDK with a custom
   `baseURL`. See [[decisions#LLM provider]] for why the env vars are still
   named `XAI_*`.
 

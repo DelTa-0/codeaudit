@@ -284,7 +284,7 @@ once in `server/.env`:
 |---|---|
 | `XAI_API_KEY` | Leave empty to skip LLM review entirely — dead-code candidates still reported from static analysis alone, fixed confidence 0.5 |
 | `XAI_BASE_URL` | OpenAI-compatible base URL. Defaults to **Groq** (`https://api.groq.com/openai/v1`) despite the `XAI_*` naming — legacy from early planning |
-| `XAI_MODEL` | e.g. `llama-3.3-70b-versatile` on Groq. Any OpenAI-compatible chat-completions model works if you point `XAI_BASE_URL` elsewhere |
+| `XAI_MODEL` | e.g. `openai/gpt-oss-120b` on Groq. Any OpenAI-compatible chat-completions model works if you point `XAI_BASE_URL` elsewhere |
 
 Get a free Groq key at [console.groq.com](https://console.groq.com). This
 is a one-time operator setup, not something individual dashboard users
