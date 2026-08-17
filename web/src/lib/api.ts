@@ -154,6 +154,17 @@ export interface ScanSummary {
   /** Present only when reviewStatus !== "skipped" AND the review was a CLI user's own key, not the platform's — self-reported by the CLI, never platform-verified. */
   llmReviewSource?: "cli-byok";
   ai?: AiAuthorshipStats | null;
+  /** What changed since the previous scan. Absent on scans from before
+   *  finding identity existed, and on the very first scan of a repository. */
+  findingDelta?: {
+    new: number;
+    resolved: number;
+    /** Previously fixed, present again — a regressed fix, not a new problem. */
+    reintroduced: number;
+    persisting: number;
+    openTotal: number;
+    byKind?: Record<string, { new: number; resolved: number; reintroduced: number }>;
+  };
   priorities?: RankedFinding[];
   advisories?: {
     duplicates: DuplicateGroup[];

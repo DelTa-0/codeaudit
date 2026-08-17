@@ -7,6 +7,7 @@ import {
   type DependencyFinding,
   type CodeFinding,
   type AiAuthorshipStats,
+  type ScanSummary,
 } from "../lib/api";
 import { Button, Card, Badge, EmptyState, Spinner, ScoreRing } from "../components/ui";
 
@@ -54,6 +55,55 @@ function ConfidenceBar({ value }: { value: number }) {
       </div>
       <span className="font-mono text-xs text-muted">{Math.round(value * 100)}%</span>
     </div>
+  );
+}
+
+/**
+ * What changed since the previous scan.
+ *
+ * A score delta on its own is not actionable — "82 → 76" could be one new
+ * vulnerability or four dead-code candidates, and it cannot show that anything
+ * was fixed. Reintroduced is given its own colour because a returning finding
+ * means an earlier fix regressed, which counting it as "new" would hide.
+ */
+function FindingDeltaCard({ delta }: { delta: NonNullable<ScanSummary["findingDelta"]> }) {
+  const quiet = delta.new === 0 && delta.resolved === 0 && delta.reintroduced === 0;
+  const cells = [
+    { label: "New", value: delta.new, tone: delta.new > 0 ? "text-danger" : "text-muted" },
+    {
+      label: "Reintroduced",
+      value: delta.reintroduced,
+      tone: delta.reintroduced > 0 ? "text-warning" : "text-muted",
+    },
+    { label: "Resolved", value: delta.resolved, tone: delta.resolved > 0 ? "text-success" : "text-muted" },
+    { label: "Still open", value: delta.openTotal, tone: "text-foreground" },
+  ];
+  return (
+    <Card>
+      <p className="mb-3 text-sm font-medium text-muted">Since the last scan</p>
+      {quiet ? (
+        <p className="text-sm text-muted">
+          Nothing opened or closed since the previous scan — {delta.openTotal} finding
+          {delta.openTotal === 1 ? "" : "s"} still open.
+        </p>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {cells.map((c) => (
+            <div key={c.label}>
+              <p className={`font-mono text-xl font-bold ${c.tone}`}>{c.value}</p>
+              <p className="text-xs text-muted">{c.label}</p>
+            </div>
+          ))}
+        </div>
+      )}
+      {delta.reintroduced > 0 && (
+        <p className="mt-3 rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning">
+          {delta.reintroduced} finding{delta.reintroduced === 1 ? " was" : "s were"} fixed earlier and
+          {delta.reintroduced === 1 ? " has" : " have"} come back. A returning finding usually means the
+          fix addressed the symptom rather than the cause — worth checking before closing it again.
+        </p>
+      )}
+    </Card>
   );
 }
 
@@ -267,6 +317,8 @@ export function ScanDetail() {
           </p>
         )}
       </Card>
+
+      {scan.summary?.findingDelta && <FindingDeltaCard delta={scan.summary.findingDelta} />}
 
       {scan.summary && (
         <Card className="flex items-center gap-6">

@@ -1,6 +1,7 @@
 import { queryOne } from "../db/pool.js";
 import { upsertPrComment, githubConfigured } from "../services/github.js";
 import type { ScanSummary, RankedFinding } from "@codeaudit/engine";
+import type { FindingDelta } from "../services/findingLifecycle.js";
 
 /**
  * Package names reach this comment as raw JSON keys from the scanned repo's
@@ -23,6 +24,86 @@ function mdSafe(value: string, max = 200): string {
   return escaped.length > max ? `${escaped.slice(0, max - 1)}…` : escaped;
 }
 
+/**
+ * Builds the comment markdown. Extracted from the job so the most
+ * attacker-visible output in the product can be tested without a database, a
+ * queue, or a GitHub installation.
+ */
+export function buildPrCommentBody(
+  s: PrCommentSummary,
+  previousScore: number | null,
+): string {
+  const delta = previousScore === null ? null : (s.score - previousScore).toFixed(1);
+  const deltaText = delta === null ? "" : Number(delta) >= 0 ? ` (+${delta})` : ` (${delta})`;
+  const vulnerable = s.counts.vulnerable ?? 0;
+  const secretCount = s.counts.secrets ?? 0;
+  const agentConfigCount = s.counts.agentConfig ?? 0;
+  const recommendation =
+    secretCount > 0 || s.counts.phantom > 0 || vulnerable > 0
+      ? "🔴 **Request changes** — hardcoded secrets, phantom dependencies, and/or known vulnerabilities must be resolved before merge."
+      : s.findingDelta?.reintroduced
+        ? "🟡 **Review recommended** — a previously fixed finding has come back."
+        : s.score < 60
+        ? "🟡 **Review recommended** — health score below threshold."
+        : "🟢 **Looks good** from a debt perspective.";
+
+  // What actually changed, not just how many findings exist. A reviewer's
+  // question is "did this PR make it worse", and a score delta alone cannot
+  // answer it: -3 could be one new vulnerability or four dead-code
+  // candidates. Reintroduced is called out separately because a returning
+  // finding means a previous fix regressed, which "new" would disguise.
+  const fd = s.findingDelta;
+  const deltaLines: string[] = [];
+  if (fd) {
+    if (fd.new > 0) deltaLines.push(`🆕 **${fd.new}** new`);
+    if (fd.reintroduced > 0) deltaLines.push(`♻️ **${fd.reintroduced}** reintroduced`);
+    if (fd.resolved > 0) deltaLines.push(`✅ **${fd.resolved}** resolved`);
+  }
+  const changed = deltaLines.length
+    ? `
+**Since the last scan of the base branch:** ${deltaLines.join(" · ")} · ${fd!.openTotal} open in total
+`
+    : fd
+      ? `
+**Since the last scan of the base branch:** no change · ${fd.openTotal} open in total
+`
+      : "";
+
+  // Lead with the ranked top three rather than a bare tally — a reviewer
+  // should see what to act on first, not just how many findings exist.
+  const topPriorities = (s.priorities ?? []).slice(0, 3);
+  const fixFirst = topPriorities.length
+    ? `\n**Fix first**\n\n${topPriorities
+        .map(
+          (p) =>
+            `${p.rank}. **${mdSafe(p.title)}** \`${p.band}\` · effort ${p.effort}${p.location ? ` · \`${mdSafe(p.location, 120)}\`` : ""}\n   ${mdSafe(p.why, 300)}`,
+        )
+        .join("\n")}\n`
+    : "";
+
+  return `## CodeAudit report
+
+**Health score: ${s.score} (${s.grade})${deltaText}**
+${changed}${fixFirst}
+| Finding | Count |
+| --- | --- |
+| 🔑 Hardcoded secrets | ${secretCount} |
+| 🤖 Agent config risks | ${agentConfigCount} |
+| 🚨 Phantom dependencies | ${s.counts.phantom} |
+| 🛡️ Known vulnerabilities | ${vulnerable} |
+| ⚠️ Suspicious packages | ${s.counts.suspicious} |
+| 📦 Unused dependencies | ${s.counts.unused} |
+| 🧟 Zombie code | ${s.counts.zombies} |
+
+${recommendation}`;
+}
+
+/** The summary shape this comment needs, including the cross-scan delta. */
+export type PrCommentSummary = ScanSummary & {
+  priorities?: RankedFinding[];
+  findingDelta?: FindingDelta;
+};
+
 export async function processPrCommentJob(scanJobId: string) {
   if (!githubConfigured()) return;
 
@@ -30,7 +111,7 @@ export async function processPrCommentJob(scanJobId: string) {
     id: string;
     repo_id: string;
     pr_number: number | null;
-    summary: (ScanSummary & { priorities?: RankedFinding[] }) | null;
+    summary: PrCommentSummary | null;
   }>("SELECT id, repo_id, pr_number, summary FROM scan_jobs WHERE id = $1", [scanJobId]);
   if (!scan?.pr_number || !scan.summary) return;
 
@@ -49,46 +130,7 @@ export async function processPrCommentJob(scanJobId: string) {
     [scan.repo_id, scan.id],
   );
 
-  const s = scan.summary;
-  const delta = prev ? (s.score - Number(prev.score)).toFixed(1) : null;
-  const deltaText = delta === null ? "" : Number(delta) >= 0 ? ` (+${delta})` : ` (${delta})`;
-  const vulnerable = s.counts.vulnerable ?? 0;
-  const secretCount = s.counts.secrets ?? 0;
-  const agentConfigCount = s.counts.agentConfig ?? 0;
-  const recommendation =
-    secretCount > 0 || s.counts.phantom > 0 || vulnerable > 0
-      ? "🔴 **Request changes** — hardcoded secrets, phantom dependencies, and/or known vulnerabilities must be resolved before merge."
-      : s.score < 60
-        ? "🟡 **Review recommended** — health score below threshold."
-        : "🟢 **Looks good** from a debt perspective.";
-
-  // Lead with the ranked top three rather than a bare tally — a reviewer
-  // should see what to act on first, not just how many findings exist.
-  const topPriorities = (s.priorities ?? []).slice(0, 3);
-  const fixFirst = topPriorities.length
-    ? `\n**Fix first**\n\n${topPriorities
-        .map(
-          (p) =>
-            `${p.rank}. **${mdSafe(p.title)}** \`${p.band}\` · effort ${p.effort}${p.location ? ` · \`${mdSafe(p.location, 120)}\`` : ""}\n   ${mdSafe(p.why, 300)}`,
-        )
-        .join("\n")}\n`
-    : "";
-
-  const body = `## CodeAudit report
-
-**Health score: ${s.score} (${s.grade})${deltaText}**
-${fixFirst}
-| Finding | Count |
-| --- | --- |
-| 🔑 Hardcoded secrets | ${secretCount} |
-| 🤖 Agent config risks | ${agentConfigCount} |
-| 🚨 Phantom dependencies | ${s.counts.phantom} |
-| 🛡️ Known vulnerabilities | ${vulnerable} |
-| ⚠️ Suspicious packages | ${s.counts.suspicious} |
-| 📦 Unused dependencies | ${s.counts.unused} |
-| 🧟 Zombie code | ${s.counts.zombies} |
-
-${recommendation}`;
+  const body = buildPrCommentBody(scan.summary, prev ? Number(prev.score) : null);
 
   await upsertPrComment(Number(repo.installation_id), repo.full_name, scan.pr_number, body);
   console.log(`[pr-comment] posted on ${repo.full_name}#${scan.pr_number}`);
