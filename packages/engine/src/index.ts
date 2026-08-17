@@ -94,6 +94,14 @@ export {
   type McpServerSpec,
 } from "./mcpDrift.js";
 export {
+  dependencyFindingIdentity,
+  deadCodeFindingIdentity,
+  secretFindingIdentity,
+  agentConfigFindingIdentity,
+  type FindingIdentity,
+  type FindingKind,
+} from "./findingIdentity.js";
+export {
   HALLUCINATED_NAMES,
   lookupHallucinatedName,
   type HallucinatedName,

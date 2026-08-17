@@ -43,6 +43,11 @@ import {
   findAgentConfigIssues,
   findMcpPackageRefs,
   verifyAgentConfigPackages,
+  dependencyFindingIdentity,
+  deadCodeFindingIdentity,
+  secretFindingIdentity,
+  agentConfigFindingIdentity,
+  type FindingIdentity,
   type DependencyVerdict,
   type DeadCodeCandidate,
   type ResolvedTree,
@@ -51,6 +56,7 @@ import {
 } from "@codeaudit/engine";
 import { reviewCandidatesWithLlm, suggestAlternatives } from "@codeaudit/engine";
 import { config } from "./lib/config.js";
+import { reconcileFindings, type FindingDelta } from "./services/findingLifecycle.js";
 
 async function setStatus(scanJobId: string, status: string, progress: string) {
   await query("UPDATE scan_jobs SET status = $2, progress = $3 WHERE id = $1", [
@@ -382,6 +388,45 @@ async function processScanJob(scanJobId: string) {
         err instanceof Error ? err.message : err,
       );
     }
+    // Findings that outlive this scan. Best-effort like the other advisory
+    // work: a reconciliation failure must not fail a scan that otherwise
+    // succeeded — the delta is reporting, not analysis.
+    let findingDelta: FindingDelta | null = null;
+    try {
+      const identities: FindingIdentity[] = [
+        // `healthy` is not a finding — recording it would make every clean
+        // dependency an open item and drown the real ones.
+        ...deps
+          .filter((d) => d.status !== "healthy")
+          .map((d) =>
+            dependencyFindingIdentity({
+              packageName: d.packageName,
+              ecosystem: d.ecosystem,
+              status: d.status,
+            }),
+          ),
+        ...zombies.map((z) =>
+          deadCodeFindingIdentity({ filePath: z.filePath, symbolName: z.symbolName }),
+        ),
+        ...[...secrets, ...historySecrets].map((sec) =>
+          secretFindingIdentity({
+            fingerprint: sec.fingerprint,
+            provider: sec.provider,
+            filePath: sec.filePath,
+          }),
+        ),
+        ...agentConfigFindings.map((f) =>
+          agentConfigFindingIdentity({ filePath: f.filePath, rule: f.rule }),
+        ),
+      ];
+      findingDelta = await reconcileFindings(scan.repo_id, scanJobId, identities);
+    } catch (err) {
+      console.error(
+        `[scan ${scanJobId}] finding reconciliation failed (continuing without a delta):`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+
     const summary = {
       ...computeSummary({
         deps,
@@ -394,6 +439,7 @@ async function processScanJob(scanJobId: string) {
         licenseConflictCount: licenseConflicts.length,
       }),
       ai: aiStats,
+      ...(findingDelta ? { findingDelta } : {}),
       priorities,
       advisories: { duplicates, licenseConflicts },
     };

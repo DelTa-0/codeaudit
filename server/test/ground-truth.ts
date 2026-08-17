@@ -41,6 +41,10 @@ import {
   collectMcpPackageRefs,
   redactSnippet,
   findAgentConfigIssues,
+  dependencyFindingIdentity,
+  deadCodeFindingIdentity,
+  secretFindingIdentity,
+  agentConfigFindingIdentity,
 } from "@codeaudit/engine";
 import { describeCoverage } from "../src/analysis/aiAuthorship.js";
 
@@ -821,6 +825,32 @@ checks.push([
     return false;
   })(),
 ]);
+
+// --- Finding identity: what counts as "the same finding" across scans ---
+const depUnused = dependencyFindingIdentity({ packageName: "axios", ecosystem: "npm", status: "unused" });
+const depVuln = dependencyFindingIdentity({ packageName: "axios", ecosystem: "npm", status: "vulnerable" });
+const depPyPi = dependencyFindingIdentity({ packageName: "axios", ecosystem: "pypi", status: "unused" });
+const deadA = deadCodeFindingIdentity({ filePath: "src/a.ts", symbolName: "helper" });
+const deadB = deadCodeFindingIdentity({ filePath: "src/b.ts", symbolName: "helper" });
+const secretHere = secretFindingIdentity({ fingerprint: "abc123", provider: "AWS access key", filePath: "src/a.ts" });
+const secretMoved = secretFindingIdentity({ fingerprint: "abc123", provider: "AWS access key", filePath: "config/b.ts" });
+const agentLine1 = agentConfigFindingIdentity({ filePath: "CLAUDE.md", rule: "instruction_injection" });
+// Keys must not collide when a field legitimately contains the separator.
+const colonPath = deadCodeFindingIdentity({ filePath: "src/a:b.ts", symbolName: "x" });
+const colonSymbol = deadCodeFindingIdentity({ filePath: "src/a", symbolName: "b.ts:x" });
+checks.push(
+  ["a dependency's status is part of its identity", depUnused.key !== depVuln.key],
+  ["the same name in another ecosystem is a different finding", depUnused.key !== depPyPi.key],
+  ["the same symbol in another file is a different finding", deadA.key !== deadB.key],
+  // A leaked credential is leaked wherever it lives — moving the file does not
+  // fix it, so identity must survive the move.
+  ["a secret keeps its identity when the file moves", secretHere.key === secretMoved.key],
+  ["an agent-config finding is keyed by file and rule", agentLine1.key === "agent_config:CLAUDE.md:instruction_injection"],
+  ["separators inside field values cannot forge another key", colonPath.key !== colonSymbol.key],
+  ["identity carries a human title for display", depUnused.title === "axios (unused)"],
+  ["file-scoped findings carry their location", deadA.location === "src/a.ts"],
+  ["dependency findings have no file location", depUnused.location === null],
+);
 
 // --- AI attribution coverage: "no markers" must never read as "no AI" ---
 const noMarkers = describeCoverage(0, 120, false);
