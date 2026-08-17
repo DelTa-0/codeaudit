@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Manifest } from "./manifest.js";
 import { checkTyposquat, fuzzyAlternative } from "./typosquat.js";
+import { lookupHallucinatedName } from "./data/hallucinatedNames.js";
 
 export type Ecosystem = "npm" | "pypi";
 
@@ -299,6 +300,16 @@ export async function checkDependencies(
         // count) — that guard keeps legit near-neighbors like `preact` (≈react)
         // from being flagged. A distance-2 name only enriches an
         // already-suspicious verdict.
+        // A name in the known-hallucination corpus is never left "healthy":
+        // once such a name is registered, existence and download counts are
+        // attacker-controlled, so the usual signals read backwards. See
+        // data/hallucinatedNames.ts.
+        const hallucinated = lookupHallucinatedName(name, "npm");
+        if (hallucinated) {
+          registryMetadata = { ...(registryMetadata ?? {}), hallucinated };
+          if (status === "healthy") status = "suspicious";
+        }
+
         if (status !== "phantom") {
           const weeklyDl = (meta?.weeklyDownloads as number | null) ?? null;
           const established = weeklyDl !== null && weeklyDl >= 100_000;

@@ -71,7 +71,26 @@ const uploadSchema = z.object({
     // agent-config risks would silently store zero while `priorities` still
     // listed them.
     agentConfig: z.number().int().min(0).default(0),
+    // Scoring v2 additions. All defaulted: a CLI predating them uploads a
+    // summary whose counts simply read zero for these, rather than being
+    // rejected outright.
+    deprecated: z.number().int().min(0).default(0),
+    duplicates: z.number().int().min(0).default(0),
+    licenseConflicts: z.number().int().min(0).default(0),
+    hallucinated: z.number().int().min(0).default(0),
+    mcpRedefined: z.number().int().min(0).default(0),
   }),
+  // Which scheme produced `score`. Defaults to 1 so a scan uploaded by an
+  // older CLI is not silently mislabelled as v2 — its number was computed
+  // under different rules and a trend chart needs to know that.
+  scoreVersion: z.number().int().min(1).max(99).default(1),
+  axes: z
+    .object({
+      security: z.number().min(0).max(100),
+      supplyChain: z.number().min(0).max(100),
+      maintainability: z.number().min(0).max(100),
+    })
+    .optional(),
   reviewStatus: z.enum(["full", "partial", "skipped"]).optional(),
   llmReviewSource: z.literal("cli-byok").optional(),
   branch: z.string().max(200).optional(),
@@ -158,6 +177,8 @@ cliUploadRouter.post("/cli-scans", uploadLimiter, validateBody(uploadSchema), as
     const summary = {
       score: body.score,
       grade: body.grade,
+      scoreVersion: body.scoreVersion,
+      ...(body.axes ? { axes: body.axes } : {}),
       counts: body.counts,
       source: "cli",
       // Older published CLIs (pre-BYOK) don't send reviewStatus at all —

@@ -145,6 +145,9 @@ repos:
   landing an innocuous server, waiting for approval, and swapping the command
   later executes on every teammate's machine with no second prompt. No single
   revision of the file looks wrong, which is why only the change is evidence.
+  Bumping a pinned version (`@1.2.2` → `@1.2.3`) is *not* a redefinition —
+  comparison is on package identity, because a detector that fires on the
+  healthy thing trains you to ignore it.
   Needs git history; silently skipped on an exported tarball.
 - **Unused dependencies** — declared in `package.json` /
   `requirements.txt` / `pyproject.toml` but never imported anywhere in
@@ -200,10 +203,26 @@ Dead-code candidates (static analysis only)
   candidate  listSourceFiles  src/imports.ts:36
 
 Score: 66 (C)  · 50 files analyzed (npm)
+  security        ██████░░░░ 66
+  supply chain    █████████░ 91
+  maintainability ████████░░ 84
 2 phantom dependencies — remove before shipping
 
 → Track trends, gate PRs, and get AI-reviewed findings: connect this repo at codeaudit.madhavaryal.info.np
 ```
+
+**The three axes** exist because one number can't tell you which kind of
+problem you have, and they prompt different reactions: a low security axis is
+"stop and fix", a low maintainability axis is "schedule it". The headline is
+capped by the security axis — a tidy codebase never carries a leaking one into
+a good grade — so when the headline and the security axis are equal, security
+is what's holding the score down.
+
+Security counts findings absolutely; maintainability normalises by repo size,
+so a large project isn't penalised for having more of everything. Each finding
+removes a *fraction* of what remains rather than a fixed number of points,
+which means the score never bottoms out and the second finding of a kind
+always costs less than the first.
 
 **Fix first** is the top of the output because a list of findings isn't much
 use if you can't tell which one matters. It ranks by severity, then finding
@@ -217,7 +236,8 @@ thing you can act on, and ties break toward the cheapest fix. `[S]`, `[M]` and
 npx codeorion scan . --json
 ```
 
-Returns a single JSON object with `score`, `grade`, `counts` (per-status
+Returns a single JSON object with `score`, `grade`, `scoreVersion`, `axes`
+(`security` / `supplyChain` / `maintainability`), `counts` (per-status
 tally), the full `dependencies` array, `deadCodeCandidates`, `priorities`
 (the ranked fix-first list), `advisories` (`duplicates` and
 `licenseConflicts`), an `upload` result (`null` unless `--upload` was

@@ -284,6 +284,36 @@ export function ScanDetail() {
                   : " Some batches could not be reviewed — most often the model provider's rate limit or daily token quota. Expand a finding below to see the exact reason, and re-run the scan once the quota resets."}
               </p>
             )}
+            {/* The headline is capped by the security axis, so when they are
+                equal, security is what is holding the score down. Showing the
+                axes is what makes an otherwise-inexplicable number legible:
+                the same 60 means very different things depending on which
+                axis produced it. */}
+            {scan.summary.axes && (
+              <div className="mb-4 space-y-1.5">
+                {(
+                  [
+                    ["Security", scan.summary.axes.security],
+                    ["Supply chain", scan.summary.axes.supplyChain],
+                    ["Maintainability", scan.summary.axes.maintainability],
+                  ] as const
+                ).map(([label, value]) => (
+                  <div key={label} className="flex items-center gap-3">
+                    <span className="w-28 shrink-0 text-xs text-muted">{label}</span>
+                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2">
+                      <div
+                        className={`h-full rounded-full ${
+                          value >= 90 ? "bg-success" : value >= 60 ? "bg-warning" : "bg-danger"
+                        }`}
+                        style={{ width: `${value}%` }}
+                      />
+                    </div>
+                    <span className="w-10 shrink-0 text-right font-mono text-xs">{value}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
             {(
               [

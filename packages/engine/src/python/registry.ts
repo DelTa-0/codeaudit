@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fetchJson, type DependencyVerdict } from "../registry.js";
 import { checkTyposquat, fuzzyAlternative } from "../typosquat.js";
+import { lookupHallucinatedName } from "../data/hallucinatedNames.js";
 import { classifyLicenseTerm } from "../licenseClass.js";
 import type { PythonManifest } from "./manifest.js";
 import { PYTHON_STDLIB } from "./stdlib.js";
@@ -313,6 +314,14 @@ export async function checkPythonDependencies(
           const veryNew = ageDays < SUSPICIOUS_AGE_DAYS;
           status = lowDownloads || veryNew ? "suspicious" : "healthy";
         }
+        // Known-hallucination corpus — see registry.ts for why a match is
+        // never left "healthy".
+        const hallucinated = lookupHallucinatedName(normalized, "pypi");
+        if (hallucinated) {
+          registryMetadata = { ...(registryMetadata ?? {}), hallucinated };
+          if (status === "healthy") status = "suspicious";
+        }
+
         // Typosquat/slopsquat check — see registry.ts for the distance/
         // established-package policy. Downloads here are monthly (PyPI).
         if (status !== "phantom") {

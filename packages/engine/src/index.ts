@@ -40,7 +40,13 @@ export {
   type ReviewStatus,
   type LlmReviewResult,
 } from "./llm.js";
-export { computeSummary, type ScanSummary } from "./score.js";
+export {
+  computeSummary,
+  SCORE_VERSION,
+  type ScanSummary,
+  type ScoreAxes,
+  type ScoreInput,
+} from "./score.js";
 export { detectEcosystems } from "./detect.js";
 export { parsePythonManifest, type PythonManifest } from "./python/manifest.js";
 export { analyzePythonRepo, listPythonFiles } from "./python/imports.js";

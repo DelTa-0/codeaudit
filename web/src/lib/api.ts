@@ -125,9 +125,21 @@ export interface ScanSummary {
     filesAnalyzed: number;
     /** Absent on scans from before secret detection shipped. */
     secrets?: number;
-    /** Absent on scans from before agent-config auditing shipped. Advisory only — never affects `score`. */
+    /** Absent on scans from before agent-config auditing shipped. Scored since v2. */
     agentConfig?: number;
+    deprecated?: number;
+    duplicates?: number;
+    licenseConflicts?: number;
+    /** Registered package names LLMs are documented to invent. */
+    hallucinated?: number;
+    /** MCP servers whose command changed after they were approved. */
+    mcpRedefined?: number;
   };
+  /** Which scoring scheme produced `score`. Absent (or 1) on pre-v2 scans,
+   *  whose number was computed under different rules and is not comparable. */
+  scoreVersion?: number;
+  /** Per-axis scores (v2+). The headline is capped by `security`. */
+  axes?: { security: number; supplyChain: number; maintainability: number };
   /** "skipped" means zombie findings are unfiltered static candidates (no LLM verdict) — score is noisier. */
   reviewStatus?: "full" | "partial" | "skipped";
   /** Present only when reviewStatus !== "skipped" AND the review was a CLI user's own key, not the platform's — self-reported by the CLI, never platform-verified. */

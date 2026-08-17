@@ -356,11 +356,9 @@ async function processScanJob(scanJobId: string) {
     await setStatus(scanJobId, "analyzing", "Attributing AI-assisted code");
     const aiStats = await computeAiAuthorship(dir, zombies);
 
-    // Advisory-only in this release: these inform the prioritized list and the
-    // dashboard, but deliberately do not feed computeSummary's score yet — see
-    // docs/superpowers/specs/2026-07-31-phase1-signal-design.md ("Scoring
-    // changes"). Landing detection and scoring in one step would silently move
-    // every repo's score and could break merge gates on unchanged code.
+    // These now feed the score (v2 — see packages/engine/src/score.ts), on
+    // their own axes rather than a shared additive budget, which is what made
+    // scoring them safe. They must still be computed before the summary.
     // Best-effort, matching analysis/aiAuthorship.ts: advisory extras must
     // never be able to fail a scan that would otherwise have succeeded. A
     // failure here means the advisory data is absent, not that the scan broke.
@@ -385,14 +383,16 @@ async function processScanJob(scanJobId: string) {
       );
     }
     const summary = {
-      ...computeSummary(
+      ...computeSummary({
         deps,
         zombies,
-        fileCount,
+        filesAnalyzed: fileCount,
         reviewStatus,
-        secrets.length + historySecrets.length,
-        agentConfigFindings.length,
-      ),
+        secretCount: secrets.length + historySecrets.length,
+        agentConfig: agentConfigFindings,
+        duplicateCount: duplicates.length,
+        licenseConflictCount: licenseConflicts.length,
+      }),
       ai: aiStats,
       priorities,
       advisories: { duplicates, licenseConflicts },

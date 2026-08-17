@@ -613,15 +613,51 @@ checks.push(
   ],
 );
 
-// --- Secrets scoring and ranking ---
-const secretSummary = computeSummary([], [], 10, "skipped", 1);
-const twoSecrets = computeSummary([], [], 10, "skipped", 2);
-const manySecrets = computeSummary([], [], 10, "skipped", 9);
+// --- Secrets scoring and ranking (scoring v2) ---
+const cleanSummary = computeSummary({ deps: [], zombies: [], filesAnalyzed: 10 });
+const secretSummary = computeSummary({ deps: [], zombies: [], filesAnalyzed: 10, secretCount: 1 });
+const twoSecrets = computeSummary({ deps: [], zombies: [], filesAnalyzed: 10, secretCount: 2 });
+const manySecrets = computeSummary({ deps: [], zombies: [], filesAnalyzed: 10, secretCount: 9 });
 checks.push(
-  ["one hardcoded secret costs 20 points", secretSummary.score === 80],
-  ["two hardcoded secrets cost 40 points", twoSecrets.score === 60],
-  ["the secret penalty is capped at 40", manySecrets.score === 60],
+  ["a clean repo scores 100", cleanSummary.score === 100],
+  ["the summary records which scoring scheme produced it", cleanSummary.scoreVersion === 2],
+  ["one hardcoded secret halves the security axis", secretSummary.axes.security === 60],
+  // v1 capped the secret penalty at 40, so two secrets and twenty scored
+  // identically. The whole point of the hyperbolic curve is that it never
+  // flattens: more is always worse, just with diminishing weight.
+  ["two secrets cost more than one", twoSecrets.score < secretSummary.score],
+  ["nine secrets cost more than two", manySecrets.score < twoSecrets.score],
+  // The load-bearing property of v2: a clean codebase cannot carry a leaking
+  // one into a good grade.
+  ["the headline never exceeds the security axis", secretSummary.score <= secretSummary.axes.security],
+  ["a secret does not touch the maintainability axis", secretSummary.axes.maintainability === 100],
   ["secrets appear in the summary counts", secretSummary.counts.secrets === 1],
+);
+
+// --- Scoring v2: size normalisation and axis separation ---
+function unusedDeps(total: number, unused: number) {
+  return Array.from({ length: total }, (_, i) => ({
+    packageName: `pkg-${i}`,
+    declaredVersion: "^1.0.0",
+    status: i < unused ? ("unused" as const) : ("healthy" as const),
+    ecosystem: "npm" as const,
+    registryMetadata: null,
+  }));
+}
+// Same *proportion* of unused dependencies in a small and a large project.
+// Under v1's flat `unused × 3` the large one scored 30 points worse for being
+// large; under v2 they land in the same place.
+const smallRepo = computeSummary({ deps: unusedDeps(20, 4), zombies: [], filesAnalyzed: 50 });
+const largeRepo = computeSummary({ deps: unusedDeps(200, 40), zombies: [], filesAnalyzed: 500 });
+checks.push(
+  [
+    "the same unused-dependency ratio scores the same at 10x repo size",
+    Math.abs(smallRepo.axes.maintainability - largeRepo.axes.maintainability) < 1,
+  ],
+  ["unused dependencies do not touch the security axis", smallRepo.axes.security === 100],
+  ["more unused dependencies is still worse at equal size",
+    computeSummary({ deps: unusedDeps(20, 10), zombies: [], filesAnalyzed: 50 }).axes.maintainability <
+      smallRepo.axes.maintainability],
 );
 
 const secretRanked = rankFindings({
@@ -785,11 +821,58 @@ checks.push([
   })(),
 ]);
 
-// --- Agent config: advisory-only, no score penalty ---
-const agentConfigSummary = computeSummary([], [], 10, "skipped", 0, 5);
+// --- Agent config: now scored (v2), on the axis its category implies ---
+function agentFinding(
+  category: Parameters<typeof rankFindings>[0] extends never ? never : string,
+  severity: "critical" | "high" | "medium",
+  rule = "test_rule",
+) {
+  return {
+    filePath: ".mcp.json",
+    line: 1,
+    category,
+    rule,
+    severity,
+    tier: 1,
+    surface: "mcp_config",
+    message: "test",
+    evidence: "test",
+  } as unknown as Parameters<typeof computeSummary>[0]["agentConfig"] extends (infer T)[] | undefined
+    ? T
+    : never;
+}
+
+const injectionSummary = computeSummary({
+  deps: [],
+  zombies: [],
+  filesAnalyzed: 10,
+  agentConfig: [agentFinding("instruction_injection", "critical")],
+});
+const mcpDriftSummary = computeSummary({
+  deps: [],
+  zombies: [],
+  filesAnalyzed: 10,
+  agentConfig: [agentFinding("dangerous_agent_config", "high", "mcp_server_redefined")],
+});
+const unverifiedPkgSummary = computeSummary({
+  deps: [],
+  zombies: [],
+  filesAnalyzed: 10,
+  agentConfig: [agentFinding("unverified_mcp_package", "medium")],
+});
 checks.push(
-  ["agent config findings cost zero score points", agentConfigSummary.score === 100],
-  ["agent config findings still appear in the summary counts", agentConfigSummary.counts.agentConfig === 5],
+  // v1 scored these zero because one additive budget made any new penalty a
+  // silent breaking change. Separate axes are what made scoring them safe.
+  ["agent instruction injection now costs score points", injectionSummary.score < 100],
+  ["instruction injection lands on the security axis", injectionSummary.axes.security < 100],
+  ["instruction injection leaves maintainability alone", injectionSummary.axes.maintainability === 100],
+  ["an MCP redefinition is charged to security", mcpDriftSummary.axes.security < 100],
+  ["an MCP redefinition is counted", mcpDriftSummary.counts.mcpRedefined === 1],
+  // An unverified package reference is a supply-chain question, not a live
+  // exposure — it must not depress the security axis.
+  ["an unverified MCP package is a supply-chain finding", unverifiedPkgSummary.axes.supplyChain < 100],
+  ["an unverified MCP package leaves security intact", unverifiedPkgSummary.axes.security === 100],
+  ["agent config findings still appear in the summary counts", injectionSummary.counts.agentConfig === 1],
 );
 
 const agentConfigRanked = rankFindings({

@@ -2,7 +2,7 @@
 type: reference
 title: "Decisions"
 created: 2026-07-17
-updated: 2026-08-04
+updated: 2026-08-17
 tags:
   - project/codeaudit
 status: evergreen
@@ -13,6 +13,66 @@ related:
 ---
 
 # Decisions (ADR-style log)
+
+## Scoring v2: three axes, multiplicative retention, headline capped by security (2026-08-17)
+
+v1 was `100 − Σ(count × weight)`. Four problems, none fixable by reweighting:
+
+**One number answered two incompatible questions.** A leaked credential
+(−40, capped) and eight unused dependencies (−24) put a repo in the same
+grade band, as if "rotate this key now" and "tidy up sometime" were
+comparable states.
+
+**Linear penalties, no size normalisation.** Seven phantom packages floored
+the score, so forty scored the same as seven. A large repo accumulated unused
+deps and dead code purely by being large, so the score tracked repo size more
+than repo health — which quietly undermined the dashboard's trend and
+comparison premise.
+
+**Hard caps flattened the top end.** `min(40, secrets × 20)` scored two
+secrets and twenty identically.
+
+**And the real one: a single additive budget made every new detector a
+breaking change.** Agent config shipped `score -= 0` (see the 2026-08-03
+entry) and the reasoning there was correct — `routes/cliScans.ts` stores
+CLI-computed scores verbatim, so a new penalty drops every user's score on
+upgrade with unchanged code. But that means the *architecture*, not caution,
+was blocking every detector from ever counting. Scoring more things required
+changing the shape first.
+
+**v2.** Three axes — security, supply chain, maintainability — scored
+independently because they prompt different actions. Within an axis,
+categories compose multiplicatively (`100 × Π(1 − pᵢ)`) with hyperbolic
+damage (`max × n/(n+k)`): never negative, never flat, monotonic forever, and
+the zero-to-one step weighted heaviest, which is how anyone actually triages.
+Hygiene normalises by repo size through `k`; security never normalises,
+because one secret in a 5,000-file repo is still one secret.
+
+The headline is `min(security, 0.5·sec + 0.3·supply + 0.2·maint)`. The `min`
+is the load-bearing half: a weighted average alone lets a tidy codebase
+dilute a live credential, and capping by security is what makes it safe to
+collapse everything back into one number.
+
+`scoreVersion` ships in the summary and uploads, so a step change in a trend
+chart is explainable rather than mysterious, and pre-v2 uploads default to
+`1` rather than being mislabelled.
+
+**Grade thresholds deliberately unchanged** (90/75/60/40). v2 scores lower
+for the same repo; moving the cutoffs to preserve everyone's letter would
+throw away the point of the change. Safe to do now only because the product
+is pre-GA — this would be a hostile change against a real user base.
+
+**Not done: server-side recompute.** `cliScans.ts` still trusts the uploaded
+number. `scoreVersion` makes that survivable (a scan records which rules
+produced it), but uniform semantics really want the CLI to upload findings
+and the server to score them. That is the remaining step.
+
+**Found while validating, and fixed:** the first cut of `mcp_server_redefined`
+compared raw invocation strings, so a pinned version bump
+(`codeorion-mcp@1.2.2` → `@1.2.3`) read as an approval-bypass attack — it
+fired four times on this repository's own `.claude/mcp.json`. Comparison is
+now on package *identity* with versions stripped. A detector that fires on
+the healthy thing trains people to ignore it.
 
 ## Distributing the agent-config skill: two copies, not one, plus real end-to-end verification (2026-08-04)
 

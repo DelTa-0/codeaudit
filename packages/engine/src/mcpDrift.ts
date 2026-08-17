@@ -66,6 +66,33 @@ function invocation(spec: McpServerSpec): string {
 }
 
 /**
+ * Strips a trailing version specifier from a package-like argument, so
+ * `codeorion-mcp@1.2.2` and `codeorion-mcp@1.2.3` compare equal. Scoped names
+ * keep their leading `@` — only a version `@` after the name is removed.
+ *
+ * This exists because the first version of this detector flagged every pinned
+ * version bump as a redefinition, which it found four times in this very
+ * repository. Bumping a pinned package is the healthy thing to do, and a
+ * detector that fires on it trains people to ignore it. The attack this rule
+ * is for is a change to *what runs* — a different binary, a different package,
+ * a shell — not a new release of the same one. Malicious-version risk is real
+ * but belongs to the registry and pinning checks, which already cover it.
+ */
+function stripVersion(arg: string): string {
+  const at = arg.lastIndexOf("@");
+  if (at <= 0) return arg; // no `@`, or a leading scope marker only
+  const suffix = arg.slice(at + 1);
+  // Only treat it as a version when it looks like one, so a path or an email
+  // shaped argument is left alone.
+  return /^[\d~^><=v][\w.\-+*]*$|^(latest|next|beta|alpha)$/i.test(suffix) ? arg.slice(0, at) : arg;
+}
+
+/** Invocation reduced to package/binary identity, ignoring versions. */
+function identity(spec: McpServerSpec): string {
+  return [spec.command, ...spec.args.map(stripVersion)].join(" ").trim();
+}
+
+/**
  * Compares two revisions of one MCP config and reports servers whose
  * invocation changed. A server that is *added* is not reported here — that is
  * a first approval, which the user is prompted for and which
@@ -87,7 +114,9 @@ export function diffMcpServers(
     if (!previous) continue;
     const wasInvocation = invocation(previous);
     const nowInvocation = invocation(spec);
-    if (wasInvocation === nowInvocation) continue;
+    // Identity, not the raw string: a version bump of the same package is a
+    // dependency update, not a redefinition. See stripVersion.
+    if (identity(previous) === identity(spec)) continue;
 
     // A redefinition that introduces shell syntax is the fully-weaponised
     // form; a plain command swap is still the same class of change, since
@@ -180,11 +209,12 @@ export function findMcpDrift(repoDir: string): AgentConfigFinding[] {
       findings.push(...diffMcpServers(before, after, filePath));
     }
   }
-  // The same server redefined twice in history is one problem to look at, not
-  // two rows in a report.
+  // One row per server, not one per revision pair. A server rewritten across
+  // four commits is one thing to go and look at; four identical-looking rows
+  // just inflate the count and, now that this feeds the score, the penalty.
   const seen = new Set<string>();
   return findings.filter((f) => {
-    const key = `${f.filePath}::${f.evidence}`;
+    const key = `${f.filePath}::${f.message}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;

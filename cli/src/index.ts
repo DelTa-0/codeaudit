@@ -218,7 +218,13 @@ function installHook(): never {
 async function uploadResults(
   apiUrl: string,
   token: string,
-  summary: { score: number; grade: string; counts: Record<string, number> },
+  summary: {
+    score: number;
+    grade: string;
+    scoreVersion: number;
+    axes: { security: number; supplyChain: number; maintainability: number };
+    counts: Record<string, number>;
+  },
   deps: unknown[],
   candidates: ReviewedFinding[],
   priorities: RankedFinding[],
@@ -233,6 +239,8 @@ async function uploadResults(
         token,
         score: summary.score,
         grade: summary.grade,
+        scoreVersion: summary.scoreVersion,
+        axes: summary.axes,
         counts: summary.counts,
         reviewStatus,
         // Present only when review actually happened — an older server that
@@ -505,14 +513,16 @@ async function main() {
       err instanceof Error ? err.message : err,
     );
   }
-  const summary = computeSummary(
+  const summary = computeSummary({
     deps,
-    staticFindings,
-    fileCount,
+    zombies: staticFindings,
+    filesAnalyzed: fileCount,
     reviewStatus,
-    secrets.length,
-    agentConfigFindings.length,
-  );
+    secretCount: secrets.length,
+    agentConfig: agentConfigFindings,
+    duplicateCount: duplicates.length,
+    licenseConflictCount: licenseConflicts.length,
+  });
   const phantomCount = summary.counts.phantom;
   const belowMin = minScore !== null && summary.score < minScore;
   const exitCode = phantomCount > 0 || belowMin ? 1 : 0;
@@ -537,6 +547,8 @@ async function main() {
         {
           score: summary.score,
           grade: summary.grade,
+          scoreVersion: summary.scoreVersion,
+          axes: summary.axes,
           counts: summary.counts,
           reviewStatus,
           dependencies: deps,
@@ -643,6 +655,19 @@ async function main() {
   console.log(
     `${BOLD}Score: ${scoreColor}${summary.score} (${summary.grade})${RESET}  ${DIM}· ${fileCount} files analyzed (${ecosystems.join(" + ") || "no ecosystems detected"})${RESET}`,
   );
+  // The axes are printed because the headline alone cannot tell you which
+  // kind of problem you have, and they prompt different reactions: a low
+  // security axis is "stop and fix", a low maintainability axis is "schedule
+  // it". The headline is capped by security, so when they differ, security is
+  // what is holding the score down.
+  const axisLine = (label: string, value: number) => {
+    const color = value >= 90 ? GREEN : value >= 60 ? YELLOW : RED;
+    const filled = Math.round(value / 10);
+    return `  ${label.padEnd(16)}${color}${"█".repeat(filled)}${DIM}${"░".repeat(10 - filled)}${RESET} ${color}${value}${RESET}`;
+  };
+  console.log(axisLine("security", summary.axes.security));
+  console.log(axisLine("supply chain", summary.axes.supplyChain));
+  console.log(axisLine("maintainability", summary.axes.maintainability));
   if (phantomCount > 0)
     console.log(`${RED}${BOLD}${phantomCount} phantom dependenc${phantomCount === 1 ? "y" : "ies"} — remove before shipping${RESET}`);
   if (belowMin) console.log(`${RED}Score below --min-score ${minScore}${RESET}`);
