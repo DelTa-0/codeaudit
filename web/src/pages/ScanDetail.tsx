@@ -59,6 +59,84 @@ function ConfidenceBar({ value }: { value: number }) {
 }
 
 /**
+ * AI agent attack surface.
+ *
+ * Leads with the inventory rather than the score, because the useful question
+ * is "what can an assistant reach in this repo" — a number alone cannot be
+ * acted on. Capability columns are limited to what an MCP config actually
+ * shows; see the caveat, which is server-authored so this card cannot drift
+ * from what the analysis is willing to claim.
+ */
+function AgentSurfaceCard({ surface }: { surface: NonNullable<ScanSummary["agentSurface"]> }) {
+  const riskTone: Record<string, string> = {
+    high: "text-danger",
+    medium: "text-warning",
+    low: "text-muted",
+  };
+  const c = surface.counts;
+  const inventory = [
+    ["Instruction files", c.instructionFiles],
+    ["MCP servers", c.mcpServers],
+    ["Skills", c.skillFiles],
+    ["Permission files", c.permissionFiles],
+    ["Shell-capable", c.shellCapableServers],
+    ["Unpinned", c.unpinnedServers],
+  ] as const;
+
+  return (
+    <Card>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-sm font-medium text-muted">AI agent attack surface</p>
+        <p className="font-mono text-sm">
+          <span
+            className={
+              surface.score >= 90 ? "text-success" : surface.score >= 60 ? "text-warning" : "text-danger"
+            }
+          >
+            {surface.score}
+          </span>
+          <span className="text-muted"> / 100 agent config</span>
+        </p>
+      </div>
+
+      <div className="mt-3 grid grid-cols-3 gap-3 sm:grid-cols-6">
+        {inventory.map(([label, value]) => (
+          <div key={label}>
+            <p className="font-mono text-lg font-bold">{value}</p>
+            <p className="text-xs text-muted">{label}</p>
+          </div>
+        ))}
+      </div>
+
+      {surface.mcpServers.length > 0 && (
+        <ul className="mt-4 divide-y divide-border border-t border-border">
+          {surface.mcpServers.map((m) => (
+            <li key={`${m.filePath}:${m.name}`} className="py-2.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-mono text-sm">{m.name}</span>
+                <span className={`text-xs font-semibold uppercase ${riskTone[m.risk]}`}>{m.risk}</span>
+                <span className="truncate font-mono text-xs text-muted">
+                  {[m.command, ...m.args].join(" ")}
+                </span>
+              </div>
+              {m.reasons.length > 0 && (
+                <ul className="mt-1 list-inside list-disc text-xs text-muted">
+                  {m.reasons.map((r) => (
+                    <li key={r}>{r}</li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <p className="mt-3 border-t border-border pt-3 text-xs text-muted">{surface.caveat}</p>
+    </Card>
+  );
+}
+
+/**
  * What changed since the previous scan.
  *
  * A score delta on its own is not actionable — "82 → 76" could be one new
@@ -319,6 +397,8 @@ export function ScanDetail() {
       </Card>
 
       {scan.summary?.findingDelta && <FindingDeltaCard delta={scan.summary.findingDelta} />}
+
+      {scan.summary?.agentSurface && <AgentSurfaceCard surface={scan.summary.agentSurface} />}
 
       {scan.summary && (
         <Card className="flex items-center gap-6">

@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test:finding-lifecycle": "tsx test/finding-lifecycle.ts",
     "test:pr-comment": "tsx test/pr-comment.ts",
-    "test:dependency-attribution": "tsx test/dependency-attribution.ts"
+    "test:dependency-attribution": "tsx test/dependency-attribution.ts",
+    "test:agent-surface": "tsx test/agent-surface.ts"
   },
   "dependencies": {
     "@codeaudit/engine": "*",

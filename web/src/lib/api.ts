@@ -165,6 +165,34 @@ export interface ScanSummary {
     openTotal: number;
     byKind?: Record<string, { new: number; resolved: number; reintroduced: number }>;
   };
+  /** Inventory of what an agent can reach here. Absent on older scans. */
+  agentSurface?: {
+    mcpServers: {
+      name: string;
+      filePath: string;
+      command: string;
+      args: string[];
+      packageRef: string | null;
+      pinned: boolean;
+      shell: boolean;
+      filesystemPaths: string[];
+      risk: "low" | "medium" | "high";
+      reasons: string[];
+    }[];
+    counts: {
+      instructionFiles: number;
+      skillFiles: number;
+      permissionFiles: number;
+      mcpServers: number;
+      shellCapableServers: number;
+      filesystemGrantingServers: number;
+      unpinnedServers: number;
+    };
+    score: number;
+    findingCounts: { critical: number; high: number; medium: number };
+    /** Render verbatim — states what the capability columns can and cannot show. */
+    caveat: string;
+  };
   priorities?: RankedFinding[];
   advisories?: {
     duplicates: DuplicateGroup[];

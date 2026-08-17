@@ -47,6 +47,7 @@ import {
   findSecrets,
   findAgentConfigIssues,
   findMcpPackageRefs,
+  analyzeAgentSurface,
   verifyAgentConfigPackages,
   dependencyFindingIdentity,
   deadCodeFindingIdentity,
@@ -417,6 +418,18 @@ async function processScanJob(scanJobId: string) {
         err instanceof Error ? err.message : err,
       );
     }
+    // What an agent can reach here — the inventory the agent-config findings
+    // are counted against. Runs after the findings so the score reflects them.
+    let agentSurface: ReturnType<typeof analyzeAgentSurface> | null = null;
+    try {
+      agentSurface = analyzeAgentSurface(dir, agentConfigFindings);
+    } catch (err) {
+      console.error(
+        `[scan ${scanJobId}] agent surface analysis failed (continuing without it):`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+
     // Findings that outlive this scan. Best-effort like the other advisory
     // work: a reconciliation failure must not fail a scan that otherwise
     // succeeded — the delta is reporting, not analysis.
@@ -468,6 +481,7 @@ async function processScanJob(scanJobId: string) {
         licenseConflictCount: licenseConflicts.length,
       }),
       ai: aiStats,
+      ...(agentSurface ? { agentSurface } : {}),
       ...(findingDelta ? { findingDelta } : {}),
       priorities,
       advisories: { duplicates, licenseConflicts },

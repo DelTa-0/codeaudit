@@ -94,6 +94,12 @@ export {
   type McpServerSpec,
 } from "./mcpDrift.js";
 export {
+  analyzeAgentSurface,
+  type AgentAttackSurface,
+  type McpServerInventory,
+  type AgentRisk,
+} from "./agentSurface.js";
+export {
   dependencyFindingIdentity,
   deadCodeFindingIdentity,
   secretFindingIdentity,
