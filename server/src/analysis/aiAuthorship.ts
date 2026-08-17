@@ -179,6 +179,46 @@ export function describeCoverage(
 }
 
 /**
+ * Which commits carry an AI marker.
+ *
+ * Exported because dependency attribution needs exactly the same answer, and
+ * two independent copies of "what counts as an AI commit" would drift — the
+ * authorship card and a per-dependency verdict disagreeing about the same
+ * commit is the kind of inconsistency nobody can debug from the UI.
+ */
+export async function collectAiCommitHashes(repoDir: string): Promise<{
+  ai: Set<string>;
+  automation: Set<string>;
+  /** [hash, authorName, authorEmail] per commit, in log order. */
+  commits: string[][];
+}> {
+  const git = simpleGit(repoDir);
+  const trailerHashes = (
+    await git.raw(["log", `-n`, MAX_COMMITS, "--format=%H", "-i", "-E", `--grep=${AI_TRAILER_GREP}`])
+  )
+    .split("\n")
+    .filter(Boolean);
+  const commits = (await git.raw(["log", "-n", MAX_COMMITS, "--format=%H%x02%an%x02%ae"]))
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => line.split("\x02"));
+  const ai = new Set(trailerHashes);
+  const automation = new Set<string>();
+  for (const [hash, name, email] of commits) {
+    const who = `${name} ${email}`;
+    if (AUTOMATION_AUTHOR.test(who)) {
+      // Scripted dependency bumps etc. — never AI authorship, and excluded
+      // from the human baseline too so they don't skew either bucket.
+      automation.add(hash);
+      ai.delete(hash);
+      continue;
+    }
+    if (AI_AUTHOR.test(who)) ai.add(hash);
+  }
+  return { ai, automation, commits };
+}
+
+/**
  * Attributes files to AI-assisted vs human commits from the (shallow,
  * depth-100) clone's history. Heuristic: a commit is AI-assisted when its
  * message carries a known assistant Co-Authored-By trailer or its author
@@ -191,31 +231,11 @@ export async function computeAiAuthorship(
   try {
     const git = simpleGit(repoDir);
 
-    // AI-assisted commit hashes: trailer match (grep on body) ∪ bot authors.
-    const trailerHashes = (
-      await git.raw(["log", `-n`, MAX_COMMITS, "--format=%H", "-i", "-E", `--grep=${AI_TRAILER_GREP}`])
-    )
-      .split("\n")
-      .filter(Boolean);
-    const authors = (
-      await git.raw(["log", "-n", MAX_COMMITS, "--format=%H%x02%an%x02%ae"])
-    )
-      .split("\n")
-      .filter(Boolean)
-      .map((line) => line.split("\x02"));
-    const aiHashes = new Set(trailerHashes);
-    const automationHashes = new Set<string>();
-    for (const [hash, name, email] of authors) {
-      const who = `${name} ${email}`;
-      if (AUTOMATION_AUTHOR.test(who)) {
-        // Scripted dependency bumps etc. — never AI authorship, and excluded
-        // from the human baseline too so they don't skew either bucket.
-        automationHashes.add(hash);
-        aiHashes.delete(hash);
-        continue;
-      }
-      if (AI_AUTHOR.test(who)) aiHashes.add(hash);
-    }
+    const {
+      ai: aiHashes,
+      automation: automationHashes,
+      commits: authors,
+    } = await collectAiCommitHashes(repoDir);
     const totalCommits = authors.length - automationHashes.size;
     if (totalCommits === 0) return null;
 

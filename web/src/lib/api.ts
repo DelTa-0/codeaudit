@@ -244,6 +244,17 @@ export interface DependencyFinding {
       source: "fuzzy" | "ai" | "corpus";
     }[];
     deprecated?: string | null;
+    /** Where this dependency came from. Absent when git history is unavailable. */
+    attribution?: {
+      introducedCommit: string | null;
+      introducedAuthor: string | null;
+      introducedAt: string | null;
+      commitsAgo: number | null;
+      /** "unlikely" is only claimed when the repo has usable AI markers. */
+      aiAssisted: "likely" | "unlikely" | "unknown";
+      /** Already present at the oldest commit in the shallow clone. */
+      predatesHistory: boolean;
+    };
   } | null;
 }
 

@@ -17,7 +17,12 @@ import {
 } from "./services/github.js";
 import { query, queryOne } from "./db/pool.js";
 import { cloneRepoSandboxed, cleanupScanDir } from "./analysis/clone.js";
-import { computeAiAuthorship } from "./analysis/aiAuthorship.js";
+import {
+  computeAiAuthorship,
+  collectAiCommitHashes,
+  describeCoverage,
+} from "./analysis/aiAuthorship.js";
+import { attributeDependencies } from "./analysis/dependencyAttribution.js";
 import { listTrackedFiles } from "./analysis/trackedFiles.js";
 import { scanHistorySecrets } from "./analysis/historySecrets.js";
 import {
@@ -181,6 +186,30 @@ async function processScanJob(scanJobId: string) {
         const alternatives = aiSuggestions.get(d.packageName);
         if (alternatives?.length) d.registryMetadata = { ...(d.registryMetadata ?? {}), alternatives };
       }
+    }
+
+    // Where each dependency came from. Attached to the verdicts rather than
+    // stored separately so every surface that already renders a dependency
+    // gets the provenance for free. Best-effort: no git history means fewer
+    // attributions, never a failed scan.
+    try {
+      const { ai: aiCommits, commits } = await collectAiCommitHashes(dir);
+      const attribution = await attributeDependencies(dir, {
+        aiCommits,
+        commitOrder: commits.map(([sha]) => sha),
+        // Gates the "unlikely" verdict — see dependencyAttribution.ts. Without
+        // usable coverage an unmarked commit is not evidence of a human.
+        attributionUsable: describeCoverage(aiCommits.size, commits.length, false).level === "usable",
+      });
+      for (const d of deps) {
+        const attr = attribution.get(d.packageName);
+        if (attr) d.registryMetadata = { ...(d.registryMetadata ?? {}), attribution: attr };
+      }
+    } catch (err) {
+      console.error(
+        `[scan ${scanJobId}] dependency attribution failed (continuing without it):`,
+        err instanceof Error ? err.message : err,
+      );
     }
 
     for (const d of deps) {
