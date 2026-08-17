@@ -110,6 +110,15 @@ export interface AiAuthorshipStats {
   /** false when either bucket is too small for the comparison to mean anything */
   comparable?: boolean;
   hotspots?: HotspotFile[];
+  /** How much the attribution is worth on this repo. Absent on older scans. */
+  attribution?: {
+    commitsExamined: number;
+    aiMarkedCommits: number;
+    historyTruncated: boolean;
+    level: "none" | "low" | "usable";
+    /** Server-authored sentence — render verbatim, do not re-derive per surface. */
+    caveat: string;
+  };
 }
 
 export interface ScanSummary {

@@ -37,6 +37,38 @@ export interface AiAuthorshipStats {
   comparable: boolean;
   /** top change-frequency × size files, cross-referenced with AI authorship */
   hotspots: HotspotFile[];
+  /**
+   * How much this attribution is actually worth on THIS repository.
+   *
+   * Authorship is inferred from Co-Authored-By trailers and bot author names.
+   * That is high precision and low recall: a trailer proves an assistant was
+   * involved, but Copilot inline completion, Cursor tab-completion and pasted
+   * chat output leave no trailer at all. So "no AI found" and "AI used without
+   * recording it" are the same observation, and a UI that renders both as 0%
+   * is asserting something the data cannot support.
+   */
+  attribution: AttributionCoverage;
+}
+
+export interface AttributionCoverage {
+  /** Commits actually inspected, after excluding automation. */
+  commitsExamined: number;
+  /** Commits carrying an AI marker. Zero is the ambiguous case. */
+  aiMarkedCommits: number;
+  /**
+   * History ran out before the window did — the clone is shallow (--depth 100
+   * in analysis/clone.ts) or the commit cap was reached. "Introduced N commits
+   * ago" answers are bounded by this window, not by the repository.
+   */
+  historyTruncated: boolean;
+  /**
+   * - `none`   no marker anywhere. Report as UNAVAILABLE, never as zero risk.
+   * - `low`    a handful of markers; directional at best.
+   * - `usable` enough marked commits to say something.
+   */
+  level: "none" | "low" | "usable";
+  /** One sentence the UI can show verbatim, so honesty is not re-derived per surface. */
+  caveat: string;
 }
 
 /** Minimum files in BOTH buckets before a density comparison is shown. */
@@ -124,6 +156,27 @@ const AI_AUTHOR = /(copilot|devin-ai|claude|cursor-agent|aider|codex|windsurf)/i
 /** Pure automation — tracked separately so it never counts as AI authorship. */
 const AUTOMATION_AUTHOR = /(dependabot|renovate|greenkeeper|semantic-release|github-actions)/i;
 const MAX_COMMITS = "500";
+/** Below this many AI-marked commits the split is directional, not evidence. */
+const MIN_AI_COMMITS_FOR_CONFIDENCE = 3;
+
+export function describeCoverage(
+  aiMarkedCommits: number,
+  commitsExamined: number,
+  historyTruncated: boolean,
+): AttributionCoverage {
+  const level: AttributionCoverage["level"] =
+    aiMarkedCommits === 0 ? "none" : aiMarkedCommits < MIN_AI_COMMITS_FOR_CONFIDENCE ? "low" : "usable";
+  const window = historyTruncated
+    ? ` Only the most recent ${commitsExamined} commits were available (shallow clone), so older work is not represented.`
+    : "";
+  const caveat =
+    level === "none"
+      ? `No AI attribution markers were found in ${commitsExamined} commits. This does not mean no AI was used — assistants that complete code inline (Copilot, Cursor tab-completion) and pasted chat output leave no trace in git.${window}`
+      : level === "low"
+        ? `Only ${aiMarkedCommits} of ${commitsExamined} commits carry an AI marker, so this split is directional rather than evidence. Assistants that complete inline leave no marker.${window}`
+        : `Based on ${aiMarkedCommits} of ${commitsExamined} commits carrying an AI marker. Assistants that complete code inline leave no marker, so this is a floor, not a total.${window}`;
+  return { commitsExamined, aiMarkedCommits, historyTruncated, level, caveat };
+}
 
 /**
  * Attributes files to AI-assisted vs human commits from the (shallow,
@@ -166,6 +219,19 @@ export async function computeAiAuthorship(
     const totalCommits = authors.length - automationHashes.size;
     if (totalCommits === 0) return null;
 
+    // A shallow clone cannot see past its depth, and the commit cap can bite
+    // before that. Either way the window — not the repository — bounds every
+    // "N commits ago" answer downstream, so it has to be reported rather than
+    // silently assumed to be the whole history.
+    let historyTruncated = authors.length >= Number(MAX_COMMITS);
+    try {
+      historyTruncated =
+        historyTruncated ||
+        (await git.raw(["rev-parse", "--is-shallow-repository"])).trim() === "true";
+    } catch {
+      // Older git without the flag — leave the cap-based answer.
+    }
+
     // Files touched per commit.
     const nameOnly = await git.raw(["log", "-n", MAX_COMMITS, "--format=%x01%H", "--name-only"]);
     const fileStats = new Map<string, { ai: number; human: number }>();
@@ -206,6 +272,7 @@ export async function computeAiAuthorship(
     return {
       aiCommits: aiHashes.size,
       totalCommits,
+      attribution: describeCoverage(aiHashes.size, totalCommits, historyTruncated),
       shareOfFiles: trackedFiles ? Math.round((aiFiles / trackedFiles) * 1000) / 1000 : 0,
       aiFindingDensity: aiFiles ? Math.round((aiFindings / aiFiles) * 100 * 10) / 10 : 0,
       humanFindingDensity: humanFiles

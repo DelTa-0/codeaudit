@@ -78,9 +78,13 @@ function AiAuthorshipCard({ ai }: { ai: AiAuthorshipStats }) {
   if (ai.aiCommits === 0) {
     verdict = {
       tone: "text-muted",
-      headline: "No AI-assisted commits detected",
+      headline: "AI attribution unavailable",
+      // Server-authored (analysis/aiAuthorship.ts describeCoverage) so the PR
+      // comment, the export and any future AI Risk score all state the same
+      // limitation instead of each inventing its own wording.
       detail:
-        "Nothing in this history carries an assistant Co-Authored-By trailer. If your team uses tools that don't write trailers (e.g. Copilot autocomplete), this will read zero regardless of actual usage — treat it as “unknown”, not “no AI”.",
+        ai.attribution?.caveat ??
+        "Nothing in this history carries an assistant Co-Authored-By trailer. Tools that complete code inline write no trailer, so this reads zero regardless of actual usage — treat it as “unknown”, not “no AI”.",
     };
   } else if (ai.comparable === false) {
     verdict = {

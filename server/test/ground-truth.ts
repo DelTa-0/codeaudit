@@ -42,6 +42,7 @@ import {
   redactSnippet,
   findAgentConfigIssues,
 } from "@codeaudit/engine";
+import { describeCoverage } from "../src/analysis/aiAuthorship.js";
 
 const fixtureDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixture");
 
@@ -820,6 +821,35 @@ checks.push([
     return false;
   })(),
 ]);
+
+// --- AI attribution coverage: "no markers" must never read as "no AI" ---
+const noMarkers = describeCoverage(0, 120, false);
+const fewMarkers = describeCoverage(2, 120, false);
+const goodMarkers = describeCoverage(40, 120, false);
+const truncated = describeCoverage(40, 100, true);
+checks.push(
+  ["zero AI markers reports level none, not a zero-risk verdict", noMarkers.level === "none"],
+  [
+    "the zero-marker caveat says absence of markers is not absence of AI",
+    /does not mean no AI was used/i.test(noMarkers.caveat),
+  ],
+  [
+    "the zero-marker caveat names the tools that leave no trace",
+    /inline|Copilot|Cursor/i.test(noMarkers.caveat),
+  ],
+  ["a couple of markers is directional, not evidence", fewMarkers.level === "low"],
+  ["enough markers reads usable", goodMarkers.level === "usable"],
+  [
+    "even a usable split is described as a floor, not a total",
+    /floor, not a total/i.test(goodMarkers.caveat),
+  ],
+  ["a shallow clone is reported as truncated history", truncated.historyTruncated === true],
+  [
+    "the truncated caveat says older work is unrepresented",
+    /older work is not represented/i.test(truncated.caveat),
+  ],
+  ["coverage carries the counts it was computed from", noMarkers.commitsExamined === 120],
+);
 
 // --- Agent config: now scored (v2), on the axis its category implies ---
 function agentFinding(
