@@ -442,8 +442,24 @@ checks.push(
   ["tier 1: an AWS access key is detected", fire(`const k = "${AWS}";`).length === 1],
   ["tier 1: a Groq key is detected", fire(`const k = "${GROQ}";`).length === 1],
   [
-    "tier 1: a PEM private key header is detected",
-    fire("-----BEGIN RSA PRIVATE KEY-----").length === 1,
+    // A header with no key material is a mention of the FORMAT, not a leak —
+    // documentation, a comment, or this scanner's own source, all of which it
+    // used to report as leaked private keys.
+    "tier 1: a bare PEM header with no key material is NOT reported",
+    fire("-----BEGIN RSA PRIVATE KEY-----").length === 0,
+  ],
+  [
+    "tier 1: a PEM key with its body on the following line IS detected",
+    fire(`-----BEGIN RSA PRIVATE KEY-----
+${"MIIEowIBAAKCAQEA" + "b".repeat(48)}
+-----END RSA PRIVATE KEY-----`).length === 1,
+  ],
+  [
+    // The realistic leak, and the one a next-line-only check would miss: a key
+    // embedded in a single env/JSON value with escaped newlines. This repo's
+    // own GitHub App key is carried exactly this way.
+    "tier 1: a PEM key embedded in one line IS detected",
+    fire(`GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n${"MIIEowIBAAKCAQEA" + "c".repeat(48)}"`).length === 1,
   ],
   [
     "tier 2: a high-entropy value on a secret-named key is detected",

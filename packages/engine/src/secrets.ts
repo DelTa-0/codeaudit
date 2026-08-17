@@ -107,6 +107,23 @@ const PLACEHOLDER =
   /^(?:x{3,}|\.{3,}|\*{3,}|<[^>]*>|\$\{[^}]*\}|your[-_ ]|my[-_ ]|changeme|placeholder|dummy|example|sample|redacted|insert|todo|fixme|abc123|test[-_]?(?:key|token|secret)?$)/i;
 
 /**
+ * Stand-in markers that count anywhere in the value, not just at the start.
+ *
+ * PLACEHOLDER is anchored, which is right for prefixes like `your-` but means
+ * a value only *containing* a giveaway escapes it. Found by scanning this
+ * repository: `not-a-real-token-not-a-real-token` and
+ * `distinctive-test-key-abc123` were both reported as live credentials, in
+ * design documents that say in the surrounding prose that they are fixtures.
+ *
+ * Same trade as DOCUMENTATION_SAMPLE below: a randomly generated credential
+ * essentially never contains "not-a-real" or "fake", so the recall cost is
+ * negligible against the precision win. Kept to unambiguous markers — "test"
+ * alone is deliberately absent, because it appears in plenty of real values.
+ */
+const PLACEHOLDER_MARKER =
+  /not[-_]?a[-_]?real|notreal|fake[-_]?(?:key|token|secret|credential)?|dummy|test[-_](?:key|token|secret)|placeholder|do[-_]?not[-_]?use/i;
+
+/**
  * Documentation sample credentials. Vendors embed a marker word in the values
  * they publish in tutorials — Amazon's canonical `AKIAIOSFODNN7EXAMPLE` is the
  * most-copied string of its kind — so any README, ADR or onboarding doc that
@@ -115,6 +132,36 @@ const PLACEHOLDER =
  * negligible against a large precision win.
  */
 const DOCUMENTATION_SAMPLE = /EXAMPLE|SAMPLE_?KEY|YOUR_?(?:API_?)?KEY|XXXXXXXX/i;
+
+/** A run of base64 long enough to be key material rather than prose. */
+const KEY_MATERIAL = /[A-Za-z0-9+/=]{40,}/;
+
+/**
+ * Whether a PEM header is accompanied by actual key material.
+ *
+ * Both shapes have to be recognised, and missing the second would be the
+ * dangerous direction:
+ *
+ *   - a real `.pem` file, where the body begins on the next line;
+ *   - a key embedded in a single value, e.g.
+ *     `GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\nMIIEow..."`,
+ *     where the body follows on the *same* line. That is precisely how this
+ *     project's own config carries its GitHub App key (see lib/config.ts,
+ *     which un-escapes `\n`), so it is the realistic leak, not the exotic one.
+ *
+ * A header with no material anywhere near it is a mention of the format —
+ * documentation, a comment, a detector's own source — not a credential.
+ */
+function hasKeyMaterial(lines: string[], headerLine: number): boolean {
+  // headerLine is 1-based. Same line first: everything after the header.
+  const own = lines[headerLine - 1] ?? "";
+  const afterHeader = own.slice(own.indexOf("PRIVATE KEY-----") + "PRIVATE KEY-----".length);
+  if (KEY_MATERIAL.test(afterHeader)) return true;
+  for (let i = headerLine; i < Math.min(headerLine + 3, lines.length); i++) {
+    if (KEY_MATERIAL.test(lines[i] ?? "")) return true;
+  }
+  return false;
+}
 
 function shannonEntropy(value: string): number {
   const counts = new Map<string, number>();
@@ -209,6 +256,18 @@ export function scanTextForSecrets(text: string, filePath: string): SecretFindin
     // A vendor-marked documentation sample (e.g. Amazon's AKIA...EXAMPLE) —
     // never a live credential, regardless of which tier matched it.
     if (DOCUMENTATION_SAMPLE.test(value)) return;
+    if (PLACEHOLDER_MARKER.test(value)) return;
+    // A PEM header with no key after it is a *pattern*, not a key. The
+    // provider regex matches the "-----BEGIN ... PRIVATE KEY-----" line alone,
+    // so any file that merely names that string — a detector's own source, a
+    // test asserting the detector fires, documentation explaining the format —
+    // was reported as a leaked private key. This scanner flagged its own
+    // secrets.ts on exactly that basis.
+    //
+    // Requiring base64 body on a following line costs nothing in recall: a
+    // real leaked key is the header AND the material, and a header with the
+    // material stripped is not a credential anyone can use.
+    if (provider === "private key" && !hasKeyMaterial(lines, line)) return;
     // The private-key pattern matches only the PEM header, e.g.
     // "-----BEGIN RSA PRIVATE KEY-----", which is byte-identical for every
     // key in every file. Fingerprinting by value alone would collapse every

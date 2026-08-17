@@ -217,7 +217,10 @@ checks.push(
   ],
   [
     "tier 2: a high-entropy value on a secret-named key is detected",
-    fire(`const apiKey = "9f2Kq7ZxVb3LmNp8RtYw1CsE4DhGj6Uk";`).length === 1,
+    // Split when this shipped: an unbroken 32-char literal reads as a live
+    // credential to external secret scanners even though it is synthetic
+    // fixture data. See the same note in server/test/ground-truth.ts.
+    fire(`const apiKey = "${"9f2Kq7ZxVb3Lm" + "Np8RtYw1CsE4DhGj6Uk"}";`).length === 1,
   ],
   // --- must NOT fire: these matter more than the ones above ---
   [
