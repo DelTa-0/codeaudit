@@ -50,7 +50,7 @@ Stripe billing) at the user's request.
 |---|---|
 | Frontend | React 19, Vite 6, TypeScript, Tailwind v4, react-router-dom, recharts |
 | Backend | Express 4, TypeScript (`tsx`), BullMQ (Redis), `pg` (no ORM, plain SQL migrations) |
-| AI | Groq (`api.groq.com`, OpenAI-compatible), model `openai/gpt-oss-120b` — despite `XAI_*` env var naming (legacy from an original xAI-Grok assumption; same naming trap as trackMyFinance, see [[known-issues]]) |
+| AI | Groq (`api.groq.com`, OpenAI-compatible), model `llama-3.3-70b-versatile` — despite `XAI_*` env var naming (legacy from an original xAI-Grok assumption; same naming trap as trackMyFinance, see [[known-issues]]) |
 | Auth | JWT (email/password) + GitHub OAuth (account linking by email) |
 | Multi-tenancy | Organizations with owner/admin/developer roles; every query is org-scoped |
 | Infra | Docker Compose: Postgres 16 + Redis 7. API, worker, and web run natively via `npm run dev` |

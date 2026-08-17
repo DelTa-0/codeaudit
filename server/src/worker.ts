@@ -169,7 +169,7 @@ async function processScanJob(scanJobId: string) {
       await setStatus(scanJobId, "analyzing", "Looking for alternatives to non-existent packages");
       const aiSuggestions = await suggestAlternatives(
         phantomsNeedingAiSuggestion.map((d) => ({ packageName: d.packageName, ecosystem: d.ecosystem })),
-        { apiKey: config.llm.apiKey, baseUrl: config.llm.baseUrl, model: config.llm.model },
+        { apiKey: config.llm.apiKey, baseUrl: config.llm.baseUrl, model: config.llm.model, fallbackModel: config.llm.fallbackModel },
       );
       for (const d of phantomsNeedingAiSuggestion) {
         const alternatives = aiSuggestions.get(d.packageName);
@@ -198,7 +198,7 @@ async function processScanJob(scanJobId: string) {
       allCandidates,
       { fileImportExports: mergedFileImportExports },
       config.llm.apiKey
-        ? { apiKey: config.llm.apiKey, baseUrl: config.llm.baseUrl, model: config.llm.model }
+        ? { apiKey: config.llm.apiKey, baseUrl: config.llm.baseUrl, model: config.llm.model, fallbackModel: config.llm.fallbackModel }
         : undefined,
     );
     for (const z of zombies) {

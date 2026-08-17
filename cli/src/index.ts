@@ -440,7 +440,7 @@ async function main() {
     if (phantomsNeedingAiSuggestion.length) {
       const aiSuggestions = await suggestAlternatives(
         phantomsNeedingAiSuggestion.map((d) => ({ packageName: d.packageName, ecosystem: d.ecosystem })),
-        { apiKey: llm.apiKey, baseUrl: llm.baseUrl, model: llm.model },
+        { apiKey: llm.apiKey, baseUrl: llm.baseUrl, model: llm.model, fallbackModel: llm.fallbackModel },
       );
       for (const d of phantomsNeedingAiSuggestion) {
         const alternatives = aiSuggestions.get(d.packageName);
@@ -458,7 +458,7 @@ async function main() {
   const { findings: staticFindings, reviewStatus } = await reviewCandidatesWithLlm(
     candidates,
     { fileImportExports: mergedFileImportExports },
-    llm ? { apiKey: llm.apiKey, baseUrl: llm.baseUrl, model: llm.model } : undefined,
+    llm ? { apiKey: llm.apiKey, baseUrl: llm.baseUrl, model: llm.model, fallbackModel: llm.fallbackModel } : undefined,
   );
 
   // Advisory-only, matching the worker's guarding (server/src/worker.ts): an

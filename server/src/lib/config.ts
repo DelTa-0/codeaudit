@@ -30,7 +30,11 @@ export const config = {
   llm: {
     apiKey: process.env.XAI_API_KEY ?? "",
     baseUrl: process.env.XAI_BASE_URL ?? "https://api.x.ai/v1",
-    model: process.env.XAI_MODEL ?? "openai/gpt-oss-120b",
+    model: process.env.XAI_MODEL ?? "llama-3.3-70b-versatile",
+    // Tried when the primary is rate-limited or gone. Groq meters tokens per
+    // model, so this is a second independent budget, and it is also what makes
+    // the primary's decommission a non-event rather than an outage.
+    fallbackModel: process.env.XAI_FALLBACK_MODEL ?? "openai/gpt-oss-120b",
   },
   github: {
     appId: process.env.GITHUB_APP_ID ?? "",

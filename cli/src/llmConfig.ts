@@ -16,6 +16,8 @@ export interface ResolvedLlmConfig {
   apiKey: string;
   baseUrl: string;
   model: string;
+  /** Only set for Groq, whose per-model token buckets make it useful. */
+  fallbackModel?: string;
   source: "groq" | "openai" | "custom";
 }
 
@@ -24,13 +26,15 @@ export type ResolveLlmConfigResult =
   | { ok: false; error: string };
 
 const GROQ_BASE_URL = "https://api.groq.com/openai/v1";
-const GROQ_MODEL = "openai/gpt-oss-120b";
+const GROQ_MODEL = "llama-3.3-70b-versatile";
+/** Second, independently-metered Groq model — see LlmConfig.fallbackModel. */
+const GROQ_FALLBACK_MODEL = "openai/gpt-oss-120b";
 const OPENAI_BASE_URL = "https://api.openai.com/v1";
 const OPENAI_MODEL = "gpt-4o-mini";
 
 export function resolveLlmConfig(flags: LlmFlags, env: NodeJS.ProcessEnv): ResolveLlmConfigResult {
   if (env.GROQ_API_KEY) {
-    return { ok: true, config: { apiKey: env.GROQ_API_KEY, baseUrl: GROQ_BASE_URL, model: GROQ_MODEL, source: "groq" } };
+    return { ok: true, config: { apiKey: env.GROQ_API_KEY, baseUrl: GROQ_BASE_URL, model: GROQ_MODEL, fallbackModel: GROQ_FALLBACK_MODEL, source: "groq" } };
   }
   if (env.OPENAI_API_KEY) {
     return { ok: true, config: { apiKey: env.OPENAI_API_KEY, baseUrl: OPENAI_BASE_URL, model: OPENAI_MODEL, source: "openai" } };
@@ -53,7 +57,7 @@ export function resolveLlmConfig(flags: LlmFlags, env: NodeJS.ProcessEnv): Resol
   // Anything unrecognised still has to name its endpoint explicitly.
   if (!url) {
     if (key.startsWith("gsk_")) {
-      return { ok: true, config: { apiKey: key, baseUrl: GROQ_BASE_URL, model: flags.model ?? env.CODEAUDIT_LLM_MODEL ?? GROQ_MODEL, source: "groq" } };
+      return { ok: true, config: { apiKey: key, baseUrl: GROQ_BASE_URL, model: flags.model ?? env.CODEAUDIT_LLM_MODEL ?? GROQ_MODEL, fallbackModel: GROQ_FALLBACK_MODEL, source: "groq" } };
     }
     if (key.startsWith("sk-")) {
       return { ok: true, config: { apiKey: key, baseUrl: OPENAI_BASE_URL, model: flags.model ?? env.CODEAUDIT_LLM_MODEL ?? OPENAI_MODEL, source: "openai" } };

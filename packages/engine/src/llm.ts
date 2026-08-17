@@ -6,6 +6,24 @@ export interface LlmConfig {
   apiKey: string;
   baseUrl: string;
   model: string;
+  /**
+   * Tried when the primary model is rate-limited or gone.
+   *
+   * Groq meters tokens *per model*, so a second model is a second independent
+   * budget rather than a share of the same one — measured at 12,000 TPM for
+   * llama-3.3-70b-versatile against 8,000 for openai/gpt-oss-120b. It also
+   * makes a decommission a non-event: when the primary starts answering
+   * "model not found", scans keep working on the fallback instead of
+   * degrading to unreviewed static candidates.
+   */
+  fallbackModel?: string;
+}
+
+/** Errors where a different model is worth trying: the token bucket for THIS
+ *  model is empty (per-model metering), or the model is gone/unknown. */
+function shouldTryFallback(err: unknown): boolean {
+  const status = (err as { status?: number }).status;
+  return status === 429 || status === 404 || status === 400;
 }
 
 /**
@@ -19,13 +37,30 @@ export async function callChatCompletion(
   config: LlmConfig,
   messages: { role: "system" | "user"; content: string }[],
 ): Promise<string> {
+  try {
+    return await callOnce(config, messages, config.model);
+  } catch (err) {
+    if (!config.fallbackModel || config.fallbackModel === config.model) throw err;
+    if (!shouldTryFallback(err)) throw err;
+    // Deliberately not retried further here — the caller's backoff still
+    // wraps this, so a fallback that is also exhausted surfaces the same
+    // error shape and gets the same wait.
+    return await callOnce(config, messages, config.fallbackModel);
+  }
+}
+
+async function callOnce(
+  config: LlmConfig,
+  messages: { role: "system" | "user"; content: string }[],
+  model: string,
+): Promise<string> {
   const res = await fetch(`${config.baseUrl.replace(/\/$/, "")}/chat/completions`, {
     method: "POST",
     headers: {
       authorization: `Bearer ${config.apiKey}`,
       "content-type": "application/json",
     },
-    body: JSON.stringify({ model: config.model, messages, temperature: 0, max_tokens: 2000 }),
+    body: JSON.stringify({ model, messages, temperature: 0, max_tokens: 2000 }),
     signal: AbortSignal.timeout(60_000),
   });
   if (!res.ok) {
@@ -56,12 +91,34 @@ export interface ReviewedFinding {
 }
 
 const MAX_BODY_LINES = 120;
-const LLM_CONCURRENCY = 2;
-const MAX_RETRIES = 3;
+/**
+ * One in-flight review at a time.
+ *
+ * Two was fine against a 12,000 token/minute bucket. The models that replaced
+ * llama-3.3-70b-versatile all carry 8,000, and two concurrent batches race the
+ * same bucket: both drain it, both 429, and both burn their retries competing
+ * for a refill neither can win. Serial is slower per batch and finishes far
+ * more of them.
+ */
+const LLM_CONCURRENCY = 1;
+const MAX_RETRIES = 4;
 const ALTERNATIVES_BATCH_SIZE = 25;
 /** Past this Retry-After (seconds) the limit is a quota window, not a burst —
  * retrying within one scan cannot succeed, so fail the batch immediately. */
-const MAX_RETRY_AFTER_SECONDS = 30;
+const MAX_RETRY_AFTER_SECONDS = 75;
+
+/**
+ * Parses Groq's rate-limit duration strings ("43.477s", "2m59.56s", "1h2m3s").
+ * Returns 0 when absent or unparseable, so callers fall back to their backoff.
+ */
+function parseRateLimitDuration(raw: string | undefined): number {
+  if (!raw) return 0;
+  const match = raw.match(/(?:(\d+(?:\.\d+)?)h)?(?:(\d+(?:\.\d+)?)m)?(?:(\d+(?:\.\d+)?)s)?/);
+  if (!match) return 0;
+  const [, h, m, s] = match;
+  const seconds = Number(h ?? 0) * 3600 + Number(m ?? 0) * 60 + Number(s ?? 0);
+  return Number.isFinite(seconds) ? seconds : 0;
+}
 
 /**
  * How long to wait before retrying a rate-limited or 5xx call.
@@ -81,11 +138,23 @@ const MAX_RETRY_AFTER_SECONDS = 30;
  */
 function retryDelayMs(err: unknown, attempt: number): number {
   const backoffMs = 2 ** attempt * 2000;
-  const retryAfterSeconds = Number(
-    (err as { headers?: Record<string, string> }).headers?.["retry-after"] ?? 0,
+  const headers = (err as { headers?: Record<string, string> }).headers ?? {};
+  const retryAfterSeconds = Number(headers["retry-after"] ?? 0);
+  // `retry-after` is the optimistic answer: measured against Groq's 8,000 TPM
+  // bucket it says 3-8s while `x-ratelimit-reset-tokens` says ~45s. Waiting
+  // the short one means waking to a bucket that has refilled ~1,000 tokens —
+  // far less than one batch needs — so the retry fails, and after three of
+  // those the batch is abandoned. That is the whole reason dashboard scans
+  // reported "partial": not a quota, just a wait that was always too short.
+  // Only the token reset matters here; the request bucket is never the
+  // binding limit (observed at 996 of 1000 remaining while tokens starved).
+  const tokenResetSeconds = parseRateLimitDuration(headers["x-ratelimit-reset-tokens"]);
+  const providerSeconds = Math.max(
+    Number.isFinite(retryAfterSeconds) ? retryAfterSeconds : 0,
+    tokenResetSeconds,
   );
-  if (!Number.isFinite(retryAfterSeconds) || retryAfterSeconds <= 0) return backoffMs;
-  return Math.max(backoffMs, retryAfterSeconds * 1000 + 250);
+  if (providerSeconds <= 0) return backoffMs;
+  return Math.max(backoffMs, providerSeconds * 1000 + 250);
 }
 
 const SYSTEM_PROMPT = `You are a static-analysis assistant reviewing dead-code candidates found in a codebase.
@@ -222,8 +291,13 @@ ${candidateBlocks}`;
         // backoff sleeps against it just slows every remaining batch down for
         // no chance of success. Honour Retry-After and give up immediately
         // when the wait is longer than our backoff could ever cover.
-        const retryAfter = Number(
-          (err as { headers?: Record<string, string> }).headers?.["retry-after"] ?? 0,
+        // Same combined signal the delay uses, so a ~45s token-bucket refill
+        // is waited out while a per-day quota (retry-after in hours) still
+        // fails fast instead of stalling every remaining batch.
+        const headers = (err as { headers?: Record<string, string> }).headers ?? {};
+        const retryAfter = Math.max(
+          Number(headers["retry-after"] ?? 0) || 0,
+          parseRateLimitDuration(headers["x-ratelimit-reset-tokens"]),
         );
         if (retryAfter > MAX_RETRY_AFTER_SECONDS) break;
         await new Promise((r) => setTimeout(r, retryDelayMs(err, attempt)));
