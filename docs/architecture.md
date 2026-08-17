@@ -65,53 +65,91 @@ Triggered by `POST /api/repos/:id/scans` (manual) or a GitHub webhook (push/PR).
 Runs in `server/src/worker.ts`, status written to `scan_jobs.status`/`.progress`
 at each step so the frontend can poll and show a live stepper.
 
+> Detection lives in **`packages/engine/`**, not in `server/src/analysis/`.
+> The engine is shared verbatim by the hosted worker, the `codeorion` CLI and
+> the `codeorion-mcp` server, so a detector fixed once is fixed everywhere.
+> `server/src/analysis/` now holds only the things that need a *repository* and
+> a database: clone sandboxing, git-history work, and AI authorship.
+
 1. **Sandboxed clone** (`analysis/clone.ts`) — `simple-git` shallow clone
-   (`--depth 1`) into `os.tmpdir()/codeaudit-scans/{jobId}`. 60s timeout,
-   ~200MB size cap, ~20k file cap enforced by walking the tree post-clone.
-   Cleanup always runs in a `finally` block. **Never executes any code from
-   the cloned repo** — no `npm install`, no scripts, static file reads only.
-   Private repos clone via a short-lived GitHub App installation token
-   embedded in the clone URL (`x-access-token:{token}@github.com/...`).
-2. **Manifest parse** (`analysis/manifest.ts`) — reads `package.json`
-   `dependencies`/`devDependencies` as plain JSON text.
-3. **Import/symbol extraction** (`analysis/imports.ts`) — walks
-   `.js/.jsx/.ts/.tsx/.mjs/.cjs` files (skips `node_modules`, `dist`, `build`,
-   files >1MB), parses each with `@babel/parser`
-   (`typescript`+`jsx`+`decorators-legacy`+`classProperties` plugins,
-   `errorRecovery: true` so one bad file doesn't kill the scan). Collects:
-   - every imported/required npm package name (bare specifiers only)
-   - every top-level/exported function, arrow-function-const, and
-     PascalCase symbol (candidate "component"), with its line range and body text
-   - every identifier + JSX-tag reference site, mapped to the file it appears in
-4. **Dependency verdicts** (`analysis/registry.ts`) — cross-references
-   declared + imported package names against the real npm registry
-   (`registry.npmjs.org/{name}`, `api.npmjs.org/downloads/point/last-week/{name}`),
-   5-way concurrent, in-memory cached per scan. Verdicts:
-   - `phantom` — 404 on the registry (hallucinated/typosquat)
-   - `unused` — declared in package.json, never imported
-   - `suspicious` — exists but <50 weekly downloads or published <90 days ago
-   - `healthy` — everything else
-5. **Dead-code candidates** (`analysis/deadcode.ts`) — a symbol is a candidate
-   when nothing *outside its own file* references it (using the reference map
-   from step 3), it's not an ignored framework-entry name (`main`, `loader`,
-   `getServerSideProps`, etc.), and it's not in a test/mock/script path. Capped
-   at 40 candidates per scan to bound LLM cost.
-6. **LLM review** (`analysis/llm.ts`) — batches candidates per file into one
-   Groq chat completion (2-3 concurrent requests, `temperature: 0`, JSON-only
-   response schema). System prompt explicitly delimits repo content inside
-   `<code>` tags as **untrusted data, never instructions** — a prompt-injection
-   guard against adversarial comments in scanned code. Retries on 429/5xx with
-   exponential backoff; malformed/unparseable responses are dropped, never
-   crash the scan. **Without `XAI_API_KEY` configured, falls back to
-   static-only findings** at confidence 0.5.
-7. **Scoring** (`analysis/score.ts`) — weighted: phantom −15/ea, suspicious
-   −6/ea, unused −3/ea, zombies up to −20 total (confidence-weighted), clamped
-   [0,100], graded A–F. Written to `scan_jobs.summary` (JSONB) and
-   `repositories.latest_score`.
-8. If the scan was PR-triggered (`pr_number` set), a `pr-comment` BullMQ job
-   is enqueued (`queue/prComment.ts`) which posts/updates a single sticky PR
-   comment (upserted by a hidden HTML-comment marker) with the score delta
-   vs. the repo's last non-PR scan and a findings table.
+   (`--depth 100`, single-branch) into `os.tmpdir()/codeaudit-scans/{jobId}`.
+   60s timeout, ~200MB size cap, ~20k file cap enforced by walking the tree
+   post-clone. Cleanup always runs in a `finally` block. **Never executes any
+   code from the cloned repo** — no `npm install`, no scripts, static file
+   reads only. Private repos clone via a short-lived GitHub App installation
+   token embedded in the clone URL. The depth-100 window bounds every
+   history-derived answer downstream, which is why those answers report
+   truncation rather than assuming they saw everything.
+2. **Ecosystem detection + manifest parse** (`detect.ts`, `manifest.ts`,
+   `python/manifest.ts`) — JS/TS and Python are both supported, and a polyglot
+   repo is analysed on both in one pass.
+3. **Import/symbol extraction** (`imports.ts`, `python/imports.ts`) — Babel for
+   JS/TS, a line-based parser for Python. Collects imported package names,
+   top-level symbols with their bodies, and every identifier reference site
+   mapped to the file it appears in.
+4. **Dependency verdicts** (`registry.ts`, `python/registry.ts`) — declared and
+   imported names cross-referenced against the live npm/PyPI registries,
+   concurrent and per-scan cached. Verdicts: `phantom` (does not exist),
+   `unused` (declared, never imported), `suspicious` (exists but near-zero
+   downloads, very new, or a typosquat neighbour), `vulnerable`, `healthy`. A
+   name in the **known-hallucination corpus** (`data/hallucinatedNames.ts`) is
+   never left `healthy` — once such a name is registered, existence and
+   download counts are attacker-controlled and read backwards.
+5. **Lockfile resolution + vulnerabilities** (`lockfile.ts`, `vulns.ts`) —
+   exact resolved versions where a lockfile exists, then OSV lookups attaching
+   advisories and upgrading verdicts to `vulnerable`.
+6. **Dead-code candidates** (`deadcode.ts`) — a symbol is a candidate when
+   nothing outside its own file references it, it is not a framework-entry
+   name, and it is not generated or test code. Capped per scan to bound LLM
+   cost.
+7. **Secrets** (`secrets.ts`, `analysis/historySecrets.ts`) — working tree plus
+   git history, so a credential removed in a later commit is still reported.
+   Findings carry only redacted matches; the dedup fingerprint never leaves
+   the server.
+8. **Agent-config audit** (`agentConfig.ts`, `mcpDrift.ts`) — `CLAUDE.md`,
+   `AGENTS.md`, `.cursorrules`, MCP configs, Claude settings and skill files
+   are checked for prompt injection, hidden Unicode, credential exfiltration,
+   unsafe MCP/permission config and unverified packages. `mcpDrift` adds the
+   one check that no single revision can show: an MCP server whose command
+   changed after it was introduced, found by walking git history.
+9. **Dependency attribution** (`analysis/dependencyAttribution.ts`) — walks
+   each manifest's history once and diffs the dependency set between
+   revisions, giving every package its introducing commit, author,
+   commits-ago and a three-valued AI verdict. Runs *before* findings are
+   persisted, since it decorates them.
+10. **LLM review** (`llm.ts`) — batches dead-code candidates per file into one
+    chat completion, serially (one in flight) against a token-per-minute
+    budget. The system prompt delimits repo content inside `<code>` tags as
+    **untrusted data, never instructions**. Retries honour the larger of
+    `retry-after` and `x-ratelimit-reset-tokens`, and a second model
+    (`XAI_FALLBACK_MODEL`) is tried on 429/404 because providers meter tokens
+    per model. Without an API key, falls back to static-only findings at
+    confidence 0.5 and `reviewStatus: "skipped"`.
+11. **AI authorship + hotspots** (`analysis/aiAuthorship.ts`) — commits are
+    classified by Co-Authored-By trailers and bot authors. The result carries
+    an explicit **attribution coverage** block: no marker anywhere means
+    "unavailable", never "no AI", because inline completion leaves no trace.
+12. **Agent attack surface** (`agentSurface.ts`) — inventories instruction
+    files, skills, permission files and MCP servers, and rates each server
+    from what its invocation shows (shell execution, filesystem paths granted,
+    unpinned package). Capabilities that a config cannot express — network
+    access in particular — are deliberately not guessed.
+13. **Finding lifecycle** (`services/findingLifecycle.ts`) — reconciles this
+    scan's findings against the repository's known findings by stable identity
+    (`findingIdentity.ts`), producing new/resolved/reintroduced/persisting.
+    Never overwrites a human `ignored`/`acknowledged` decision.
+14. **Scoring v2** (`score.ts`) — three axes (security, supply chain,
+    maintainability) composed multiplicatively, with the headline capped by
+    the security axis so a tidy codebase cannot carry a leaking one into a
+    good grade. Hygiene is normalised by repo size; security never is. See
+    `docs/decisions.md` for why v1's single additive budget had to go.
+15. **Prioritisation** (`priority.ts`) — the ranked "fix first" list, ordered
+    by severity band, then kind, then confidence, then effort.
+16. If the scan was PR-triggered, a `pr-comment` BullMQ job posts or updates a
+    single sticky comment (upserted by a hidden marker) carrying the score
+    delta, the finding delta (new/reintroduced/resolved) and the top three
+    ranked actions. Every value that originates in the scanned repository is
+    escaped before it reaches that comment.
 
 ## GitHub App integration (`services/github.ts`)
 

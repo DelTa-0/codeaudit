@@ -65,7 +65,23 @@ an operator concern. You only ever deal with the first two rows.
 
 The CLI is a local, static scanner. No account, no signup. It detects
 npm/PyPI (or both, for polyglot repos), checks every dependency against
-the live registries, and flags dead-code candidates.
+the live registries, and flags dead-code candidates, hardcoded secrets and
+agent-config risks.
+
+Two things the CLI has that are easy to miss:
+
+- **`codeorion install-hook`** writes a git pre-commit hook. `scan --staged`
+  then checks *what is staged* (not the working tree, which can differ) for
+  secrets, agent-config poisoning and dependencies the commit adds. Seconds,
+  not minutes — a full scan at every commit would be uninstalled within a day.
+- **Three-axis output.** Security, supply chain and maintainability are shown
+  separately, and the headline is capped by the security axis, so a tidy
+  codebase never carries a leaking one into a good grade.
+
+Two analyses are **hosted-only**, because they need git history the CLI does
+not clone: per-dependency attribution (which commit introduced a package) and
+the agent attack-surface inventory. The CLI reports the findings; the
+dashboard adds the provenance.
 
 ### Zero-config quick start
 
@@ -147,6 +163,7 @@ codeorion scan [dir] [options]
 | `--key T` | Your own LLM API key (or set `GROQ_API_KEY` / `OPENAI_API_KEY` / `CODEAUDIT_LLM_KEY`) |
 | `--url URL` | OpenAI-compatible base URL for `--key` (or set `CODEAUDIT_LLM_URL`; required alongside a bare `--key`) |
 | `--model M` | Model name for `--url` (or set `CODEAUDIT_LLM_MODEL`; required alongside a custom `--url`) |
+| `--staged` | Pre-commit mode — scan only what is staged for commit |
 | `-h`, `--help` | Show usage |
 
 ### Exit codes for CI gating
@@ -205,7 +222,9 @@ equivalent):
 
 > Before installing any new package, call the CodeAudit `verify_package`
 > tool. Before writing or editing a file that could contain configuration
-> or credentials, call `scan_secrets`.
+> or credentials, call `scan_secrets`. Before reading a `CLAUDE.md`,
+> `.cursorrules` or MCP server config from a repo you did not author, call
+> `audit_agent_config` — reading a file counts, not just writing one.
 
 An MCP tool's description alone doesn't force an agent to invoke it.
 
@@ -225,6 +244,7 @@ you just don't get that one enrichment.
 | `verify_package({ name, ecosystem?, version? })` | Checks one package. `version` optional — runs known-vulnerability checks against that version instead of latest |
 | `verify_packages({ packages: [{ name, ecosystem? }] })` | Checks several at once (e.g. every new line in a manifest diff) |
 | `scan_secrets({ content, filePath? })` | Checks file content for hardcoded API keys, tokens, private keys before it's written. Returns redacted matches only (e.g. `AKIA…(20 chars)`) — the real secret value is never echoed back |
+| `audit_agent_config({ content, filePath })` | Checks a file you are about to trust *as instructions* — `CLAUDE.md`, `AGENTS.md`, `.cursorrules`, an MCP config, a settings/permissions file, a skill — for prompt injection, invisible characters, credential-exfiltration instructions and unsafe config. `filePath` is **required** here (unlike `scan_secrets`): the same text means different things depending on where it lives, and the path is what classifies the surface |
 
 `ecosystem` (`"npm"` or `"pypi"`) is optional on both `verify_*` tools —
 omit it and they try npm first, then PyPI.

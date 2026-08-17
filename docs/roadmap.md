@@ -2,7 +2,7 @@
 type: reference
 title: "Roadmap"
 created: 2026-07-17
-updated: 2026-08-04
+updated: 2026-08-17
 tags:
   - project/codeaudit
 status: developing
@@ -12,6 +12,28 @@ related:
 ---
 
 # Roadmap
+
+> [!warning] Reading order
+> This file is a reverse-chronological log: **the newest section is at the
+> top and older sections describe states that no longer hold.** Several
+> entries below have been superseded — where that is true it is marked
+> inline. For current state start at [[index]]; for why something is built
+> the way it is, [[decisions]].
+
+## AI risk & agent security (2026-08-17)
+
+Five items shipped, documented in full at [[features/m6-ai-risk]]: attribution
+coverage honesty, finding lifecycle (migration 006), debt delta, per-dependency
+attribution, and the agent attack surface. Alongside them: scoring v2 (three
+axes, headline capped by security), MCP server-redefinition detection, a
+known-hallucinated-name corpus, a `--staged` pre-commit mode, and the move to
+a primary + fallback LLM model.
+
+**Next:** the AI Risk score, deliberately left until last — restricted to the
+AI-attributed subset it means something; computed over everything it is just
+the health score renamed. It is only computable where attribution coverage is
+`usable`, which needs a product decision about what to show everywhere else.
+
 
 ## Agent config auditing shipped; `codeorion`/`codeorion-mcp` actually published (2026-08-02 – 2026-08-04)
 
@@ -29,7 +51,15 @@ config (`alwaysAllow`, raw shell commands, unpinned or phantom packages —
 the last reusing the existing `verifyPackage` guardrail, zero new detection
 logic). Wired into the worker pipeline, CLI (`Agent config` output section
 + `--json` key), a new MCP tool (`audit_agent_config`), the dashboard, PR
-comments, and exported reports. Advisory-only this release — `score -= 0`
+comments, and exported reports.
+
+> [!note] Superseded
+> Agent-config findings **are** scored now, on the security and supply-chain
+> axes. Scoring v2 removed the single additive budget that made a new penalty
+> a breaking change — see [[decisions]] and [[features/m6-ai-risk]]. The
+> original reasoning below still explains why it shipped at zero.
+
+Advisory-only this release — `score -= 0`
 — matching the precedent set for Phase 1a's advisory findings: these
 detectors have no false-positive track record yet, and CLI-computed scores
 are stored verbatim with no server recompute, so a penalty would have
@@ -455,7 +485,7 @@ and verified.
   regardless of tree-shaking behavior.
   (Historical log, left as-is — the `"./llm"` subpath described here was
   later removed once the `openai` SDK itself was replaced by a shared
-  `fetch()` wrapper; see [[docs/decisions.md]]'s "CLI BYOK: fetch() instead
+  `fetch()` wrapper; see [[decisions]]'s "CLI BYOK: fetch() instead
   of the openai SDK" entry.)
 - **Bundled the CLI with esbuild** (`cli/build.mjs`) into a single
   self-contained `dist/index.js` — no `node_modules` needed at install
@@ -682,5 +712,7 @@ one actually contains.
 - No test suite beyond the ground-truth fixture test
   (`server/test/ground-truth.ts`) — sufficient for validating the analysis
   engine's correctness, but no route-level integration tests exist yet
-- Local dev only — no deployment target chosen yet (Nitro/Cloudflare was
-  used for the *landing page* project, `ai-debt-cleaner`, not this one)
+- ~~Local dev only — no deployment target chosen yet~~ — **SUPERSEDED**: the
+  product is deployed and serving traffic at `codeaudit.madhavaryal.info.np`
+  on a single EC2 host under docker compose (see `deploy/ec2.md`), with
+  `codeorion` and `codeorion-mcp` published on npm

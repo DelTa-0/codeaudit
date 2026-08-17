@@ -5,12 +5,39 @@
 AI Technical Debt Intelligence — a SaaS that audits GitHub repositories
 (**JS/TS + Python**, polyglot repos analyze both at once) for:
 
+**Code health**
+
 1. **Phantom dependencies** — hallucinated packages that don't exist on npm or PyPI
-2. **Suspicious dependencies** — near-zero downloads or very recently published (typosquat heuristic)
-3. **Unused dependencies** — declared in `package.json` / `requirements.txt` / `pyproject.toml` but never imported
-4. **Zombie code** — exported functions/components with zero call-sites, judged by an LLM with confidence scores
+2. **Known-hallucinated names** — names LLMs are documented to invent, flagged *even when the package exists*, because registering one is the attack
+3. **Suspicious dependencies** — near-zero downloads, very recently published, or a typosquat neighbour
+4. **Unused dependencies** — declared but never imported
+5. **Known vulnerabilities** — declared and transitive versions checked against [OSV](https://osv.dev)
+6. **Zombie code** — exported symbols with zero call-sites, judged by an LLM with confidence scores
+7. **Hardcoded secrets** — working tree *and* git history, so a credential deleted in a later commit is still found
+
+**AI agent security** — the part generic debt scanners don't do
+
+8. **Agent-config auditing** — `CLAUDE.md`, `AGENTS.md`, `.cursorrules`, MCP configs, Claude settings and skill files, checked for prompt injection, hidden Unicode, credential exfiltration and unsafe permissions
+9. **MCP server redefinition** — a server whose command changed *after* it was approved. Invisible in any single revision, because approval binds to the server's name, not to what it runs
+10. **Agent attack surface** — an inventory of every instruction file, skill and MCP server, with each server rated from what its invocation actually shows
+
+**Debt over time**
+
+11. **Finding lifecycle** — findings persist across scans: first detected, fixed, reintroduced
+12. **Dependency attribution** — which commit introduced each package, by whom, and whether an assistant was involved
+13. **Three-axis scoring** — security, supply chain and maintainability scored separately, with the headline capped by security
 
 **Stack:** PostgreSQL · Express · React · Node (PERN) + Redis/BullMQ job queue + an OpenAI-compatible LLM (Groq by default).
+
+Detection lives in `packages/engine/`, shared verbatim by the hosted worker,
+the `codeorion` CLI and the `codeorion-mcp` server — a detector fixed once is
+fixed in all three.
+
+**On honesty:** several features here are built on heuristics, and the docs
+say so where it matters. AI authorship is inferred from commit trailers, so a
+repository with no markers reports "unavailable", never "no AI". MCP
+capabilities are read from a server's invocation, so network access — which a
+config cannot express — is not reported at all rather than guessed.
 
 Every automated action (auto-scan on push, merge gate, auto-fix PRs) is **opt-in per repository, off by default, and audit-logged** — nothing acts on your code without an explicit toggle and, where it matters, an explicit click.
 
@@ -366,16 +393,31 @@ disabled.
 
 ## Testing
 
+No framework — each suite is a plain script that prints `PASS`/`FAIL` lines and
+exits non-zero on failure, so they run identically in CI and in a terminal.
+
 ```bash
-npm run test:ground-truth --workspace server
+npm run test:ground-truth --workspace server            # 212 — engine against a seeded fixture
+npm run test:ground-truth-python --workspace server     # 35  — the same, for Python
+npm run test:finding-lifecycle --workspace server       # 24  — needs postgres (see below)
+npm run test:agent-surface --workspace server           # 15  — agent/MCP inventory
+npm run test:dependency-attribution --workspace server  # 12  — builds a real git repo
+npm run test:pr-comment --workspace server              # 10  — PR comment body + escaping
+npm run test:llm-protocol --workspace server            # 8   — wire format, against a mock server
+npm run test:plan-limits --workspace server             # 7   — billing tier boundaries
+npm run test:ground-truth --workspace mcp               # 17  — the MCP tools
 ```
 
-Runs the analysis engine directly against a seeded fixture
-(`server/test/fixture/`) with known-correct answers — one fake package, one
-unused real dependency, two dead exports, and two symbols that must *not* be
-flagged (a cross-file-referenced helper and an entry-point-named function).
-7 assertions, covering the core detection logic end-to-end without needing
-the database or a live clone.
+Two of these need something running:
+
+- `test:finding-lifecycle` needs Postgres (`docker compose up -d postgres`)
+  because the behaviour under test *is* the SQL — which rows a scan is allowed
+  to change, and which it must leave alone.
+- `test:dependency-attribution` builds a throwaway git repository in a temp
+  dir; it needs `git` on PATH but nothing else.
+
+Everything else is offline except the registry-backed checks in
+`test:ground-truth`, which hit npm/PyPI.
 
 ---
 
