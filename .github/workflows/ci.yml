@@ -23,6 +23,19 @@ jobs:
     env:
       DATABASE_URL: postgres://ci:ci@localhost:5432/ci
       JWT_SECRET: ci-not-a-real-secret
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
 
@@ -45,6 +58,41 @@ jobs:
 
       - name: Test — LLM protocol
         run: npm run test:llm-protocol --workspace server
+
+      # Blocking, and the most important guard here: runs our own detectors
+      # against this repository. A scan once reported five hardcoded secrets in
+      # this repo and every one was a false positive — including the detector's
+      # own source, where a comment quoting a PEM header was read as a leaked
+      # key. Fixtures cannot catch that class: they hold realistic secrets, not
+      # prose *about* secrets. Offline, ~2s.
+      - name: Test — self scan (detector precision against this repo)
+        run: npm run test:self-scan --workspace server
+
+      # Blocking: offline. Agent/MCP inventory, PR comment rendering and its
+      # markdown-forgery escaping, and dependency attribution (builds a throwaway
+      # git repo — needs only git, which the runner has).
+      - name: Test — agent surface
+        run: npm run test:agent-surface --workspace server
+
+      - name: Test — PR comment body
+        run: npm run test:pr-comment --workspace server
+
+      - name: Test — dependency attribution
+        run: npm run test:dependency-attribution --workspace server
+
+      # Schema first — the lifecycle suite exercises real tables.
+      - name: Migrate the CI database
+        run: npm run migrate
+        env:
+          DATABASE_URL: postgres://ci:ci@localhost:5432/ci
+
+      # Blocking: needs the postgres service. The behaviour under test is the
+      # SQL itself — which rows a scan may change, and which it must leave
+      # alone — so a mock would test nothing.
+      - name: Test — finding lifecycle
+        run: npm run test:finding-lifecycle --workspace server
+        env:
+          DATABASE_URL: postgres://ci:ci@localhost:5432/ci
 
       # Non-blocking: these hit the live npm / PyPI registries, so registry
       # rate-limits or outages must not fail the build. They still surface

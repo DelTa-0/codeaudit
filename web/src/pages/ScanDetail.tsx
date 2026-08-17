@@ -396,9 +396,7 @@ export function ScanDetail() {
         )}
       </Card>
 
-      {scan.summary?.findingDelta && <FindingDeltaCard delta={scan.summary.findingDelta} />}
 
-      {scan.summary?.agentSurface && <AgentSurfaceCard surface={scan.summary.agentSurface} />}
 
       {scan.summary && (
         <Card className="flex items-center gap-6">
@@ -554,28 +552,49 @@ export function ScanDetail() {
         );
       })()}
 
+      {/* The most useful thing on the page, so it is styled to look like it.
+          A ranked list rendered identically to every other card asks the
+          reader to work out that it matters; the accent border and numbered
+          rows say it outright. */}
       {scan.summary?.priorities && scan.summary.priorities.length > 0 && (
-        <Card>
-          <p className="mb-1 text-sm font-medium text-muted">Fix first</p>
-          <p className="mb-3 text-xs text-muted">
-            Ranked by severity, then kind, then confidence, then effort.
-          </p>
-          <ol className="space-y-3">
+        <Card className="border-primary/30">
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+            <p className="text-base font-semibold">Fix first</p>
+            <p className="text-xs text-muted">
+              Ranked by severity, then kind, then confidence, then effort
+            </p>
+          </div>
+          <ol className="space-y-2.5">
             {scan.summary.priorities.map((p) => (
-              <li key={p.rank} className="flex gap-3">
-                <Badge label={p.band} />
-                <div className="min-w-0">
-                  <div className="text-sm font-medium">{p.title}</div>
-                  <div className="text-sm text-muted">{p.why}</div>
-                  <div className="mt-1 text-xs text-muted">
-                    {p.location ? `${p.location} · ` : ""}effort {p.effort}
+              <li
+                key={p.rank}
+                className="flex gap-3 rounded-xl border border-border bg-surface-2 p-3"
+              >
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/15 font-mono text-sm font-bold text-primary">
+                  {p.rank}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-medium">{p.title}</span>
+                    <Badge label={p.band} />
+                    <span className="text-xs text-muted">effort {p.effort}</span>
                   </div>
+                  <div className="mt-1 text-sm text-muted">{p.why}</div>
+                  {p.location && (
+                    <div className="mt-1 truncate font-mono text-xs text-muted" title={p.location}>
+                      {p.location}
+                    </div>
+                  )}
                 </div>
               </li>
             ))}
           </ol>
         </Card>
       )}
+
+      {scan.summary?.findingDelta && <FindingDeltaCard delta={scan.summary.findingDelta} />}
+
+      {scan.summary?.agentSurface && <AgentSurfaceCard surface={scan.summary.agentSurface} />}
 
       {scan.summary?.ai && scan.summary.ai.totalCommits > 0 && (
         <AiAuthorshipCard ai={scan.summary.ai} />
