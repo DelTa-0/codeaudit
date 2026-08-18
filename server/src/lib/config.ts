@@ -27,6 +27,12 @@ export const config = {
   // Empty disables static serving (API-only, e.g. local dev with Vite).
   webDistDir: process.env.WEB_DIST_DIR ?? "",
   jwtSecret: required("JWT_SECRET"),
+  // Beta mode: lift the paid-plan caps for every org so developers can
+  // actually exercise the product during the free public beta, while the
+  // real free/pro/team tiers (services/plans.ts) stay defined and tested for
+  // when billing turns on. A single env flag, so it flips off with a restart
+  // and no code change.
+  betaUnlimited: bool("BETA_UNLIMITED_PLANS"),
   llm: {
     apiKey: process.env.XAI_API_KEY ?? "",
     baseUrl: process.env.XAI_BASE_URL ?? "https://api.x.ai/v1",
