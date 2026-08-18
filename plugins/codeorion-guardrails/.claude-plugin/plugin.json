@@ -1,7 +1,7 @@
 {
   "name": "codeorion-guardrails",
   "description": "Reminds an AI coding agent to call codeorion-mcp's guardrail tools at every trust decision \u2014 verifying packages, assessing MCP servers before adding them, scanning secrets, auditing agent configs, and self-reviewing staged changes \u2014 including passive encounters, not just installs/writes.",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "author": {
     "name": "CodeAudit"
   },

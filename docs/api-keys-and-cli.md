@@ -248,6 +248,7 @@ you just don't get that one enrichment.
 | `assess_mcp_server({ name, command, args?, existingConfigText? })` | Pre-install check for MCP servers: shell execution, filesystem grants, unpinned packages, backing-package verification, and — with the existing config passed — detection of a silent redefinition of an already-approved server name |
 | `check_redundancy({ name, ... })` | Pre-add check for dependencies: already declared? an equivalent library already in use? licence conflict with the project? Corpus-based, never guessed |
 | `audit_staged({ projectDir? })` | Agent self-review before committing — the same secrets/agent-config/new-dependency checks as `codeorion scan --staged`, no git hook required |
+| `audit_tool_descriptions({ toolsJson })` | Audits the tool descriptions an MCP server exposes (tools/list output) for poisoning — hidden Unicode, injection phrasing — and returns a `toolsHash` for `codeorion-mcp.lock` rug-pull pinning |
 
 `ecosystem` (`"npm"` or `"pypi"`) is optional on both `verify_*` tools —
 omit it and they try npm first, then PyPI.

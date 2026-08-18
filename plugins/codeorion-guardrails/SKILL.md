@@ -32,6 +32,7 @@ package — no install, no pressure, just an unexamined encounter.)
 | **Add an MCP server** to any config — even one the user asked for by name | `assess_mcp_server` (pass the existing config file's content so a silent redefinition of an approved name is caught) |
 | Add a dependency the user did not explicitly name | `check_redundancy` — the project may already use an equivalent library, and the licence may conflict |
 | **Commit staged changes** | `audit_staged` — the same pre-commit checks as the git hook, no hook required |
+| Connect to a NEW MCP server, or one whose tools changed | `audit_tool_descriptions` with its tools/list result — descriptions enter the context as trusted text, and no repo scan sees them |
 
 The middle two rows are what tool descriptions alone miss: nothing about
 "open this file to add one field" implies "verify the neighboring

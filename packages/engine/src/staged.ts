@@ -37,7 +37,10 @@ import {
 import { parseManifest } from "./manifest.js";
 import { parsePythonManifest } from "./python/manifest.js";
 import { verifyPackage, type PackageVerifyResult } from "./verify.js";
-import { diffMcpServers } from "./mcpDrift.js";
+import { diffMcpServers, extractMcpServers } from "./mcpDrift.js";
+import { verifyMcpLock } from "./mcpLock.js";
+import { loadPolicy, evaluatePackagePolicy, evaluateMcpPolicy, type PolicyViolation } from "./policy.js";
+import { assessMcpServerProposal } from "./agentSurface.js";
 import type { Ecosystem } from "./registry.js";
 
 /** Manifests whose *added* dependency entries are worth a registry check. */
@@ -137,6 +140,12 @@ export interface StagedReport {
   newDependencies: PackageVerifyResult[];
   /** Additions beyond MAX_NEW_DEPS_CHECKED, reported rather than hidden. */
   dependenciesNotChecked: number;
+  /** Violations of the repo's .codeorion-policy.json. Blocking — a policy the
+   *  scan merely mentions is advice wearing a policy's name. Empty when the
+   *  repo has no policy file. */
+  policyViolations: PolicyViolation[];
+  /** True when codeorion-mcp.lock exists and was checked. */
+  lockChecked: boolean;
 }
 
 export async function scanStaged(repoDir: string = process.cwd()): Promise<StagedReport> {
@@ -184,6 +193,32 @@ export async function scanStaged(repoDir: string = process.cwd()): Promise<Stage
     ),
   );
 
+  // The lockfile check runs against the working tree's configs — the staged
+  // blob comparison above already covers redefinition-vs-HEAD; the lock adds
+  // redefinition-vs-what-the-team-approved, which survives history rewrites.
+  const lock = verifyMcpLock(repoDir);
+  agentConfig.push(...lock.findings);
+
+  // Policy: evaluated over EVERY verified addition, healthy ones included — a
+  // deny-listed or licence-forbidden package is usually perfectly healthy on
+  // the registry, which is precisely why it needs a policy to catch it.
+  const policyViolations: PolicyViolation[] = [];
+  const policy = loadPolicy(repoDir);
+  if (policy) {
+    for (const v of verdicts) {
+      if (v) policyViolations.push(...evaluatePackagePolicy(v, policy));
+    }
+    for (const file of files) {
+      if (classifyAgentSurface(file) !== "mcp_config") continue;
+      const content = stagedBlob(file, repoDir);
+      if (!content) continue;
+      for (const [name, spec] of extractMcpServers(content)) {
+        const { server } = assessMcpServerProposal({ name, command: spec.command, args: spec.args });
+        policyViolations.push(...evaluateMcpPolicy(server, policy));
+      }
+    }
+  }
+
   return {
     fileCount: files.length,
     secrets,
@@ -192,5 +227,7 @@ export async function scanStaged(repoDir: string = process.cwd()): Promise<Stage
       (v): v is PackageVerifyResult => v !== null && v.status !== "healthy",
     ),
     dependenciesNotChecked: added.length - toCheck.length,
+    policyViolations,
+    lockChecked: lock.hasLock,
   };
 }

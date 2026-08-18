@@ -14,6 +14,7 @@ import { billingRouter, stripeWebhookRouter } from "./routes/billing.js";
 import { badgeRouter, publicBadgeRouter } from "./routes/badge.js";
 import { cliTokenRouter, cliUploadRouter } from "./routes/cliScans.js";
 import { mcpAlternativesRouter } from "./routes/mcpAlternatives.js";
+import { phantomReportsRouter } from "./routes/phantomReports.js";
 import { warnIfGithubAppMisconfigured } from "./services/github.js";
 
 const app = express();
@@ -39,6 +40,7 @@ app.get("/api/health", (_req, res) => res.json({ ok: true }));
 app.use("/api", publicBadgeRouter); // no auth — README-embeddable SVG
 app.use("/api", cliUploadRouter); // no JWT — authed by per-repo CLI token
 app.use("/api", mcpAlternativesRouter); // no JWT — authed by per-repo CLI token
+app.use("/api", phantomReportsRouter); // no auth — opt-in telemetry, name+ecosystem only
 app.use("/api/auth", authRouter);
 app.use("/api/auth", githubAuthRouter);
 app.use("/api/orgs", orgsRouter);

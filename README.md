@@ -340,7 +340,14 @@ commit boundary, and a hook that takes half a minute to block a commit on a
 dead-code candidate is a hook that gets a permanent `--no-verify`.
 
 `install-hook` refuses to overwrite a pre-commit hook it didn't write, and
-prints the one line to add instead. Users of the
+prints the one line to add instead.
+
+Two repo-level governance files extend the hook: `codeorion-mcp.lock`
+(created by `npx codeorion mcp-lock`) commits MCP approval as a team
+artifact — a server that changes what it runs fails the staged scan as a
+critical mismatch until re-locked — and `.codeorion-policy.json` turns
+verdicts into blocking policy (package age/download floors, deny lists,
+licence rules, no shell or unpinned MCP servers). Users of the
 [pre-commit framework](https://pre-commit.com) can reference this repo
 directly — see [`.pre-commit-hooks.yaml`](.pre-commit-hooks.yaml).
 

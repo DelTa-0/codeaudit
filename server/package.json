@@ -16,7 +16,8 @@
     "test:pr-comment": "tsx test/pr-comment.ts",
     "test:dependency-attribution": "tsx test/dependency-attribution.ts",
     "test:agent-surface": "tsx test/agent-surface.ts",
-    "test:self-scan": "tsx test/self-scan.ts"
+    "test:self-scan": "tsx test/self-scan.ts",
+    "test:phantom-reports": "tsx test/phantom-reports.ts"
   },
   "dependencies": {
     "@codeaudit/engine": "*",

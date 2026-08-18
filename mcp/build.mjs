@@ -48,6 +48,8 @@ await build({
     "@codeaudit/engine/duplicates": path.resolve(here, "../packages/engine/dist/duplicates.js"),
     "@codeaudit/engine/license": path.resolve(here, "../packages/engine/dist/license.js"),
     "@codeaudit/engine/staged": path.resolve(here, "../packages/engine/dist/staged.js"),
+    "@codeaudit/engine/mcpDrift": path.resolve(here, "../packages/engine/dist/mcpDrift.js"),
+    "@codeaudit/engine/mcpLock": path.resolve(here, "../packages/engine/dist/mcpLock.js"),
   },
 });
 

@@ -34,6 +34,23 @@ export {
   type ProposedDependencyCheck,
 } from "./duplicates.js";
 export { scanStaged, isGitRepo, stagedFiles, type StagedReport } from "./staged.js";
+export {
+  readMcpLock,
+  buildMcpLock,
+  writeMcpLock,
+  verifyMcpLock,
+  MCP_LOCK_FILENAME,
+  type McpLock,
+  type McpLockEntry,
+} from "./mcpLock.js";
+export {
+  loadPolicy,
+  evaluatePackagePolicy,
+  evaluateMcpPolicy,
+  POLICY_FILENAME,
+  type CodeorionPolicy,
+  type PolicyViolation,
+} from "./policy.js";
 export { EQUIVALENT_GROUPS, type EquivalentGroup } from "./data/equivalents.js";
 export { verifyPackage, type PackageVerifyResult } from "./verify.js";
 export { findDeadCodeCandidates, type DeadCodeCandidate } from "./deadcode.js";
@@ -87,6 +104,8 @@ export {
   redactSnippet,
   findAgentConfigIssues,
   findMcpPackageRefs,
+  auditToolDescriptions,
+  type ToolDescriptionAudit,
   type AgentSurface,
   type AgentConfigCategory,
   type AgentConfigFinding,

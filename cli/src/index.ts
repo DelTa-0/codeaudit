@@ -44,7 +44,14 @@ import {
   type AgentConfigFinding,
 } from "@codeaudit/engine";
 import { resolveLlmConfig, type LlmFlags } from "./llmConfig.js";
-import { scanStaged, isGitRepo } from "@codeaudit/engine";
+import {
+  scanStaged,
+  isGitRepo,
+  readMcpLock,
+  buildMcpLock,
+  writeMcpLock,
+  MCP_LOCK_FILENAME,
+} from "@codeaudit/engine";
 
 const RESET = "\x1b[0m";
 const BOLD = "\x1b[1m";
@@ -114,6 +121,18 @@ as a hook with:
 
 "git commit --no-verify" bypasses it, as with any hook.
 
+Two more commands:
+
+  npx codeorion mcp-lock
+      Approve the repo's MCP servers as they stand into codeorion-mcp.lock.
+      Once committed, a server that changes what it runs fails scan --staged
+      as a critical lock mismatch until a human re-locks. Team-wide: the
+      approval travels with every clone.
+
+A .codeorion-policy.json at the repo root turns verdicts into enforcement in
+scan --staged: minAgeDays, minDownloads, denyPackages, allowLicenses /
+denyLicenses, forbidUnpinnedMcp, forbidShellMcp. Violations block the commit.
+
 Note: flags work in every shell. The VAR=value prefix used in many examples is
 bash/zsh only; in PowerShell set it first, e.g. $env:GROQ_API_KEY="gsk_…".
 
@@ -136,6 +155,7 @@ function parseArgs(argv: string[]): CliArgs {
   const args = [...argv];
   const command = args.shift();
   if (command === "install-hook") installHook(); // never returns
+  if (command === "mcp-lock") mcpLockCommand(); // never returns
   if (command !== "scan" || args.includes("-h") || args.includes("--help")) usage();
 
   let dir = ".";
@@ -169,6 +189,33 @@ function parseArgs(argv: string[]): CliArgs {
     else usage();
   }
   return { dir: path.resolve(dir), json, staged, minScore, upload, token, apiUrl, llmFlags: { key, url, model } };
+}
+
+/**
+ * Creates or updates codeorion-mcp.lock: "I approve the MCP servers as they
+ * stand." Approval becomes a committed artifact that travels with every
+ * clone, instead of living in one machine's client state — after this, a
+ * server that changes what it runs fails `scan --staged` and CI as a
+ * critical lock mismatch until a human re-runs this command and commits the
+ * diff. Deliberately explicit and manual: an auto-updating approval file
+ * would approve everything and record nothing.
+ */
+function mcpLockCommand(): never {
+  const dir = process.cwd();
+  const previous = readMcpLock(dir);
+  const lock = buildMcpLock(dir, previous);
+  const names = Object.keys(lock.servers);
+  if (!names.length && !previous) {
+    console.log("codeorion: no MCP servers found in this repository — nothing to lock.");
+    process.exit(0);
+  }
+  writeMcpLock(dir, lock);
+  console.log(`codeorion: ${previous ? "updated" : "created"} ${MCP_LOCK_FILENAME} with ${names.length} server(s):`);
+  for (const name of names) {
+    console.log(`  ${name.padEnd(24)} ${lock.servers[name].identity}`);
+  }
+  console.log("Commit this file. Any later change to what these servers run fails scan --staged until re-locked.");
+  process.exit(0);
 }
 
 /**
@@ -301,7 +348,10 @@ async function runStaged(json: boolean): Promise<never> {
   const blocking =
     report.secrets.length +
     report.agentConfig.filter((f) => f.severity === "critical" || f.severity === "high").length +
-    report.newDependencies.filter((d) => d.status === "phantom" || d.status === "vulnerable").length;
+    report.newDependencies.filter((d) => d.status === "phantom" || d.status === "vulnerable").length +
+    // Policy violations block by definition — a policy the hook merely
+    // mentions is advice wearing a policy's name.
+    report.policyViolations.length;
   const exitCode = blocking > 0 ? 1 : 0;
 
   if (json) {
@@ -316,6 +366,8 @@ async function runStaged(json: boolean): Promise<never> {
           agentConfig: report.agentConfig,
           newDependencies: report.newDependencies,
           dependenciesNotChecked: report.dependenciesNotChecked,
+          policyViolations: report.policyViolations,
+          lockChecked: report.lockChecked,
           blocking,
           exitCode,
         },
@@ -349,9 +401,17 @@ async function runStaged(json: boolean): Promise<never> {
       `${DIM}         ${report.dependenciesNotChecked} further added dependencies not checked (cap reached) — run a full scan.${RESET}`,
     );
   }
+  for (const v of report.policyViolations) {
+    console.log(`${RED}policy${RESET}   ${v.rule}`);
+    console.log(`         ${DIM}${v.message}${RESET}`);
+  }
 
   if (exitCode === 0) {
-    const warned = report.agentConfig.length + report.newDependencies.length + report.secrets.length;
+    const warned =
+      report.agentConfig.length +
+      report.newDependencies.length +
+      report.secrets.length +
+      report.policyViolations.length;
     console.log(
       warned > 0
         ? `${DIM}codeorion: ${report.fileCount} staged file(s), nothing blocking.${RESET}`

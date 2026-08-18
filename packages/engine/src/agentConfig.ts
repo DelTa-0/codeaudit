@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { createHash } from "node:crypto";
 import path from "node:path";
 
 /**
@@ -524,4 +525,68 @@ export function findAgentConfigIssues(repoDir: string): AgentConfigFinding[] {
   }
 
   return findings.slice(0, MAX_FINDINGS);
+}
+
+// ---------------------------------------------------------------------------
+// Tool-description auditing — the poisoning surface a repo scan cannot see.
+// ---------------------------------------------------------------------------
+
+export interface ToolDescriptionAudit {
+  toolCount: number;
+  findings: AgentConfigFinding[];
+  /** sha256 over the sorted (name, description) pairs. Store it in
+   *  codeorion-mcp.lock and a later description change — a rug pull —
+   *  surfaces as a lock mismatch instead of silently entering the context. */
+  toolsHash: string;
+}
+
+/**
+ * Audits the tool descriptions an MCP server EXPOSES, from a tools/list
+ * result the caller obtained. Descriptions enter the agent's context as
+ * trusted text, which makes them the premier injection carrier (the
+ * "tool poisoning" class) — and none of the repo-file scanning here ever
+ * sees them, because they live in the server, not the repo.
+ *
+ * Deliberately takes JSON, never a server to launch: assessing a server must
+ * not require executing it. The caller that already ran the server passes
+ * what it saw.
+ *
+ * Accepts either a bare array of {name, description} or the standard MCP
+ * tools/list result shape ({ tools: [...] }).
+ */
+export function auditToolDescriptions(toolsJson: string): ToolDescriptionAudit | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(toolsJson);
+  } catch {
+    return null;
+  }
+  const list = Array.isArray(parsed)
+    ? parsed
+    : Array.isArray((parsed as { tools?: unknown[] })?.tools)
+      ? (parsed as { tools: unknown[] }).tools
+      : null;
+  if (!list) return null;
+
+  const tools = list
+    .filter((t): t is { name?: unknown; description?: unknown } => !!t && typeof t === "object")
+    .map((t) => ({
+      name: typeof t.name === "string" ? t.name : "(unnamed)",
+      description: typeof t.description === "string" ? t.description : "",
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const findings: AgentConfigFinding[] = [];
+  for (const tool of tools) {
+    if (!tool.description) continue;
+    // The existing instruction-surface rules apply unchanged: a hidden
+    // Unicode payload or exfiltration instruction is the same attack whether
+    // it lives in a CLAUDE.md or a tool description. The synthetic path keeps
+    // findings attributable per tool without pretending a file exists.
+    findings.push(...scanAgentText(tool.description, `mcp-tool:${tool.name}`, "instructions"));
+  }
+
+  const hash = createHash("sha256");
+  for (const tool of tools) hash.update(`${tool.name}\u0000${tool.description}\u0000`);
+  return { toolCount: tools.length, findings, toolsHash: hash.digest("hex") };
 }

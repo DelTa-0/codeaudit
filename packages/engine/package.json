@@ -33,6 +33,14 @@
     "./staged": {
       "types": "./dist/staged.d.ts",
       "default": "./dist/staged.js"
+    },
+    "./mcpDrift": {
+      "types": "./dist/mcpDrift.d.ts",
+      "default": "./dist/mcpDrift.js"
+    },
+    "./mcpLock": {
+      "types": "./dist/mcpLock.d.ts",
+      "default": "./dist/mcpLock.js"
     }
   },
   "scripts": {

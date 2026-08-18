@@ -94,6 +94,20 @@ jobs:
         env:
           DATABASE_URL: postgres://ci:ci@localhost:5432/ci
 
+      - name: Test — phantom report intake
+        run: npm run test:phantom-reports --workspace server
+        env:
+          DATABASE_URL: postgres://ci:ci@localhost:5432/ci
+
+      # Non-blocking like the other registry-backed suites: spawns the real
+      # MCP server over stdio and several checks hit live npm/PyPI.
+      - name: Build MCP server
+        run: npm run build:mcp
+
+      - name: Test — MCP ground truth (live registries)
+        continue-on-error: true
+        run: npm run test:ground-truth --workspace mcp
+
       # Non-blocking: these hit the live npm / PyPI registries, so registry
       # rate-limits or outages must not fail the build. They still surface
       # results in the log for signal.

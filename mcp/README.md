@@ -9,10 +9,26 @@ secrets before it's written to a file, and audits files an agent is about to
 trust *as instructions* (`CLAUDE.md`, MCP configs, permission settings) for
 prompt injection and unsafe configuration.
 
-Seven tools covering the trust decisions an agent actually makes: installing
-a package, **adding an MCP server**, adding a dependency the project may
-already have an equivalent for, writing something that could be a credential,
-treating a file as instructions, and **committing staged changes**.
+Eight tools covering the trust decisions an agent actually makes: installing
+a package, **adding an MCP server**, **trusting the tool descriptions a
+server exposes**, adding a dependency the project may already have an
+equivalent for, writing something that could be a credential, treating a file
+as instructions, and **committing staged changes**.
+
+Three repo-level mechanisms turn the verdicts into enforcement:
+
+- **`codeorion-mcp.lock`** (`npx codeorion mcp-lock`) — MCP approval as a
+  *committed team artifact*, not one machine's client state. A server that
+  changes what it runs fails `audit_staged`, the git hook and CI as a
+  critical lock mismatch until a human re-locks and commits the diff.
+- **`.codeorion-policy.json`** — repo-scoped guardrails (minimum package age
+  and downloads, deny lists, licence rules, no shell/unpinned MCP servers)
+  enforced by `audit_staged` and the pre-commit hook. Violations block.
+- **Opt-in phantom telemetry** — set `CODEAUDIT_REPORT_PHANTOMS=1` and a
+  verify that returns "phantom" reports the package **name and ecosystem
+  only** — no code, no paths, no identity — into a human-reviewed candidate
+  queue for the hallucinated-names corpus. Off by default; nothing is ever
+  promoted to the shipped corpus automatically.
 
 Runs fully offline by default (no account needed) — same registry/CVE
 checks as `npx codeorion`. Set `CODEAUDIT_TOKEN` to additionally get
@@ -39,7 +55,7 @@ Restart your session, then:
 /plugin install codeorion-guardrails@codeaudit
 ```
 
-That's it. `/mcp` should now list seven tools under `codeaudit`. The rest of
+That's it. `/mcp` should now list eight tools under `codeaudit`. The rest of
 this section covers the variations: `npx` instead of a global install, other
 clients, and putting the skill in a repo instead of on one machine.
 
@@ -88,10 +104,10 @@ claude mcp list
 ```
 
 `/mcp` inside a session lists each server's tools. As of 1.3.0 you want
-**seven**: `verify_package`, `verify_packages`, `scan_secrets`,
-`audit_agent_config`, `assess_mcp_server`, `check_redundancy` and
-`audit_staged`. Only two means the pre-rename package is connected — see
-"Upgrading from `codeaudit-mcp`" below.
+**eight**: `verify_package`, `verify_packages`, `scan_secrets`,
+`audit_agent_config`, `assess_mcp_server`, `check_redundancy`,
+`audit_staged` and `audit_tool_descriptions`. Only two means the pre-rename
+package is connected — see "Upgrading from `codeaudit-mcp`" below.
 
 **Cursor** — click to install:
 
@@ -250,9 +266,19 @@ globally, or `"command": "npx", "args": ["-y", "codeorion-mcp"]` otherwise.
   candidate's licence conflicts with the project's.
 - `audit_staged({ projectDir? })` — an agent's self-review after staging and
   before committing: secrets, agent-config poisoning (including MCP servers
-  redefined relative to HEAD), and dependencies the commit adds that don't
-  exist or carry CVEs. The same checks `codeorion scan --staged` runs from a
-  git hook — with no hook required.
+  redefined relative to HEAD **and relative to `codeorion-mcp.lock`**), new
+  dependencies that don't exist or carry CVEs, and violations of the repo's
+  `.codeorion-policy.json`. The same checks `codeorion scan --staged` runs
+  from a git hook — with no hook required.
+- `audit_tool_descriptions({ toolsJson })` — pass a server's tools/list
+  result. Tool descriptions enter the model's context as trusted text, which
+  makes them the premier injection carrier (tool poisoning) — and no repo
+  scan ever sees them, because they live in the server. Applies the same
+  instruction-surface rules as `audit_agent_config`, and returns a
+  `toolsHash` to record in the lockfile so a later description change — a
+  rug pull — surfaces as a mismatch instead of silently entering the
+  context. Takes JSON, never launches anything: assessing a server must not
+  require executing it.
 
 `ecosystem` (`"npm"` or `"pypi"`) is optional — omit it and `verify_package`/
 `verify_packages` try npm first, then PyPI.
