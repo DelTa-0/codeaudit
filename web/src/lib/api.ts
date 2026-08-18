@@ -315,6 +315,23 @@ export interface CodeFinding {
     | null;
 }
 
+/** A finding that outlives scans, with its history and human state. */
+export interface LifecycleFinding {
+  id: string;
+  finding_key: string;
+  kind: string;
+  title: string;
+  location: string | null;
+  state: "open" | "fixed" | "ignored" | "acknowledged";
+  first_detected_at: string;
+  last_seen_at: string;
+  fixed_at: string | null;
+  reintroduced_at: string | null;
+  times_seen: number;
+  times_reintroduced: number;
+  note: string | null;
+}
+
 export interface Member {
   id: string;
   role: string;

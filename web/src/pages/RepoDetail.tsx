@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { api, type Repo, type Scan } from "../lib/api";
+import { api, type Repo, type Scan, type LifecycleFinding } from "../lib/api";
 import { Button, Card, Badge, EmptyState, Spinner, ScoreRing } from "../components/ui";
 
 export function RepoDetail() {
@@ -9,15 +9,37 @@ export function RepoDetail() {
   const navigate = useNavigate();
   const [repo, setRepo] = useState<Repo | null>(null);
   const [scans, setScans] = useState<Scan[] | null>(null);
+  const [findings, setFindings] = useState<LifecycleFinding[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [busyFinding, setBusyFinding] = useState<string | null>(null);
+  const [showResolved, setShowResolved] = useState(false);
 
   const load = async () => {
-    const [r, s] = await Promise.all([
+    const [r, s, f] = await Promise.all([
       api<Repo>(`/api/repos/${repoId}`),
       api<Scan[]>(`/api/repos/${repoId}/scans`),
+      // Older accounts may hit a server predating this endpoint — the card
+      // simply stays empty rather than failing the whole page.
+      api<LifecycleFinding[]>(`/api/repos/${repoId}/findings`).catch(() => []),
     ]);
     setRepo(r);
     setScans(s);
+    setFindings(f);
+  };
+
+  const setFindingState = async (id: string, state: "open" | "ignored") => {
+    setBusyFinding(id);
+    try {
+      const updated = await api<LifecycleFinding>(`/api/repos/${repoId}/findings/${id}`, {
+        method: "PATCH",
+        body: { state },
+      });
+      setFindings((prev) => prev.map((f) => (f.id === id ? updated : f)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update the finding");
+    } finally {
+      setBusyFinding(null);
+    }
   };
 
   useEffect(() => {
@@ -61,6 +83,68 @@ export function RepoDetail() {
       {error && <p className="text-sm text-danger">{error}</p>}
 
       <RepoSettings repo={repo} onChanged={load} onError={setError} />
+
+      {findings.length > 0 && (
+        <Card>
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <p className="text-sm font-medium text-muted">Findings across scans</p>
+            <button
+              type="button"
+              onClick={() => setShowResolved((v) => !v)}
+              className="cursor-pointer text-xs text-muted underline underline-offset-2 hover:text-foreground"
+            >
+              {showResolved ? "Hide" : "Show"} fixed & ignored
+            </button>
+          </div>
+          {/* Ignore exists because a false positive with no dismiss button
+              costs the product its credibility on the second scan. An ignored
+              finding never reopens by itself — scans record sightings but
+              leave the state alone. */}
+          <ul className="mt-3 divide-y divide-border">
+            {findings
+              .filter((f) => (showResolved ? true : f.state === "open"))
+              .slice(0, 30)
+              .map((f) => (
+                <li key={f.id} className="flex items-center gap-3 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="truncate text-sm font-medium">{f.title}</span>
+                      <Badge label={f.state === "open" ? f.kind.replace("_", " ") : f.state} />
+                      {f.times_reintroduced > 0 && (
+                        <span className="text-xs text-warning">
+                          came back ×{f.times_reintroduced}
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-0.5 text-xs text-muted">
+                      First seen {new Date(f.first_detected_at).toLocaleDateString()} · last seen{" "}
+                      {new Date(f.last_seen_at).toLocaleDateString()}
+                      {f.note ? ` · ${f.note}` : ""}
+                    </p>
+                  </div>
+                  {f.state === "open" && (
+                    <Button
+                      variant="ghost"
+                      onClick={() => void setFindingState(f.id, "ignored")}
+                      disabled={busyFinding !== null}
+                    >
+                      {busyFinding === f.id ? "…" : "Ignore"}
+                    </Button>
+                  )}
+                  {f.state === "ignored" && (
+                    <Button
+                      variant="ghost"
+                      onClick={() => void setFindingState(f.id, "open")}
+                      disabled={busyFinding !== null}
+                    >
+                      {busyFinding === f.id ? "…" : "Restore"}
+                    </Button>
+                  )}
+                </li>
+              ))}
+          </ul>
+        </Card>
+      )}
 
       {trendData.length >= 2 && (
         <Card>

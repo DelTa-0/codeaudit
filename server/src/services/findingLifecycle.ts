@@ -1,5 +1,63 @@
-import { query } from "../db/pool.js";
+import { query, queryOne } from "../db/pool.js";
 import type { FindingIdentity } from "@codeaudit/engine";
+
+export interface LifecycleRow {
+  id: string;
+  finding_key: string;
+  kind: string;
+  title: string;
+  location: string | null;
+  state: string;
+  first_detected_at: string;
+  last_seen_at: string;
+  fixed_at: string | null;
+  reintroduced_at: string | null;
+  times_seen: number;
+  times_reintroduced: number;
+  note: string | null;
+}
+
+/** Open first (they need action), then ignored, then fixed; newest first
+ *  within each group so what just happened is on top. */
+export async function listFindingLifecycle(repoId: string): Promise<LifecycleRow[]> {
+  return query<LifecycleRow>(
+    `SELECT id, finding_key, kind, title, location, state,
+            first_detected_at, last_seen_at, fixed_at, reintroduced_at,
+            times_seen, times_reintroduced, note
+       FROM finding_lifecycle
+      WHERE repo_id = $1
+      ORDER BY CASE state WHEN 'open' THEN 0 WHEN 'acknowledged' THEN 1 WHEN 'ignored' THEN 2 ELSE 3 END,
+               last_seen_at DESC
+      LIMIT 500`,
+    [repoId],
+  );
+}
+
+/**
+ * The human half of the state machine. Scans may only move rows between
+ * `open` and `fixed` (reconcileFindings); this is the only writer for
+ * `ignored` and `acknowledged`, and the only way back to `open` from them.
+ *
+ * Setting a vanished finding back to `open` is fine: the next scan's resolve
+ * sweep marks it `fixed`, which is the truthful outcome.
+ */
+export async function setFindingState(
+  repoId: string,
+  findingId: string,
+  state: "open" | "ignored" | "acknowledged",
+  note: string | null,
+): Promise<LifecycleRow | null> {
+  return queryOne<LifecycleRow>(
+    `UPDATE finding_lifecycle
+        SET state = $3,
+            note = CASE WHEN $4::text IS NOT NULL THEN $4 ELSE note END
+      WHERE id = $2 AND repo_id = $1
+      RETURNING id, finding_key, kind, title, location, state,
+                first_detected_at, last_seen_at, fixed_at, reintroduced_at,
+                times_seen, times_reintroduced, note`,
+    [repoId, findingId, state, note],
+  );
+}
 
 /**
  * What changed since the previous scan of this repository.

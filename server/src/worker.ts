@@ -64,6 +64,33 @@ import { reviewCandidatesWithLlm, suggestAlternatives } from "@codeaudit/engine"
 import { config } from "./lib/config.js";
 import { reconcileFindings, type FindingDelta } from "./services/findingLifecycle.js";
 
+/**
+ * Turns a scan failure into a sentence a user can act on.
+ *
+ * Found by beta-testing the failure path: connecting a nonexistent repo
+ * produced an error_message of raw git stderr — "fatal: could not read
+ * Username for 'https://…'" — because GitHub answers a missing repo with an
+ * auth challenge rather than a 404 (private-repo existence must not leak).
+ * A user reads that as "the product is broken", not "the repo doesn't
+ * exist". The raw error still goes to the worker log for diagnosis; the
+ * user-facing column gets the translation.
+ */
+function humanizeScanError(raw: string): string {
+  if (/could not read Username|Authentication failed|Repository not found|access denied|returned error: 40[34]/i.test(raw)) {
+    return (
+      "The repository could not be cloned — it does not exist, or it is private. " +
+      "Check the URL, and if the repository is private, connect it through the GitHub App so scans can authenticate."
+    );
+  }
+  if (/timed? ?out|took too long/i.test(raw)) {
+    return "Cloning timed out — the repository may be very large or the network slow. Try again; if it persists, the repo may exceed this scanner's size limits.";
+  }
+  if (/too (large|many files)|size cap|file cap/i.test(raw)) {
+    return raw; // the clone sandbox already writes these as user-facing sentences
+  }
+  return raw;
+}
+
 async function setStatus(scanJobId: string, status: string, progress: string) {
   await query("UPDATE scan_jobs SET status = $2, progress = $3 WHERE id = $1", [
     scanJobId,
@@ -531,7 +558,7 @@ async function processScanJob(scanJobId: string) {
     await query(
       `UPDATE scan_jobs SET status = 'failed', progress = 'Failed',
          error_message = $2, completed_at = now() WHERE id = $1`,
-      [scanJobId, message.slice(0, 1000)],
+      [scanJobId, humanizeScanError(message).slice(0, 1000)],
     );
     console.error(`[scan ${scanJobId}] failed:`, err);
 

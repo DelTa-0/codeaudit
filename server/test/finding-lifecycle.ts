@@ -9,7 +9,7 @@
 //
 // Run: npm run test:finding-lifecycle   (needs docker compose up -d postgres)
 import { query, pool } from "../src/db/pool.js";
-import { reconcileFindings } from "../src/services/findingLifecycle.js";
+import { reconcileFindings, listFindingLifecycle, setFindingState } from "../src/services/findingLifecycle.js";
 import {
   dependencyFindingIdentity,
   deadCodeFindingIdentity,
@@ -149,6 +149,25 @@ const d7 = await reconcileFindings(repo.id, await newScan(), [
   injection,
 ]);
 checks.push(["the same finding reported twice in one scan counts once", d7.persisting === 2]);
+
+// --- the human half: list + dismiss/restore (the dismiss API's service) ---
+const listed = await listFindingLifecycle(repo.id);
+checks.push(
+  ["listing returns the repo's findings", listed.length >= 2],
+  ["open findings sort before ignored ones", listed.findIndex((r) => r.state === "open") < listed.findIndex((r) => r.state === "ignored")],
+);
+const target = listed.find((r) => r.state === "open");
+const dismissed = await setFindingState(repo.id, target!.id, "ignored", "beta reviewer says: false positive");
+checks.push(
+  ["dismissing via the service lands in ignored with the note", dismissed?.state === "ignored" && dismissed?.note === "beta reviewer says: false positive"],
+);
+const restored = await setFindingState(repo.id, target!.id, "open", null);
+checks.push(
+  ["restore returns to open", restored?.state === "open"],
+  ["restore without a note keeps the existing note", restored?.note === "beta reviewer says: false positive"],
+  // Wrong-repo scoping: the id exists, but not under this repo — must be a miss.
+  ["a finding cannot be dismissed through another repo's id", (await setFindingState(org.id, target!.id, "ignored", null)) === null],
+);
 
 await query("DELETE FROM organizations WHERE id = $1", [org.id]);
 

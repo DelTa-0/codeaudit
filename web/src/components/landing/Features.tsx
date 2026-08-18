@@ -69,7 +69,21 @@ const FEATURES = [
     tagFg: "#127a4f",
     tagBg: "#e4f7ec",
     title: "MCP server & CLI",
-    body: "Check a package before your agent installs it, not after review. codeorion-mcp exposes the same verification as tools your agent can call; the CLI runs the whole scan offline in CI.",
+    body: "Eight guardrail tools your agent calls at the moment of the decision — verify a package, assess an MCP server, audit tool descriptions for poisoning, self-review staged changes. The CLI runs the whole scan offline in CI.",
+  },
+  {
+    tag: "AGENT-TIME",
+    tagFg: "#127a4f",
+    tagBg: "#e4f7ec",
+    title: "Pre-commit guardrail",
+    body: "npx codeorion install-hook blocks a commit that stages a secret, a poisoned agent config, or a dependency that doesn't exist — in seconds, on the staged content itself.",
+  },
+  {
+    tag: "TEAM TRUST",
+    tagFg: "#127a4f",
+    tagBg: "#e4f7ec",
+    title: "MCP lockfile",
+    body: "codeorion-mcp.lock commits your MCP approvals to the repo. A server that silently changes what it runs fails the scan as a critical mismatch until a human re-locks — approval that survives the clone, not one laptop.",
   },
   {
     tag: "METRICS",

@@ -3,10 +3,12 @@ import { z } from "zod";
 import { query, queryOne } from "../db/pool.js";
 import { requireAuth, requireOrgRole } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
-import { conflict, notFound } from "../lib/errors.js";
+import { execFile } from "node:child_process";
+import { conflict, notFound, badRequest } from "../lib/errors.js";
 import { parseRepoUrl } from "../lib/repoUrl.js";
 import { assertCanAddRepo } from "../services/plans.js";
 import { logAudit } from "../services/audit.js";
+import { listFindingLifecycle, setFindingState } from "../services/findingLifecycle.js";
 import { githubConfigured, listInstallationRepos } from "../services/github.js";
 
 /**
@@ -53,6 +55,28 @@ reposRouter.get("/orgs/:orgId/repos", requireOrgRole("developer"), async (req, r
   }
 });
 
+/**
+ * Does a public repo exist? `git ls-remote` rather than the GitHub API:
+ * unauthenticated API calls are capped at 60/hour per IP, which one busy
+ * launch afternoon would exhaust for every user behind this server at once.
+ * ls-remote has no such quota. GIT_TERMINAL_PROMPT=0 makes git fail instead
+ * of hanging on the credential prompt GitHub answers missing repos with.
+ *
+ * Fails OPEN on timeout/git-missing: a network blip must not block
+ * connecting a real repo, and a nonexistent one still fails cleanly at scan
+ * time — now with a human-readable message (see worker.ts humanizeScanError).
+ */
+function publicRepoExists(fullName: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    execFile(
+      "git",
+      ["ls-remote", "--exit-code", `https://github.com/${fullName}.git`, "HEAD"],
+      { timeout: 10_000, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } },
+      (err) => resolve(err === null || err.killed === true),
+    );
+  });
+}
+
 const connectSchema = z.object({ url: z.string().min(1).max(500) });
 
 reposRouter.post(
@@ -69,6 +93,17 @@ reposRouter.post(
       );
       if (existing) throw conflict("Repository is already connected");
       const linked = await findInstallationMatch(req.params.orgId, fullName);
+      // Connect-time existence check, but only for repos no installation
+      // covers: an installation match already proves existence, and a private
+      // repo visible to the App would FAIL a public probe — probing first
+      // would wrongly reject exactly the repos the App exists to unlock.
+      // Without this, a typo'd URL connected fine and then failed its first
+      // scan with raw git stderr, which reads as a product bug.
+      if (!linked && !(await publicRepoExists(fullName))) {
+        throw badRequest(
+          `github.com/${fullName} was not found, or is private. Check the spelling — and if it is private, install the GitHub App on it instead of pasting the URL.`,
+        );
+      }
       const [repo] = await query(
         `INSERT INTO repositories (org_id, installation_id, github_repo_id, full_name, private, default_branch)
          VALUES ($1, $2, $3, $4, $5, $6)
@@ -112,6 +147,64 @@ reposRouter.get("/repos/:repoId", async (req, res, next) => {
     next(err);
   }
 });
+
+/** Findings that outlive scans, with their history. Any member can read. */
+reposRouter.get("/repos/:repoId/findings", async (req, res, next) => {
+  try {
+    const repo = await queryOne<{ id: string }>(
+      `SELECT r.id FROM repositories r
+       JOIN org_members m ON m.org_id = r.org_id AND m.user_id = $2
+       WHERE r.id = $1`,
+      [req.params.repoId, req.user!.id],
+    );
+    if (!repo) throw notFound("Repository not found");
+    res.json(await listFindingLifecycle(req.params.repoId));
+  } catch (err) {
+    next(err);
+  }
+});
+
+const findingStateSchema = z.object({
+  state: z.enum(["open", "ignored", "acknowledged"]),
+  note: z.string().max(500).optional(),
+});
+
+/**
+ * Dismiss or restore a finding. This endpoint exists because a false
+ * positive with no dismiss button costs the product its credibility on the
+ * second scan: the user sees the same wrong finding again and stops reading
+ * the report. Scans never overwrite these states (reconcileFindings only
+ * touches `open`/`fixed`), so a dismissal survives every future scan.
+ *
+ * Admin+ only, same as the merge-gate and autofix toggles: silencing a
+ * finding changes what the whole team sees.
+ */
+reposRouter.patch(
+  "/repos/:repoId/findings/:findingId",
+  validateBody(findingStateSchema),
+  async (req, res, next) => {
+    try {
+      const repo = await queryOne<{ id: string; org_id: string; role: string }>(
+        `SELECT r.id, r.org_id, m.role FROM repositories r
+         JOIN org_members m ON m.org_id = r.org_id AND m.user_id = $2
+         WHERE r.id = $1`,
+        [req.params.repoId, req.user!.id],
+      );
+      if (!repo) throw notFound("Repository not found");
+      if (repo.role === "developer") throw notFound("Repository not found");
+      const { state, note } = req.body as z.infer<typeof findingStateSchema>;
+      const row = await setFindingState(req.params.repoId, req.params.findingId, state, note ?? null);
+      if (!row) throw notFound("Finding not found");
+      await logAudit(repo.org_id, req.user!.id, "finding.state_changed", row.finding_key, {
+        state,
+        ...(note ? { note } : {}),
+      });
+      res.json(row);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 reposRouter.delete("/repos/:repoId", async (req, res, next) => {
   try {

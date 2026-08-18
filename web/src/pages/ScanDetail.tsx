@@ -770,6 +770,33 @@ export function ScanDetail() {
                           {d.registry_metadata?.transitive && (
                             <span className="ml-2 font-sans text-xs text-muted">(transitive)</span>
                           )}
+                          {/* Provenance — collected since the attribution work
+                              but rendered nowhere until now. The AI verdict is
+                              three-valued on purpose; "unknown" renders as
+                              nothing rather than as a hedge badge, because a
+                              row of "AI: unknown" labels is noise wearing an
+                              insight's clothes. */}
+                          {d.registry_metadata?.attribution && (
+                            <div className="mt-0.5 font-sans text-xs text-muted">
+                              {d.registry_metadata.attribution.predatesHistory
+                                ? "Introduced before this scan's history window"
+                                : [
+                                    d.registry_metadata.attribution.commitsAgo !== null
+                                      ? `Introduced ${d.registry_metadata.attribution.commitsAgo} commit${d.registry_metadata.attribution.commitsAgo === 1 ? "" : "s"} ago`
+                                      : null,
+                                    d.registry_metadata.attribution.introducedAuthor
+                                      ? `by ${d.registry_metadata.attribution.introducedAuthor}`
+                                      : null,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" ")}
+                              {d.registry_metadata.attribution.aiAssisted === "likely" && (
+                                <span className="ml-1.5 rounded-full bg-primary/10 px-1.5 py-0.5 font-medium text-primary">
+                                  AI-assisted
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </td>
                         {polyglot && (
                           <td className="py-2">
