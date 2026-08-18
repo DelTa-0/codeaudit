@@ -2,7 +2,7 @@
   "mcpServers": {
     "codeorion": {
       "command": "npx",
-      "args": ["-y", "codeorion-mcp@1.2.3"]
+      "args": ["-y", "codeorion-mcp@1.3.0"]
     }
   }
 }

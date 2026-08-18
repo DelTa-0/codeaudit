@@ -22,6 +22,14 @@ export interface PackageVerifyResult {
   downloadsPeriod: "week" | "month";
   ageDays: number | null;
   latestVersion: string | null;
+  /** SPDX-ish licence string from the registry, or null when undeclared. */
+  license: string | null;
+  /** Maintainer's deprecation/yank message. An agent about to install should
+   *  treat this as "pick something else", even though it does not change
+   *  `status` — matching the scan path, where deprecation is advisory. */
+  deprecated: string | null;
+  /** npm only: unpacked size in bytes of the latest version. */
+  unpackedSize: number | null;
   typosquatOf?: string;
   typosquatDistance?: number;
   alternatives?: AlternativeSuggestion[];
@@ -77,6 +85,9 @@ export async function verifyPackage(
       downloadsPeriod: DEFAULT_DOWNLOADS_PERIOD[ecosystem],
       ageDays: null,
       latestVersion: null,
+      license: null,
+      deprecated: null,
+      unpackedSize: null,
       hallucinated: hallucinated ?? undefined,
       alternatives: alternative
         ? [alternative]
@@ -110,7 +121,17 @@ export async function verifyPackage(
     downloadsPeriod,
     ageDays,
     latestVersion: (meta?.latest as string | null) ?? null,
+    license: (meta?.license as string | null) ?? null,
+    deprecated: (meta?.deprecated as string | null) ?? null,
+    unpackedSize: (meta?.unpackedSize as number | null) ?? null,
   };
+
+  // Advisory, same semantics as the scan path (status stays put), but an
+  // agent reading only `reason` must still see it — deprecation is the
+  // registry's own "do not adopt this" signal.
+  if (result.deprecated) {
+    result.reason = `Package "${name}" exists on ${ecosystem} but its latest version is deprecated: ${result.deprecated}`;
+  }
 
   if (result.status === "suspicious") {
     const triggers: string[] = [];

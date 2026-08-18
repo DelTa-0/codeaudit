@@ -9,8 +9,10 @@ secrets before it's written to a file, and audits files an agent is about to
 trust *as instructions* (`CLAUDE.md`, MCP configs, permission settings) for
 prompt injection and unsafe configuration.
 
-Four tools, three kinds of trust decision — installing a package, writing
-something that could be a credential, and treating a file as instructions.
+Seven tools covering the trust decisions an agent actually makes: installing
+a package, **adding an MCP server**, adding a dependency the project may
+already have an equivalent for, writing something that could be a credential,
+treating a file as instructions, and **committing staged changes**.
 
 Runs fully offline by default (no account needed) — same registry/CVE
 checks as `npx codeorion`. Set `CODEAUDIT_TOKEN` to additionally get
@@ -37,7 +39,7 @@ Restart your session, then:
 /plugin install codeorion-guardrails@codeaudit
 ```
 
-That's it. `/mcp` should now list four tools under `codeaudit`. The rest of
+That's it. `/mcp` should now list seven tools under `codeaudit`. The rest of
 this section covers the variations: `npx` instead of a global install, other
 clients, and putting the skill in a repo instead of on one machine.
 
@@ -85,10 +87,11 @@ server looks identical to a working one until the moment you need it:
 claude mcp list
 ```
 
-`/mcp` inside a session lists each server's tools. You want **four**:
-`verify_package`, `verify_packages`, `scan_secrets`, `audit_agent_config`.
-Fewer than four means an old version is connected — see "Upgrading from
-`codeaudit-mcp`" below.
+`/mcp` inside a session lists each server's tools. As of 1.3.0 you want
+**seven**: `verify_package`, `verify_packages`, `scan_secrets`,
+`audit_agent_config`, `assess_mcp_server`, `check_redundancy` and
+`audit_staged`. Only two means the pre-rename package is connected — see
+"Upgrading from `codeaudit-mcp`" below.
 
 **Cursor** — click to install:
 
@@ -205,7 +208,9 @@ globally, or `"command": "npx", "args": ["-y", "codeorion-mcp"]` otherwise.
 
 - `verify_package({ name, ecosystem?, version? })` — checks one package.
   `version` is optional — when given, known-vulnerability checks run
-  against that version instead of the registry's latest. Also matches the
+  against that version instead of the registry's latest. Returns the
+  package's licence, deprecation message and unpacked size alongside the
+  existence/typosquat/CVE verdict. Also matches the
   name against a curated corpus of names LLMs are documented to invent, and
   says so in the result (`hallucinated`). That check matters most when the
   package **does** exist: registering a hallucinated name is the attack, so
@@ -230,6 +235,24 @@ globally, or `"command": "npx", "args": ["-y", "codeorion-mcp"]` otherwise.
   classifies the surface. A path that isn't a recognized agent surface
   comes back explicitly unscanned rather than as an empty (and misleadable)
   "no findings".
+- `assess_mcp_server({ name, command, args?, existingConfigText? })` — call
+  **before adding an MCP server to any config**, the moment the trust decision
+  is actually made. Reports what the invocation reveals (shell execution,
+  filesystem paths granted, unpinned package), verifies the backing package,
+  and — when the existing config is passed — whether this name would silently
+  **redefine an already-approved server**. Approval binds to the name, not the
+  command, so a redefinition executes with no new prompt. Network behaviour
+  cannot be read from a config and is deliberately not guessed.
+- `check_redundancy({ name, ecosystem?, dependencies? | manifestContent?, projectLicense? })`
+  — call before adding a dependency the user did not explicitly name. Answers
+  whether the exact package is already declared, whether the project already
+  uses an equivalent library (curated corpus, never guessed), and whether the
+  candidate's licence conflicts with the project's.
+- `audit_staged({ projectDir? })` — an agent's self-review after staging and
+  before committing: secrets, agent-config poisoning (including MCP servers
+  redefined relative to HEAD), and dependencies the commit adds that don't
+  exist or carry CVEs. The same checks `codeorion scan --staged` runs from a
+  git hook — with no hook required.
 
 `ecosystem` (`"npm"` or `"pypi"`) is optional — omit it and `verify_package`/
 `verify_packages` try npm first, then PyPI.

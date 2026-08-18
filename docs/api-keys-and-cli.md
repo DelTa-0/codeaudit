@@ -245,6 +245,9 @@ you just don't get that one enrichment.
 | `verify_packages({ packages: [{ name, ecosystem? }] })` | Checks several at once (e.g. every new line in a manifest diff) |
 | `scan_secrets({ content, filePath? })` | Checks file content for hardcoded API keys, tokens, private keys before it's written. Returns redacted matches only (e.g. `AKIA…(20 chars)`) — the real secret value is never echoed back |
 | `audit_agent_config({ content, filePath })` | Checks a file you are about to trust *as instructions* — `CLAUDE.md`, `AGENTS.md`, `.cursorrules`, an MCP config, a settings/permissions file, a skill — for prompt injection, invisible characters, credential-exfiltration instructions and unsafe config. `filePath` is **required** here (unlike `scan_secrets`): the same text means different things depending on where it lives, and the path is what classifies the surface |
+| `assess_mcp_server({ name, command, args?, existingConfigText? })` | Pre-install check for MCP servers: shell execution, filesystem grants, unpinned packages, backing-package verification, and — with the existing config passed — detection of a silent redefinition of an already-approved server name |
+| `check_redundancy({ name, ... })` | Pre-add check for dependencies: already declared? an equivalent library already in use? licence conflict with the project? Corpus-based, never guessed |
+| `audit_staged({ projectDir? })` | Agent self-review before committing — the same secrets/agent-config/new-dependency checks as `codeorion scan --staged`, no git hook required |
 
 `ecosystem` (`"npm"` or `"pypi"`) is optional on both `verify_*` tools —
 omit it and they try npm first, then PyPI.

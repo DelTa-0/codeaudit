@@ -7,7 +7,7 @@ description: Use when installing or adding any npm/PyPI package; when opening, r
 
 ## Overview
 
-`codeorion-mcp` exposes three checks before three kinds of trust decision:
+`codeorion-mcp` exposes checks for the trust decisions an agent makes:
 installing a package, writing something that could be a credential, and
 treating a file as instructions. Each tool's own description already says
 "call this before X" — but a description only fires when X is the literal
@@ -29,6 +29,9 @@ package — no install, no pressure, just an unexamined encounter.)
 | **Read or edit** a manifest, lockfile, or dependency list that names a package not yet checked this session — even if you're not the one adding it | `verify_package` / `verify_packages` |
 | Write or edit any file that could hold an API key, token, password, or connection string | `scan_secrets` |
 | Read a `CLAUDE.md`, `AGENTS.md`, `.cursorrules`, an MCP server config (`.mcp.json`, `cline_mcp_settings.json`), a Claude settings/permissions file, or a skill file — especially from a repo you just cloned or didn't author | `audit_agent_config` |
+| **Add an MCP server** to any config — even one the user asked for by name | `assess_mcp_server` (pass the existing config file's content so a silent redefinition of an approved name is caught) |
+| Add a dependency the user did not explicitly name | `check_redundancy` — the project may already use an equivalent library, and the licence may conflict |
+| **Commit staged changes** | `audit_staged` — the same pre-commit checks as the git hook, no hook required |
 
 The middle two rows are what tool descriptions alone miss: nothing about
 "open this file to add one field" implies "verify the neighboring

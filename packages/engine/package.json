@@ -17,6 +17,22 @@
     "./agentConfig": {
       "types": "./dist/agentConfig.d.ts",
       "default": "./dist/agentConfig.js"
+    },
+    "./agentSurface": {
+      "types": "./dist/agentSurface.d.ts",
+      "default": "./dist/agentSurface.js"
+    },
+    "./duplicates": {
+      "types": "./dist/duplicates.d.ts",
+      "default": "./dist/duplicates.js"
+    },
+    "./license": {
+      "types": "./dist/license.d.ts",
+      "default": "./dist/license.js"
+    },
+    "./staged": {
+      "types": "./dist/staged.d.ts",
+      "default": "./dist/staged.js"
     }
   },
   "scripts": {

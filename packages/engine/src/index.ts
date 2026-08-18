@@ -27,7 +27,13 @@ export {
   type ResolvedPackage,
 } from "./lockfile.js";
 export { checkTyposquat, type TyposquatHit } from "./typosquat.js";
-export { findDuplicateLibraries, type DuplicateGroup } from "./duplicates.js";
+export {
+  findDuplicateLibraries,
+  checkProposedDependency,
+  type DuplicateGroup,
+  type ProposedDependencyCheck,
+} from "./duplicates.js";
+export { scanStaged, isGitRepo, stagedFiles, type StagedReport } from "./staged.js";
 export { EQUIVALENT_GROUPS, type EquivalentGroup } from "./data/equivalents.js";
 export { verifyPackage, type PackageVerifyResult } from "./verify.js";
 export { findDeadCodeCandidates, type DeadCodeCandidate } from "./deadcode.js";
@@ -95,6 +101,8 @@ export {
 } from "./mcpDrift.js";
 export {
   analyzeAgentSurface,
+  assessMcpServerProposal,
+  type McpServerProposalAssessment,
   type AgentAttackSurface,
   type McpServerInventory,
   type AgentRisk,

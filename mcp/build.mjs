@@ -42,6 +42,12 @@ await build({
     "@codeaudit/engine": path.resolve(here, "../packages/engine/dist/verify.js"),
     "@codeaudit/engine/secrets": path.resolve(here, "../packages/engine/dist/secrets.js"),
     "@codeaudit/engine/agentConfig": path.resolve(here, "../packages/engine/dist/agentConfig.js"),
+    // All four verified babel-free: agentSurface/duplicates/license pull only
+    // fs/path-level modules; staged pulls verify+manifest+smol-toml (bundled).
+    "@codeaudit/engine/agentSurface": path.resolve(here, "../packages/engine/dist/agentSurface.js"),
+    "@codeaudit/engine/duplicates": path.resolve(here, "../packages/engine/dist/duplicates.js"),
+    "@codeaudit/engine/license": path.resolve(here, "../packages/engine/dist/license.js"),
+    "@codeaudit/engine/staged": path.resolve(here, "../packages/engine/dist/staged.js"),
   },
 });
 

@@ -44,7 +44,7 @@ import {
   type AgentConfigFinding,
 } from "@codeaudit/engine";
 import { resolveLlmConfig, type LlmFlags } from "./llmConfig.js";
-import { scanStaged, isGitRepo } from "./staged.js";
+import { scanStaged, isGitRepo } from "@codeaudit/engine";
 
 const RESET = "\x1b[0m";
 const BOLD = "\x1b[1m";

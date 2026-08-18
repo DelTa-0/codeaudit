@@ -43,3 +43,55 @@ export function findDuplicateLibraries(deps: DependencyVerdict[]): DuplicateGrou
   }
   return groups;
 }
+
+export interface ProposedDependencyCheck {
+  /** The manifest already lists this exact package. */
+  alreadyDeclared: boolean;
+  /** The project already uses another member of the same equivalence group. */
+  redundantWith: {
+    category: string;
+    existingMembers: string[];
+    prefer: string | null;
+    recommendation: string;
+  } | null;
+}
+
+/**
+ * "Should this package be added at all?" — answered before the install, from
+ * the same curated equivalence groups the post-hoc duplicate scan uses.
+ *
+ * This is where dependency explosion actually starts: an agent adding
+ * `moment` has no idea the repo standardised on `dayjs`, and by the time a
+ * scan reports the duplicate, code depends on both. Deliberately corpus-only,
+ * no similarity guessing — a wrong "you already have this" blocks legitimate
+ * installs, which is worse than missing an equivalence.
+ */
+export function checkProposedDependency(
+  name: string,
+  ecosystem: Ecosystem,
+  existingDependencies: string[],
+): ProposedDependencyCheck {
+  const existing = new Set(existingDependencies.map((d) => d.toLowerCase()));
+  const candidate = name.toLowerCase();
+
+  const group = EQUIVALENT_GROUPS.find(
+    (g) => g.ecosystem === ecosystem && g.members.includes(candidate),
+  );
+  const existingMembers = group
+    ? group.members.filter((m) => m !== candidate && existing.has(m))
+    : [];
+
+  return {
+    alreadyDeclared: existing.has(candidate),
+    redundantWith: existingMembers.length
+      ? {
+          category: group!.category,
+          existingMembers,
+          prefer: group!.prefer,
+          recommendation:
+            `The project already uses ${existingMembers.join(" and ")} for ${group!.category}. ` +
+            `Reuse ${existingMembers[0]} instead of adding ${name}.`,
+        }
+      : null,
+  };
+}

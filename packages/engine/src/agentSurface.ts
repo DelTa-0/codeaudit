@@ -24,7 +24,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { classifyAgentSurface, type AgentConfigFinding } from "./agentConfig.js";
-import { extractMcpServers } from "./mcpDrift.js";
+import { extractMcpServers, invocationIdentity } from "./mcpDrift.js";
 
 export type AgentRisk = "low" | "medium" | "high";
 
@@ -117,6 +117,62 @@ function assessServer(
   const risk: AgentRisk = shell ? "high" : reasons.length >= 2 ? "medium" : reasons.length === 1 ? "medium" : "low";
 
   return { name, filePath, command, args, packageRef: ref, pinned, shell, filesystemPaths, risk, reasons };
+}
+
+export interface McpServerProposalAssessment {
+  server: McpServerInventory;
+  /** Registry ecosystem implied by the launcher, for the caller's
+   *  verify-package step. Null when the invocation names no package. */
+  packageEcosystem: "npm" | "pypi" | null;
+  /**
+   * Set when the project already defines a server with this name.
+   *
+   * `redefines: true` is the finding that matters: same name, different
+   * program. Approval in MCP clients binds to the name, so adding this
+   * proposal would silently change what an already-trusted name executes —
+   * the MCPoison setup step, caught before it is committed rather than by
+   * the history detector afterwards.
+   */
+  collision: {
+    existingInvocation: string;
+    redefines: boolean;
+  } | null;
+}
+
+/**
+ * Assesses an MCP server BEFORE it is added — the moment the decision is
+ * actually being made, which no repo scan can reach.
+ *
+ * Offline on purpose. The caller (codeorion-mcp) runs the network half —
+ * verifyPackage on `server.packageRef` — separately, so this stays a pure
+ * function of its inputs and the tool composes registry facts on top.
+ */
+export function assessMcpServerProposal(input: {
+  name: string;
+  command: string;
+  args?: string[];
+  /** Content of the project's existing MCP config, for collision detection. */
+  existingConfigText?: string;
+  configFilePath?: string;
+}): McpServerProposalAssessment {
+  const args = input.args ?? [];
+  const server = assessServer(input.name, input.configFilePath ?? "(proposed)", input.command, args);
+  const packageEcosystem =
+    server.packageRef === null ? null : input.command === "uvx" ? "pypi" : "npm";
+
+  let collision: McpServerProposalAssessment["collision"] = null;
+  if (input.existingConfigText) {
+    const existing = extractMcpServers(input.existingConfigText).get(input.name);
+    if (existing) {
+      collision = {
+        existingInvocation: [existing.command, ...existing.args].join(" ").trim(),
+        redefines:
+          invocationIdentity(existing.command, existing.args) !==
+          invocationIdentity(input.command, args),
+      };
+    }
+  }
+  return { server, packageEcosystem, collision };
 }
 
 function damage(n: number, max: number, k: number): number {

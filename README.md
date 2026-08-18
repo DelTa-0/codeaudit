@@ -346,10 +346,12 @@ directly — see [`.pre-commit-hooks.yaml`](.pre-commit-hooks.yaml).
 
 ### Guardrails for AI coding agents (`codeorion-mcp`)
 
-An MCP server your AI coding agent can call *before* installing a package,
-to check whether it's real, well-maintained, and free of known CVEs —
-catching hallucinated packages and typosquats at the moment an agent is
-about to install them, rather than in a scan after the fact. Also checks
+An MCP server that sits inside your AI coding agent's decision loop, at the
+moment of the mistake rather than in a scan after the fact: verify a package
+before installing it, assess an MCP server before adding it (including
+whether it would silently redefine an already-approved name), check whether
+the project already has an equivalent library, scan for secrets, audit
+agent-config files, and self-review staged changes before committing. Also checks
 file content for hardcoded secrets before it's written, and audits files an
 agent trusts as instructions (`CLAUDE.md`, MCP configs, permission
 settings) for prompt injection and unsafe config. See

@@ -93,6 +93,17 @@ function identity(spec: McpServerSpec): string {
 }
 
 /**
+ * Public form of `identity`, for callers comparing a *proposed* server against
+ * one already in a config (assessMcpServerProposal). Exported rather than
+ * duplicated: "what counts as the same program" must have one definition, or
+ * the pre-install check and the history detector will disagree about the same
+ * server.
+ */
+export function invocationIdentity(command: string, args: string[]): string {
+  return identity({ name: "", command, args });
+}
+
+/**
  * Compares two revisions of one MCP config and reports servers whose
  * invocation changed. A server that is *added* is not reported here — that is
  * a first approval, which the user is prompted for and which
