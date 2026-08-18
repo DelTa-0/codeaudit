@@ -1,4 +1,4 @@
-import { useIsMobile, useIsCompact } from "../../lib/useMediaQuery";
+import { useInViewOnce, useCountUp } from "../../lib/useFx";
 
 const DEPS = [
   { name: "currency-format-pro", status: "PHANTOM", sc: "#ff8a70", meta: "not on npm" },
@@ -10,105 +10,57 @@ const DEPS = [
 const TREND = [58, 61, 60, 66, 70, 73, 76, 82];
 
 export function DashboardPreview() {
-  const isMobile = useIsMobile();
-  const isCompact = useIsCompact();
-
+  const [panelRef, powered] = useInViewOnce<HTMLDivElement>(0.8);
+  // power-on: the dial sweeps and the number counts together
+  const num = useCountUp(82, powered, 1200);
+  const deg = Math.round((num / 100) * 360);
   return (
-    <section
-      style={{
-        borderTop: "1px solid #e6e4dc",
-        background: "#f2f1ea",
-        padding: isMobile ? "56px 20px" : "96px 48px",
-      }}
-    >
-      <div
-        style={{
-          maxWidth: 1024,
-          margin: "0 auto",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          textAlign: "center",
-        }}
-      >
-        <span style={{ font: "500 12px 'JetBrains Mono',monospace", color: "#127a4f", letterSpacing: ".08em" }}>
-          DASHBOARD
-        </span>
-        <h2
-          style={{
-            margin: "16px 0 0",
-            font: isMobile ? "600 26px/1.2 Geist,sans-serif" : "600 40px/1.12 Geist,sans-serif",
-            letterSpacing: "-.02em",
-            maxWidth: 560,
-            textWrap: "balance",
-          }}
-        >
-          Debt, trending down and to the right.
+    <section className="ca-section">
+      <div className="ca-wrap" style={{ textAlign: "center" }}>
+        <div className="ca-file" data-reveal>
+          <span className="ca-file-no">FILE 06</span>
+          <span>THE DASHBOARD</span>
+        </div>
+        <h2 className="ca-h2" data-reveal style={{ maxWidth: 620, margin: "0 auto" }}>
+          Debt, trending <em>down and to the right</em>.
         </h2>
-        <div
-          style={{
-            width: "100%",
-            marginTop: 44,
-            background: "#0a0c12",
-            borderRadius: 14,
-            overflow: "hidden",
-            boxShadow: "0 24px 60px -24px rgba(16,21,18,.4)",
-            textAlign: "left",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "14px 22px",
-              borderBottom: "1px solid #1c2029",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-              <div
+        {/* reveal lives on the wrapper: React rewrites this panel's className
+            when `powered` flips, which would wipe the scroll-added .is-in */}
+        <div data-reveal style={{ transitionDelay: "0.1s" }}>
+        <div className={`ca-dash${powered ? " is-powered" : ""}`} ref={panelRef}>
+          <div className="ca-dash-head">
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span
                 style={{
                   width: 22,
                   height: 22,
-                  borderRadius: 6,
-                  background: "#11141d",
+                  borderRadius: 5,
                   border: "1px solid #262b38",
-                  display: "flex",
+                  display: "inline-flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  font: "600 11px 'JetBrains Mono',monospace",
+                  font: "600 11px var(--mono)",
                   color: "#9ef0c6",
                 }}
               >
                 ✓
-              </div>
-              <span style={{ font: "500 13px 'JetBrains Mono',monospace", color: "#e8ebf2" }}>
+              </span>
+              <span style={{ font: "500 13px var(--mono)", color: "#e8ebf2" }}>
                 acme/checkout-service
               </span>
             </div>
-            <span style={{ font: "500 11px 'JetBrains Mono',monospace", color: "#6b7280" }}>
+            <span style={{ font: "500 10.5px var(--mono)", letterSpacing: ".1em", color: "#6b7280" }}>
               LAST SCAN 2 MIN AGO · WEBHOOK
             </span>
           </div>
-          {/* Three panels side by side leave ~110px each at 375px, which the
-              score dial and the 8-week trend chart cannot shrink into — this
-              was the last thing dragging the document past the viewport.
-              Stacked, each panel gets the full width and stays legible. */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: isCompact ? "1fr" : "0.9fr 1.4fr 1fr",
-              gap: 1,
-              background: "#1c2029",
-            }}
-          >
+          <div className="ca-dash-grid">
             <div
               style={{
-                background: "#0a0c12",
-                padding: 26,
+                padding: 28,
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
+                justifyContent: "center",
                 gap: 14,
               }}
             >
@@ -116,8 +68,8 @@ export function DashboardPreview() {
                 style={{
                   width: 128,
                   height: 128,
-                  borderRadius: 99,
-                  background: "conic-gradient(#12b673 295deg, #1c2029 0deg)",
+                  borderRadius: 999,
+                  background: `conic-gradient(#12b673 ${deg}deg, #1c2029 0deg)`,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -125,9 +77,9 @@ export function DashboardPreview() {
               >
                 <div
                   style={{
-                    width: 100,
-                    height: 100,
-                    borderRadius: 99,
+                    width: 102,
+                    height: 102,
+                    borderRadius: 999,
                     background: "#0a0c12",
                     display: "flex",
                     flexDirection: "column",
@@ -135,32 +87,33 @@ export function DashboardPreview() {
                     justifyContent: "center",
                   }}
                 >
-                  <span style={{ font: "600 34px 'JetBrains Mono',monospace", color: "#e8ebf2" }}>82</span>
-                  <span style={{ font: "500 9px 'JetBrains Mono',monospace", color: "#6b7280", letterSpacing: ".12em" }}>
+                  <span style={{ font: "700 36px var(--serif)", color: "#e8ebf2" }}>{num}</span>
+                  <span
+                    style={{
+                      font: "500 8.5px var(--mono)",
+                      color: "#6b7280",
+                      letterSpacing: ".18em",
+                    }}
+                  >
                     HEALTH
                   </span>
                 </div>
               </div>
-              <span style={{ font: "500 11.5px 'JetBrains Mono',monospace", color: "#9ef0c6" }}>
+              <span
+                className="ca-dash-fade"
+                style={{ font: "600 11px var(--mono)", letterSpacing: ".08em", color: "#9ef0c6", "--d": "1.2s" } as React.CSSProperties}
+              >
                 ▲ +6 THIS WEEK
               </span>
             </div>
-            <div style={{ background: "#0a0c12", padding: "22px 24px" }}>
-              <span style={{ font: "600 11px 'JetBrains Mono',monospace", color: "#6b7280", letterSpacing: ".08em" }}>
-                DEPENDENCIES
-              </span>
+            <div style={{ padding: "24px 24px 26px" }}>
+              <span className="ca-dash-label">DEPENDENCIES</span>
               <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 14 }}>
-                {DEPS.map((d) => (
+                {DEPS.map((d, i) => (
                   <div
+                    className="ca-dep-row ca-dash-fade"
                     key={d.name}
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1.6fr 0.9fr 0.7fr",
-                      padding: "9px 12px",
-                      background: "#11141d",
-                      font: "400 12px 'JetBrains Mono',monospace",
-                      alignItems: "center",
-                    }}
+                    style={{ "--d": `${0.3 + i * 0.12}s` } as React.CSSProperties}
                   >
                     <span style={{ color: "#e8ebf2" }}>{d.name}</span>
                     <span style={{ fontWeight: 600, color: d.sc }}>{d.status}</span>
@@ -169,20 +122,29 @@ export function DashboardPreview() {
                 ))}
               </div>
             </div>
-            <div style={{ background: "#0a0c12", padding: "22px 24px", display: "flex", flexDirection: "column" }}>
-              <span style={{ font: "600 11px 'JetBrains Mono',monospace", color: "#6b7280", letterSpacing: ".08em" }}>
-                SCORE · 8 WEEKS
-              </span>
-              <div style={{ flex: 1, display: "flex", alignItems: "flex-end", gap: 8, marginTop: 14, minHeight: 120 }}>
+            <div style={{ padding: "24px 24px 26px", display: "flex", flexDirection: "column" }}>
+              <span className="ca-dash-label">SCORE · 8 WEEKS</span>
+              <div
+                style={{
+                  flex: 1,
+                  display: "flex",
+                  alignItems: "flex-end",
+                  gap: 8,
+                  marginTop: 14,
+                  minHeight: 120,
+                }}
+              >
                 {TREND.map((v, i) => (
                   <div
+                    className="ca-bar"
                     key={i}
                     style={{
                       flex: 1,
                       height: `${v}%`,
                       background: i === TREND.length - 1 ? "#12b673" : "#2c362e",
-                      borderRadius: "3px 3px 0 0",
-                    }}
+                      borderRadius: "2px 2px 0 0",
+                      "--d": `${0.15 + i * 0.08}s`,
+                    } as React.CSSProperties}
                   />
                 ))}
               </div>
@@ -190,9 +152,10 @@ export function DashboardPreview() {
                 style={{
                   display: "flex",
                   justifyContent: "space-between",
-                  font: "400 9.5px 'JetBrains Mono',monospace",
+                  font: "400 9.5px var(--mono)",
                   color: "#3c414d",
                   marginTop: 8,
+                  letterSpacing: ".08em",
                 }}
               >
                 <span>MAY</span>
@@ -201,6 +164,7 @@ export function DashboardPreview() {
               </div>
             </div>
           </div>
+        </div>
         </div>
       </div>
     </section>

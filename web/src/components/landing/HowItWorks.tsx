@@ -1,92 +1,111 @@
-import { useIsMobile, useIsCompact } from "../../lib/useMediaQuery";
+import { useEffect, useRef } from "react";
+import { prefersReducedMotion } from "../../lib/useFx";
 
+/**
+ * Sticky-scrub pipeline: the section pins while you scroll and your scroll
+ * position drives the elapsed clock (T+0s → T+61s), the progress line, and
+ * which stages have ignited. The timestamps are the proof of the headline's
+ * "about a minute" — scrubbing them makes the reader feel the duration.
+ */
 const STEPS = [
-  { n: "01", title: "Push or scan", body: "A webhook fires on push, or you run the CLI. No agent installed in your repo.", highlight: false },
-  { n: "02", title: "Clone & parse", body: "We clone the repo, walk the tree, and build the full dependency and import graph.", highlight: false },
-  { n: "03", title: "Verify & analyze", body: "Every dependency checked against the live npm registry; static analysis flags dead code.", highlight: false },
-  { n: "04", title: "LLM review", body: "An AI second pass confirms findings and assigns confidence scores — fewer false alarms.", highlight: false },
-  { n: "05", title: "Score & report", body: "Health score, PR comment, dashboard trend — and a merge gate if you've turned it on.", highlight: true },
+  {
+    t: "T+0s",
+    title: "Push or scan",
+    body: "A webhook fires on push, or you run the CLI. No agent installed in your repo.",
+  },
+  {
+    t: "T+4s",
+    title: "Clone & parse",
+    body: "We clone the repo, walk the tree, and build the full dependency and import graph.",
+  },
+  {
+    t: "T+12s",
+    title: "Verify & analyze",
+    body: "Every dependency checked against the live npm registry; static analysis flags dead code.",
+  },
+  {
+    t: "T+38s",
+    title: "LLM review",
+    body: "An AI second pass confirms findings and assigns confidence scores — fewer false alarms.",
+  },
+  {
+    t: "T+61s",
+    title: "Score & report",
+    body: "Health score, PR comment, dashboard trend — and a merge gate if you've turned it on.",
+  },
 ];
 
+const SCAN_SECONDS = 61;
+
 export function HowItWorks() {
-  const isMobile = useIsMobile();
-  const isCompact = useIsCompact();
+  const spaceRef = useRef<HTMLDivElement>(null);
+  const stepsRef = useRef<HTMLDivElement>(null);
+  const clockRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    const space = spaceRef.current;
+    const steps = stepsRef.current;
+    const clock = clockRef.current;
+    if (!space || !steps || !clock) return;
+
+    const apply = (p: number) => {
+      steps.style.setProperty("--p", p.toFixed(4));
+      clock.textContent = `T+${Math.round(p * SCAN_SECONDS)}s`;
+      const kids = steps.querySelectorAll(".ca-step");
+      kids.forEach((el, i) => {
+        // a stage ignites as the line's leading edge crosses its node
+        el.classList.toggle("is-lit", p * 5 >= i + 0.35);
+      });
+    };
+
+    if (prefersReducedMotion()) {
+      apply(1);
+      return;
+    }
+
+    const onScroll = () => {
+      const r = space.getBoundingClientRect();
+      const travel = r.height - window.innerHeight;
+      const p = travel > 0 ? Math.max(0, Math.min(1, -r.top / travel)) : 1;
+      apply(p);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, []);
 
   return (
-    <section
-      id="how"
-      style={{
-        borderTop: "1px solid #e6e4dc",
-        background: "#f2f1ea",
-        padding: isMobile ? "56px 20px" : "96px 48px",
-      }}
-    >
-      <div style={{ maxWidth: 1024, margin: "0 auto" }}>
-        <span style={{ font: "500 12px 'JetBrains Mono',monospace", color: "#127a4f", letterSpacing: ".08em" }}>
-          HOW IT WORKS
-        </span>
-        <h2
-          style={{
-            margin: isMobile ? "12px 0 0" : "16px 0 0",
-            font: isMobile ? "600 26px/1.2 Geist,sans-serif" : "600 40px/1.12 Geist,sans-serif",
-            letterSpacing: "-.02em",
-            maxWidth: 560,
-            textWrap: "balance",
-          }}
-        >
-          From push to verdict in about a minute.
-        </h2>
-        <div
-          style={{
-            display: "grid",
-            // Five columns at 375px gives each step ~66px — narrower than one
-            // word. One column on phones, a 2x3 arrangement on small tablets.
-            gridTemplateColumns: isMobile ? "1fr" : isCompact ? "repeat(2,1fr)" : "repeat(5,1fr)",
-            gap: 1,
-            background: "#ddd9cf",
-            border: "1px solid #ddd9cf",
-            borderRadius: 12,
-            overflow: "hidden",
-            marginTop: isMobile ? 28 : 44,
-          }}
-        >
-          {STEPS.map((s) => (
-            <div
-              key={s.n}
-              style={{
-                background: s.highlight ? "#e4f7ec" : "#f7f6f1",
-                padding: "24px 20px 28px",
-                display: "flex",
-                flexDirection: "column",
-                gap: 10,
-              }}
-            >
-              <span
-                style={{
-                  font: "600 12px 'JetBrains Mono',monospace",
-                  color: s.highlight ? "#127a4f" : "#a3a79a",
-                }}
-              >
-                {s.n}
-              </span>
-              <span
-                style={{
-                  font: "600 16px Geist,sans-serif",
-                  color: s.highlight ? "#0c2a1c" : undefined,
-                }}
-              >
-                {s.title}
-              </span>
-              <span
-                style={{
-                  font: "400 13.5px/1.5 Geist,sans-serif",
-                  color: s.highlight ? "#12503a" : "#565b51",
-                }}
-              >
-                {s.body}
+    <section id="how" className="ca-section ca-scrub-section">
+      <div className="ca-scrub-space" ref={spaceRef}>
+        <div className="ca-scrub-pin">
+          <div className="ca-wrap" style={{ width: "100%" }}>
+            <div className="ca-file">
+              <span className="ca-file-no">FILE 02</span>
+              <span>THE PROCEDURE</span>
+            </div>
+            <div className="ca-scrub-head">
+              <h2 className="ca-h2" style={{ maxWidth: 560 }}>
+                From push to verdict in <em>about a minute</em>.
+              </h2>
+              <span className="ca-scrub-clock" ref={clockRef}>
+                T+0s
               </span>
             </div>
-          ))}
+            <div className="ca-steps" ref={stepsRef}>
+              <span className="ca-steps-fill" aria-hidden="true" />
+              {STEPS.map((s) => (
+                <div key={s.t} className="ca-step">
+                  <span className="ca-step-t">{s.t}</span>
+                  <span className="ca-step-title">{s.title}</span>
+                  <span className="ca-step-body">{s.body}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </section>

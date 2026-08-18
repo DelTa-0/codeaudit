@@ -1,120 +1,96 @@
-import { useIsMobile, useIsCompact } from "../../lib/useMediaQuery";
+import { useEffect, useState } from "react";
+import { useInViewOnce, prefersReducedMotion } from "../../lib/useFx";
 
+const ADD_LINE = "+ import { formatMoney } from 'currency-format-pro'";
+
+const CONTEXT_AFTER = [
+  "  export function lineTotal(qty, price) {",
+  "    return formatMoney(round(qty * price, 2))",
+  "  }",
+];
+
+/**
+ * Live commit replay: when the document scrolls into view, the diff plays
+ * once — context appears, the bad import types itself in red, the rest of
+ * the file follows, and the PHANTOM finding stamps down.
+ */
 export function Problem() {
-  const isMobile = useIsMobile();
-  const isCompact = useIsCompact();
+  const [docRef, inView] = useInViewOnce<HTMLDivElement>();
+  const [stage, setStage] = useState(0); // 0 idle · 1 ctx · 2 typing · 3 rest · 4 callout
+  const [typed, setTyped] = useState(0);
+
+  useEffect(() => {
+    if (!inView) return;
+    if (prefersReducedMotion()) {
+      setStage(4);
+      setTyped(ADD_LINE.length);
+      return;
+    }
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    setStage(1);
+    timers.push(setTimeout(() => setStage(2), 350));
+    const typeStart = 500;
+    for (let i = 1; i <= ADD_LINE.length; i++) {
+      timers.push(setTimeout(() => setTyped(i), typeStart + i * 26));
+    }
+    const typeEnd = typeStart + ADD_LINE.length * 26;
+    timers.push(setTimeout(() => setStage(3), typeEnd + 180));
+    timers.push(setTimeout(() => setStage(4), typeEnd + 650));
+    return () => timers.forEach(clearTimeout);
+  }, [inView]);
+
   return (
-    <section
-      style={{
-        borderTop: "1px solid #e6e4dc",
-        padding: isMobile ? "56px 20px" : "96px 48px",
-        display: "grid",
-        gridTemplateColumns: isCompact ? "1fr" : "1fr 1fr",
-        gap: 64,
-        alignItems: "center",
-        maxWidth: 1120,
-        margin: "0 auto",
-        boxSizing: "border-box",
-      }}
-    >
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
-        <span
-          style={{
-            font: "500 12px 'JetBrains Mono',monospace",
-            color: "#127a4f",
-            letterSpacing: ".08em",
-            marginBottom: 18,
-          }}
-        >
-          THE PROBLEM
-        </span>
-        <h2
-          style={{
-            margin: 0,
-            font: isMobile ? "600 26px/1.2 Geist,sans-serif" : "600 40px/1.12 Geist,sans-serif",
-            letterSpacing: "-.02em",
-            textWrap: "balance",
-          }}
-        >
-          Your AI just imported a package that doesn't exist.
-        </h2>
-        <p
-          style={{
-            margin: "18px 0 0",
-            font: "400 16.5px/1.6 Geist,sans-serif",
-            color: "#565b51",
-            textWrap: "pretty",
-          }}
-        >
-          LLMs invent plausible-sounding package names — a 2026 multi-LLM study across 576k
-          samples found{" "}
-          <strong style={{ fontWeight: 600, color: "#101512" }}>
-            ~20% of AI-recommended packages are hallucinated
-          </strong>
-          . Attackers register those exact names before you notice. It's called slopsquatting,
-          and it's happening now.
-        </p>
-        <p
-          style={{
-            margin: "14px 0 0",
-            font: "400 16.5px/1.6 Geist,sans-serif",
-            color: "#565b51",
-            textWrap: "pretty",
-          }}
-        >
-          CodeAudit verifies every dependency against the live npm registry, on every push.
-        </p>
-      </div>
-      <div style={{ background: "#fff", border: "1px solid #e6e4dc", borderRadius: 12, overflow: "hidden" }}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            padding: "10px 16px",
-            borderBottom: "1px solid #efede6",
-            font: "500 11.5px 'JetBrains Mono',monospace",
-            color: "#8d9187",
-          }}
-        >
-          <span>src/utils/pricing.ts</span>
-          <span>PR #241</span>
+    <section className="ca-section">
+      <div className="ca-wrap">
+        <div className="ca-file" data-reveal>
+          <span className="ca-file-no">FILE 01</span>
+          <span>THE PROBLEM</span>
         </div>
-        <div style={{ padding: "14px 0", font: "400 13px/1.9 'JetBrains Mono',monospace" }}>
-          <div style={{ padding: "0 16px", color: "#8d9187" }}>  import {"{"} round {"}"} from 'lodash'</div>
-          <div style={{ padding: "0 16px", background: "#fdeae5", color: "#8c2f1b" }}>
-            + import {"{"} formatMoney {"}"} from 'currency-format-pro'
+        <div className="ca-split">
+          <div className="ca-split-copy" data-reveal>
+            <h2 className="ca-h2">
+              Your AI just imported a package that <em>doesn't exist</em>.
+            </h2>
+            <p className="ca-lede">
+              LLMs invent plausible-sounding package names — a 2026 multi-LLM study across 576k
+              samples found <strong>~20% of AI-recommended packages are hallucinated</strong>.
+              Attackers register those exact names before you notice. It's called slopsquatting,
+              and it's happening now.
+            </p>
+            <p className="ca-lede" style={{ marginTop: 14 }}>
+              CodeAudit verifies every dependency against the live npm registry, on every push.
+            </p>
           </div>
-          <div style={{ padding: "0 16px", color: "#8d9187" }}>  export function lineTotal(qty, price) {"{"}</div>
-          <div style={{ padding: "0 16px", color: "#8d9187" }}>    return formatMoney(round(qty * price, 2))</div>
-          <div style={{ padding: "0 16px", color: "#8d9187" }}>  {"}"}</div>
-        </div>
-        <div
-          style={{
-            display: "flex",
-            gap: 10,
-            alignItems: "flex-start",
-            margin: "0 16px 16px",
-            padding: "12px 14px",
-            background: "#fdeae5",
-            border: "1px solid #f5cabb",
-            borderRadius: 8,
-          }}
-        >
-          <span
-            style={{
-              font: "600 11px 'JetBrains Mono',monospace",
-              color: "#fff",
-              background: "#c2452d",
-              padding: "2px 7px",
-              borderRadius: 99,
-              whiteSpace: "nowrap",
-            }}
-          >
-            PHANTOM
-          </span>
-          <span style={{ font: "400 12.5px/1.5 'JetBrains Mono',monospace", color: "#8c2f1b" }}>
-            currency-format-pro is not on npm. This exact name is a known slopsquatting target.
-          </span>
+          <div className="ca-doc ca-replay" data-reveal ref={docRef}>
+            <div className="ca-doc-head">
+              <span>src/utils/pricing.ts</span>
+              <span>PR #241</span>
+            </div>
+            <div className="ca-doc-mono" style={{ padding: "14px 0" }}>
+              <div className={`ca-diff-row${stage >= 1 ? " is-on" : ""}`}>
+                {"  import { round } from 'lodash'"}
+              </div>
+              <div
+                className={`ca-diff-row is-add${stage >= 2 ? " is-on" : ""}${
+                  stage === 2 ? " ca-type-caret" : ""
+                }`}
+              >
+                {ADD_LINE.slice(0, typed) || " "}
+              </div>
+              {CONTEXT_AFTER.map((t, i) => (
+                <div key={i} className={`ca-diff-row${stage >= 3 ? " is-on" : ""}`}>
+                  {t}
+                </div>
+              ))}
+            </div>
+            <div className={`ca-finding-callout${stage >= 4 ? " is-on" : ""}`}>
+              <span className="ca-tag-crit">PHANTOM</span>
+              <p>
+                currency-format-pro is not on npm. This exact name is a known slopsquatting
+                target.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </section>

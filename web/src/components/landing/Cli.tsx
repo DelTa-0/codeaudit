@@ -1,110 +1,95 @@
 import { useCopyCommand } from "../../lib/useScanDemo";
-import { useIsMobile, useIsCompact } from "../../lib/useMediaQuery";
+import { useMagnetic } from "../../lib/useFx";
 
 export function Cli() {
   const { copied, copy } = useCopyCommand();
-  const isMobile = useIsMobile();
-  const isCompact = useIsCompact();
+  const chipRef = useMagnetic<HTMLSpanElement>(0.25, 8);
 
   return (
-    <section
-      id="cli"
-      style={{ background: "#101512", padding: isMobile ? "56px 20px" : "96px 48px" }}
-    >
-      <div
-        style={{
-          maxWidth: 1024,
-          margin: "0 auto",
-          display: "grid",
-          gridTemplateColumns: isCompact ? "1fr" : "0.85fr 1.15fr",
-          gap: isCompact ? 28 : 56,
-          alignItems: "center",
-        }}
-      >
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
-          <span
-            style={{
-              font: "500 12px 'JetBrains Mono',monospace",
-              color: "#9ef0c6",
-              letterSpacing: ".08em",
-              marginBottom: 18,
-            }}
-          >
-            ZERO-SIGNUP CLI
-          </span>
-          <h2
-            style={{
-              margin: 0,
-              font: "600 40px/1.12 Geist,sans-serif",
-              letterSpacing: "-.02em",
-              color: "#f7f6f1",
-              textWrap: "balance",
-            }}
-          >
-            Try it before you trust it.
-          </h2>
-          <p
-            style={{
-              margin: "18px 0 0",
-              font: "400 16.5px/1.6 Geist,sans-serif",
-              color: "#9aa39b",
-              textWrap: "pretty",
-            }}
-          >
-            One command, no account, nothing leaves your machine. The real output from a real repo
-            is on the right.
-          </p>
-          <span
-            onClick={copy}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              marginTop: 26,
-              font: "500 15px 'JetBrains Mono',monospace",
-              color: "#9ef0c6",
-              background: "#1a221c",
-              border: "1px solid #2c362e",
-              padding: "14px 20px",
-              borderRadius: 10,
-              cursor: "pointer",
-            }}
-          >
-            $ npx codeorion scan . <span style={{ color: "#5d675e", fontSize: 12 }}>{copied ? "✓ copied" : "⧉"}</span>
-          </span>
+    <section id="cli" className="ca-section">
+      <div className="ca-wrap">
+        <div className="ca-file" data-reveal>
+          <span className="ca-file-no">FILE 04</span>
+          <span>ZERO-SIGNUP CLI</span>
         </div>
-        {/* Terminal output is fixed-width by nature — the aligned columns are
-            the point, so shrinking the type would defeat it. Instead the block
-            scrolls horizontally within itself, which keeps the page body from
-            scrolling. minWidth:0 is required: a grid item defaults to
-            min-width:auto and would otherwise refuse to shrink below its
-            content, pushing the whole grid wide. */}
-        <div
-          style={{
-            background: "#0b0f0c",
-            border: "1px solid #232a24",
-            borderRadius: 12,
-            padding: isMobile ? "16px 16px" : "20px 22px",
-            font: isMobile
-              ? "400 11.5px/1.7 'JetBrains Mono',monospace"
-              : "400 13px/1.75 'JetBrains Mono',monospace",
-            minWidth: 0,
-            overflowX: "auto",
-            WebkitOverflowScrolling: "touch",
-          }}
-        >
-          <div><span style={{ color: "#7b857c" }}>~/vibe/codeaudit ›</span> <span style={{ color: "#f0c064" }}>npx</span> <span style={{ color: "#e8ede8" }}>codeorion scan</span></div>
-          <div style={{ marginTop: 12 }}><span style={{ color: "#e8ede8", fontWeight: 600 }}>CodeAudit</span> <span style={{ color: "#7b857c" }}>· static scan of ~/vibe/codeaudit</span></div>
-          <div style={{ marginTop: 12, color: "#e8ede8", fontWeight: 600 }}>Dependencies</div>
-          <div><span style={{ color: "#ff8a70" }}>  phantom</span><span style={{ color: "#e8ede8" }}>    react-toolkitz</span></div>
-          <div><span style={{ color: "#ff8a70" }}>  phantom</span><span style={{ color: "#e8ede8" }}>    @codeaudit/engine</span></div>
-          <div><span style={{ color: "#f0c064" }}>  unused</span><span style={{ color: "#e8ede8" }}>     concurrently</span></div>
-          <div style={{ color: "#7b857c" }}>  22 healthy packages not shown</div>
-          <div style={{ marginTop: 12 }}><span style={{ color: "#e8ede8", fontWeight: 600 }}>Dead-code candidates</span> <span style={{ color: "#7b857c" }}>(static analysis only)</span></div>
-          <div><span style={{ color: "#f0c064" }}>  candidate</span><span style={{ color: "#e8ede8" }}>  listSourceFiles</span><span style={{ color: "#7b857c" }}>  packages/engine/src/imports.ts:36</span></div>
-          <div style={{ marginTop: 12 }}><span style={{ color: "#e8ede8", fontWeight: 600 }}>Score:</span> <span style={{ color: "#f0c064", fontWeight: 600 }}>66.3 (C)</span> <span style={{ color: "#7b857c" }}>· 50 files analyzed</span></div>
-          <div style={{ color: "#ff8a70", fontWeight: 600 }}>2 phantom dependencies — remove before shipping</div>
-          <div style={{ marginTop: 12, color: "#7b857c" }}>→ Track trends, gate PRs, and get AI-reviewed findings: connect this repo at <span style={{ color: "#9ef0c6" }}>codeaudit.dev</span></div>
+        <div className="ca-split">
+          <div className="ca-split-copy" data-reveal>
+            <h2 className="ca-h2">
+              Try it before you <em>trust it</em>.
+            </h2>
+            <p className="ca-lede">
+              One command, no account, nothing leaves your machine. The real output from a real
+              repo is on the right.
+            </p>
+            <span
+              className="ca-cmd-chip"
+              ref={chipRef}
+              onClick={copy}
+              role="button"
+              tabIndex={0}
+              aria-label="Copy the scan command to your clipboard"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  copy();
+                }
+              }}
+            >
+              $ npx codeorion scan .
+              <span className="ca-copy-hint" style={{ fontSize: 11 }}>
+                {copied ? "✓ copied" : "⧉"}
+              </span>
+            </span>
+          </div>
+          <div className="ca-term" data-reveal style={{ transitionDelay: "0.12s" }}>
+            <div>
+              <span className="t-dim">~/vibe/codeaudit ›</span>{" "}
+              <span className="t-accent">npx</span> <span className="t-fg">codeorion scan</span>
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <span className="t-b">CodeAudit</span>{" "}
+              <span className="t-dim">· static scan of ~/vibe/codeaudit</span>
+            </div>
+            <div className="t-b" style={{ marginTop: 12 }}>
+              Dependencies
+            </div>
+            <div>
+              <span className="t-crit">  phantom</span>
+              <span className="t-fg">    react-toolkitz</span>
+            </div>
+            <div>
+              <span className="t-crit">  phantom</span>
+              <span className="t-fg">    @codeaudit/engine</span>
+            </div>
+            <div>
+              <span className="t-warn">  unused</span>
+              <span className="t-fg">     concurrently</span>
+            </div>
+            <div className="t-dim">  22 healthy packages not shown</div>
+            <div style={{ marginTop: 12 }}>
+              <span className="t-b">Dead-code candidates</span>{" "}
+              <span className="t-dim">(static analysis only)</span>
+            </div>
+            <div>
+              <span className="t-warn">  candidate</span>
+              <span className="t-fg">  listSourceFiles</span>
+              <span className="t-dim">  packages/engine/src/imports.ts:36</span>
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <span className="t-b">Score:</span>{" "}
+              <span className="t-warn" style={{ fontWeight: 600 }}>
+                66.3 (C)
+              </span>{" "}
+              <span className="t-dim">· 50 files analyzed</span>
+            </div>
+            <div className="t-crit" style={{ fontWeight: 600 }}>
+              2 phantom dependencies — remove before shipping
+            </div>
+            <div className="t-dim" style={{ marginTop: 12 }}>
+              → Track trends, gate PRs, and get AI-reviewed findings: connect this repo at{" "}
+              <span className="t-accent">codeaudit.dev</span>
+            </div>
+          </div>
         </div>
       </div>
     </section>

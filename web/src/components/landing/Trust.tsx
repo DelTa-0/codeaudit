@@ -1,101 +1,70 @@
-import { useIsMobile, useIsCompact } from "../../lib/useMediaQuery";
+import { useEffect, useState } from "react";
+import { useInViewOnce } from "../../lib/useFx";
 
 const OPT_INS = [
-  { title: "Webhook auto-scan", body: "Scan automatically on every push", bg: "#12b673", bd: "#0e9b60", side: "flex-end" as const },
-  { title: "Merge gate", body: "Block PRs below your score threshold", bg: "#e0ddd2", bd: "#cfccc0", side: "flex-start" as const },
-  { title: "Auto-fix PRs", body: "Bot opens dependency-cleanup PRs", bg: "#e0ddd2", bd: "#cfccc0", side: "flex-start" as const },
+  { title: "Webhook auto-scan", body: "Scan automatically on every push", on: true },
+  { title: "Merge gate", body: "Block PRs below your score threshold", on: false },
+  { title: "Auto-fix PRs", body: "Bot opens dependency-cleanup PRs", on: false },
 ];
 
+/**
+ * The one light section on the page — the terms of engagement, set on paper
+ * like the agreement you actually sign. The one default-on switch flips
+ * itself as the section enters: you watch the opt-in happen.
+ */
 export function Trust() {
-  const isMobile = useIsMobile();
-  const isCompact = useIsCompact();
+  const [cardsRef, inView] = useInViewOnce<HTMLDivElement>();
+  const [flipped, setFlipped] = useState(false);
+  useEffect(() => {
+    if (!inView) return;
+    const t = setTimeout(() => setFlipped(true), 550);
+    return () => clearTimeout(t);
+  }, [inView]);
   return (
-    <section style={{ background: "#d9f4e3", padding: isMobile ? "56px 20px" : "96px 48px" }}>
-      <div
-        style={{
-          maxWidth: 1024,
-          margin: "0 auto",
-          display: "grid",
-          gridTemplateColumns: isCompact ? "1fr" : "1fr 1fr",
-          gap: 64,
-          alignItems: "center",
-        }}
-      >
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
-          <span
-            style={{
-              font: "500 12px 'JetBrains Mono',monospace",
-              color: "#127a4f",
-              letterSpacing: ".08em",
-              marginBottom: 18,
-            }}
-          >
-            EVERYTHING IS OPT-IN
-          </span>
-          <h2
-            style={{
-              margin: 0,
-              font: isMobile ? "600 27px/1.2 Geist,sans-serif" : "600 44px/1.1 Geist,sans-serif",
-              letterSpacing: "-.02em",
-              color: "#0c2a1c",
-              textWrap: "balance",
-            }}
-          >
-            We propose. You decide.
-          </h2>
-          <p
-            style={{
-              margin: "18px 0 0",
-              font: "400 16.5px/1.6 Geist,sans-serif",
-              color: "#12503a",
-              textWrap: "pretty",
-            }}
-          >
-            Every automation ships <strong style={{ fontWeight: 600 }}>off by default</strong> and
-            requires an explicit toggle. CodeAudit never merges, blocks, or deletes anything
-            without a human decision. Auto-fix PRs are opened — never auto-merged.
-          </p>
+    <section className="ca-trust">
+      <div className="ca-wrap" style={{ padding: "clamp(72px, 9vw, 128px) clamp(20px, 4vw, 48px)" }}>
+        <div className="ca-file" data-reveal>
+          <span className="ca-file-no">FILE 07</span>
+          <span>TERMS OF ENGAGEMENT</span>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {OPT_INS.map((o) => (
-            <div
-              key={o.title}
+        <div className="ca-split">
+          <div className="ca-split-copy" data-reveal>
+            <h2 className="ca-h2">
+              We propose. <em>You decide.</em>
+            </h2>
+            <p className="ca-lede">
+              Every automation ships <strong>off by default</strong> and requires an explicit
+              toggle. CodeAudit never merges, blocks, or deletes anything without a human
+              decision. Auto-fix PRs are opened — never auto-merged.
+            </p>
+          </div>
+          <div
+            data-reveal
+            ref={cardsRef}
+            style={{ display: "flex", flexDirection: "column", gap: 12, transitionDelay: "0.12s" }}
+          >
+            {OPT_INS.map((o) => (
+              <div className="ca-toggle-card" key={o.title}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                  <span className="tc-title">{o.title}</span>
+                  <span className="tc-body">{o.body}</span>
+                </div>
+                <div className={`ca-switch${o.on && flipped ? " is-on" : ""}`}>
+                  <span className="knob" />
+                </div>
+              </div>
+            ))}
+            <span
               style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                background: "#f7f6f1",
-                border: "1px solid #bfeacf",
-                borderRadius: 12,
-                padding: "16px 20px",
+                font: "600 10.5px var(--mono)",
+                letterSpacing: ".14em",
+                color: "#12503a",
+                padding: "4px 4px 0",
               }}
             >
-              <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                <span style={{ font: "600 15px Geist,sans-serif", color: "#101512" }}>{o.title}</span>
-                <span style={{ font: "400 13px Geist,sans-serif", color: "#565b51" }}>{o.body}</span>
-              </div>
-              <div
-                style={{
-                  flex: "none",
-                  width: 40,
-                  height: 22,
-                  borderRadius: 99,
-                  background: o.bg,
-                  border: `1px solid ${o.bd}`,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: o.side,
-                  padding: "0 3px",
-                  boxSizing: "border-box",
-                }}
-              >
-                <span style={{ width: 16, height: 16, borderRadius: 99, background: "#fff", boxShadow: "0 1px 2px rgba(0,0,0,.2)" }} />
-              </div>
-            </div>
-          ))}
-          <span style={{ font: "500 11.5px 'JetBrains Mono',monospace", color: "#12503a", padding: "0 4px" }}>
-            DEFAULT STATE SHOWN — YOU FLIP THE SWITCHES.
-          </span>
+              DEFAULT STATE SHOWN — YOU FLIP THE SWITCHES.
+            </span>
+          </div>
         </div>
       </div>
     </section>

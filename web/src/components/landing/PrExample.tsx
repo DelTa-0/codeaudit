@@ -1,4 +1,4 @@
-import { useIsMobile, useIsCompact } from "../../lib/useMediaQuery";
+import { useInViewOnce, useCountUp } from "../../lib/useFx";
 
 const FINDINGS = [
   { type: "PHANTOM", tc: "#c2452d", finding: "currency-format-pro not on npm", sev: "CRITICAL", conf: "1.00" },
@@ -8,190 +8,95 @@ const FINDINGS = [
 ];
 
 export function PrExample() {
-  const isMobile = useIsMobile();
-  const isCompact = useIsCompact();
-
+  const [docRef, inView] = useInViewOnce<HTMLDivElement>();
+  // the pill counts up from the previous scan's 76 to today's 82
+  const score = 76 + useCountUp(6, inView, 800);
   return (
-    <section
-      style={{ borderTop: "1px solid #e6e4dc", padding: isMobile ? "56px 20px" : "96px 48px" }}
-    >
-      <div
-        style={{
-          maxWidth: 1024,
-          margin: "0 auto",
-          display: "grid",
-          gridTemplateColumns: isCompact ? "1fr" : "0.8fr 1.2fr",
-          gap: isCompact ? 28 : 56,
-          alignItems: "start",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "flex-start",
-            // Sticky only makes sense beside a scrolling column. Once stacked,
-            // it would pin the heading over the content below it.
-            position: isCompact ? "static" : "sticky",
-            top: isCompact ? undefined : 96,
-          }}
-        >
-          <span
-            style={{
-              font: "500 12px 'JetBrains Mono',monospace",
-              color: "#127a4f",
-              letterSpacing: ".08em",
-              marginBottom: 18,
-            }}
-          >
-            IN YOUR PULL REQUESTS
-          </span>
-          <h2
-            style={{
-              margin: 0,
-              font: isMobile ? "600 26px/1.2 Geist,sans-serif" : "600 40px/1.12 Geist,sans-serif",
-              letterSpacing: "-.02em",
-              textWrap: "balance",
-            }}
-          >
-            One sticky comment. Updated on every push.
-          </h2>
-          <p
-            style={{
-              margin: "18px 0 0",
-              font: "400 16.5px/1.6 Geist,sans-serif",
-              color: "#565b51",
-              textWrap: "pretty",
-            }}
-          >
-            No comment spam — a single bot comment that edits itself with the latest score, delta,
-            and findings. This is a real comment from a real PR.
-          </p>
+    <section className="ca-section">
+      <div className="ca-wrap">
+        <div className="ca-file" data-reveal>
+          <span className="ca-file-no">FILE 05</span>
+          <span>IN YOUR PULL REQUESTS</span>
         </div>
-        {/* minWidth:0 is load-bearing. A grid item defaults to min-width:auto,
-            so this card would size itself to the 460px findings table and drag
-            the page wide no matter what overflow the inner box declares. */}
-        <div
-          style={{
-            background: "#fff",
-            border: "1px solid #e6e4dc",
-            borderRadius: 12,
-            overflow: "hidden",
-            minWidth: 0,
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              padding: "12px 18px",
-              background: "#faf9f5",
-              borderBottom: "1px solid #efede6",
-            }}
-          >
-            <div
-              style={{
-                width: 26,
-                height: 26,
-                borderRadius: 99,
-                background: "#101512",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                font: "600 12px 'JetBrains Mono',monospace",
-                color: "#9ef0c6",
-              }}
-            >
-              ✓
-            </div>
-            <span style={{ font: "600 13.5px Geist,sans-serif" }}>codeaudit</span>
-            <span
-              style={{
-                font: "500 10.5px 'JetBrains Mono',monospace",
-                color: "#565b51",
-                background: "#efede6",
-                padding: "2px 7px",
-                borderRadius: 5,
-              }}
-            >
-              bot
-            </span>
-            <span style={{ font: "400 12.5px Geist,sans-serif", color: "#8d9187" }}>commented 2 minutes ago</span>
+        <div className="ca-split">
+          <div className="ca-split-copy" data-reveal>
+            <h2 className="ca-h2">
+              One sticky comment. Updated on <em>every push</em>.
+            </h2>
+            <p className="ca-lede">
+              No comment spam — a single bot comment that edits itself with the latest score,
+              delta, and findings. This is a real comment from a real PR.
+            </p>
           </div>
-          <div style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: 16 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-              <span style={{ font: "600 22px Geist,sans-serif" }}>CodeAudit report</span>
-              <span
-                style={{
-                  font: "600 13px 'JetBrains Mono',monospace",
-                  color: "#127a4f",
-                  background: "#e4f7ec",
-                  border: "1px solid #bfeacf",
-                  padding: "4px 12px",
-                  borderRadius: 99,
-                }}
-              >
-                82/100 ▲ +6
-              </span>
-            </div>
-            {/* Four columns of monospace findings need ~460px to stay aligned
-                and readable. Rather than crush them to ~84px each on a phone,
-                the table keeps its shape and scrolls inside this box. */}
-            <div
-              style={{
-                border: "1px solid #efede6",
-                borderRadius: 8,
-                overflow: "hidden",
-                overflowX: isMobile ? "auto" : "hidden",
-                WebkitOverflowScrolling: "touch",
-              }}
-            >
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "0.9fr 2fr 0.8fr 0.8fr",
-                  minWidth: isMobile ? 460 : undefined,
-                  padding: "9px 14px",
-                  background: "#faf9f5",
-                  font: "600 11px 'JetBrains Mono',monospace",
-                  color: "#8d9187",
-                  letterSpacing: ".05em",
-                }}
-              >
-                <span>TYPE</span>
-                <span>FINDING</span>
-                <span>SEVERITY</span>
-                <span>CONFIDENCE</span>
-              </div>
-              {FINDINGS.map((row, i) => (
-                <div
-                  key={i}
+          <div className="ca-doc" data-reveal style={{ transitionDelay: "0.12s" }} ref={docRef}>
+            <div className="ca-doc-head">
+              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span
                   style={{
-                    display: "grid",
-                    gridTemplateColumns: "0.9fr 2fr 0.8fr 0.8fr",
-                    minWidth: isMobile ? 460 : undefined,
-                    padding: "10px 14px",
-                    borderTop: "1px solid #f3f1ea",
-                    font: "400 12.5px 'JetBrains Mono',monospace",
+                    width: 20,
+                    height: 20,
+                    borderRadius: 999,
+                    background: "#101512",
+                    color: "#9ef0c6",
+                    display: "inline-flex",
                     alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 10,
                   }}
                 >
-                  <span style={{ fontWeight: 600, color: row.tc }}>{row.type}</span>
-                  <span style={{ color: "#101512" }}>{row.finding}</span>
-                  <span style={{ color: row.tc }}>{row.sev}</span>
-                  <span style={{ color: "#565b51" }}>{row.conf}</span>
+                  ✓
+                </span>
+                codeaudit <span style={{ opacity: 0.6 }}>· bot</span>
+              </span>
+              <span>commented 2 minutes ago</span>
+            </div>
+            <div style={{ padding: "20px 20px 22px", display: "flex", flexDirection: "column", gap: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+                <span style={{ font: "700 22px var(--serif, serif)" }}>CodeAudit report</span>
+                <span className="ca-pr-score">
+                  {score}/100{" "}
+                  <span className={`ca-pr-delta${inView ? " is-on" : ""}`} style={{ animationDelay: "0.9s" }}>
+                    ▲ +6
+                  </span>
+                </span>
+              </div>
+              <div className="ca-pr-table">
+                <div className="ca-pr-thead">
+                  <span>TYPE</span>
+                  <span>FINDING</span>
+                  <span>SEVERITY</span>
+                  <span>CONFIDENCE</span>
                 </div>
-              ))}
+                {FINDINGS.map((row, i) => (
+                  <div
+                    className={`ca-pr-tr ca-stamp-row${inView ? " is-on" : ""}`}
+                    style={{ animationDelay: `${0.2 + i * 0.16}s` }}
+                    key={row.finding}
+                  >
+                    <span style={{ fontWeight: 600, color: row.tc }}>{row.type}</span>
+                    <span style={{ color: "#101512" }}>{row.finding}</span>
+                    <span style={{ color: row.tc }}>{row.sev}</span>
+                    <span style={{ color: "#8d9187" }}>{row.conf}</span>
+                  </div>
+                ))}
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  font: "500 12.5px 'IBM Plex Mono', monospace",
+                  color: "#127a4f",
+                }}
+              >
+                <span style={{ width: 8, height: 8, borderRadius: 999, background: "#12b673" }} />
+                Merge gate: passing — threshold 70, score 82
+              </div>
+              <span style={{ font: "400 12px Geist, sans-serif", color: "#8d9187" }}>
+                Findings are proposals. CodeAudit never blocks, merges, or deletes without your
+                explicit opt-in.
+              </span>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, font: "400 13px 'JetBrains Mono',monospace", color: "#127a4f" }}>
-              <span style={{ width: 8, height: 8, borderRadius: 99, background: "#12b673" }} />
-              Merge gate: passing — threshold 70, score 82
-            </div>
-            <span style={{ font: "400 12px Geist,sans-serif", color: "#8d9187" }}>
-              Findings are proposals. CodeAudit never blocks, merges, or deletes without your
-              explicit opt-in.
-            </span>
           </div>
         </div>
       </div>
