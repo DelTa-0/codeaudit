@@ -9,19 +9,33 @@ import { badRequest, conflict, unauthorized } from "../lib/errors.js";
 
 export const authRouter = Router();
 
-// Credential endpoints are the one place an anonymous caller can guess a
-// secret, so they get a tighter budget than the scan routes. Keyed by IP —
-// which requires `trust proxy` to be set, or every request behind the reverse
-// proxy shares one bucket and the limit locks out all users at once.
-const credentialsLimiter = rateLimit({
+// Login is where an anonymous caller guesses a password, so it gets the tight
+// budget. Keyed by IP — which requires `trust proxy` (set in index.ts), or
+// every request behind the reverse proxy shares one bucket.
+const loginLimiter = rateLimit({
   windowMs: 15 * 60_000,
   limit: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  // Failed attempts are what we care about; a user logging in successfully
-  // several times should not burn through the allowance.
+  // Only failed attempts count; logging in successfully several times must not
+  // burn the allowance.
   skipSuccessfulRequests: true,
   message: { error: "Too many attempts. Try again in a few minutes." },
+});
+
+// Registration gets its OWN, more generous bucket. Sharing login's bucket
+// meant ten fat-fingered logins from one office IP locked registration for
+// everyone behind that NAT — a real day-one failure for the "a colleague
+// showed me this, let me sign up" path on a shared corporate network. Still
+// capped, to blunt automated mass-signup; unlike login it does not skip
+// successes, since a burst of successful registrations from one IP is exactly
+// the abuse to slow.
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60_000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many sign-ups from this network. Try again later." },
 });
 
 const credentialsSchema = z.object({
@@ -40,7 +54,7 @@ function slugify(name: string): string {
   );
 }
 
-authRouter.post("/register", credentialsLimiter, validateBody(credentialsSchema), async (req, res, next) => {
+authRouter.post("/register", registerLimiter, validateBody(credentialsSchema), async (req, res, next) => {
   try {
     const { email, password, name } = req.body as z.infer<typeof credentialsSchema>;
     const existing = await queryOne("SELECT id FROM users WHERE email = $1", [email]);
@@ -73,7 +87,7 @@ authRouter.post("/register", credentialsLimiter, validateBody(credentialsSchema)
 
 authRouter.post(
   "/login",
-  credentialsLimiter,
+  loginLimiter,
   validateBody(credentialsSchema.pick({ email: true, password: true })),
   async (req, res, next) => {
     try {

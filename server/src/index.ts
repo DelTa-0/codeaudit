@@ -71,6 +71,21 @@ app.use(
     if (err instanceof HttpError) {
       return res.status(err.status).json({ error: err.message });
     }
+    // Bad *input* is a 400, not a server fault. Two cases were returning 500
+    // and reading, to anyone fuzzing the API, as unhandled crashes:
+    //   - a malformed JSON body (express.json throws a SyntaxError tagged
+    //     entity.parse.failed);
+    //   - a non-UUID value in a path param, which Postgres rejects with
+    //     SQLSTATE 22P02 (invalid_text_representation). This is NOT injection
+    //     — the query is parameterised, so the value never reaches the SQL as
+    //     code — but the 500 it produced looked like one to a reviewer.
+    const e = err as { type?: string; code?: string; status?: number };
+    if (e?.type === "entity.parse.failed") {
+      return res.status(400).json({ error: "Request body is not valid JSON." });
+    }
+    if (e?.code === "22P02") {
+      return res.status(400).json({ error: "A path parameter was malformed." });
+    }
     console.error(err);
     res.status(500).json({ error: "Internal server error" });
   },

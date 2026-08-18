@@ -17,15 +17,27 @@ declare module "express-serve-static-core" {
   }
 }
 
+// Pin the algorithm on both sides. jsonwebtoken already refuses `alg:none`
+// when a secret is supplied, but an explicit allow-list is the belt-and-braces
+// a security reviewer looks for: it closes any future algorithm-confusion
+// (e.g. an attacker-supplied `alg` the library might otherwise honour) by
+// construction, not by trusting the library's default.
+const JWT_ALG = "HS256" as const;
+
 export function signToken(user: AuthUser): string {
-  return jwt.sign({ sub: user.id, email: user.email }, config.jwtSecret, { expiresIn: "7d" });
+  return jwt.sign({ sub: user.id, email: user.email }, config.jwtSecret, {
+    expiresIn: "7d",
+    algorithm: JWT_ALG,
+  });
 }
 
 export function requireAuth(req: Request, _res: Response, next: NextFunction) {
   const header = req.headers.authorization;
   if (!header?.startsWith("Bearer ")) return next(unauthorized());
   try {
-    const payload = jwt.verify(header.slice(7), config.jwtSecret) as jwt.JwtPayload;
+    const payload = jwt.verify(header.slice(7), config.jwtSecret, {
+      algorithms: [JWT_ALG],
+    }) as jwt.JwtPayload;
     req.user = { id: String(payload.sub), email: String(payload.email) };
     next();
   } catch {
