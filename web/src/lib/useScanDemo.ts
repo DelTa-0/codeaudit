@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { prefersReducedMotion } from "./useFx";
 
+// Kept short on purpose. The hero headline is "Catch <word> before it merges.",
+// and a word long enough to wrap the "Catch <word>" clause to a second line
+// changed the heading's height as it rotated, shifting the whole page. Every
+// word here fits the clause on one line (≤ ~12 chars at the hero font), so the
+// heading is a constant two lines tall. "phantom" is the product's own term
+// for a hallucinated/nonexistent package, so the hook survives the shortening.
 export const ROTATING_WORDS = [
-  "hallucinated packages",
+  "phantom deps",
   "dead code",
-  "unused dependencies",
+  "unused deps",
   "AI tech debt",
 ];
 

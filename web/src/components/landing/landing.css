@@ -346,6 +346,12 @@
   font-size: clamp(30px, 3.8vw, 50px);
   line-height: 1.18;
   letter-spacing: 0;
+  /* Every rotating word is short enough that "Catch <word>" stays one line, so
+     the heading is always exactly two lines. This min-height reserves those
+     two lines (in em, so it tracks the clamped font) as belt-and-braces: even
+     if a word were ever mis-sized, the block cannot change height and the page
+     cannot shift. */
+  min-height: calc(2 * 1.18em);
 }
 .ca-hero .ca-h1 em {
   font-style: normal;
