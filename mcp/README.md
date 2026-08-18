@@ -31,9 +31,11 @@ Three repo-level mechanisms turn the verdicts into enforcement:
   promoted to the shipped corpus automatically.
 
 Runs fully offline by default (no account needed) — same registry/CVE
-checks as `npx codeorion`. Set `CODEAUDIT_TOKEN` to additionally get
-an LLM-suggested real alternative for phantom packages that aren't a
-simple typo of anything popular (e.g. `fastimagepro` → Pillow/imageio).
+checks as `npx codeorion`, and **nothing leaves your machine unless you
+opt in** (see [Environment variables](#environment-variables) for exactly
+what each opt-in sends). Set `CODEAUDIT_TOKEN` to additionally get an
+LLM-suggested real alternative for phantom packages that aren't a simple
+typo of anything popular (e.g. `fastimagepro` → Pillow/imageio).
 
 ## Setup
 
@@ -282,6 +284,76 @@ globally, or `"command": "npx", "args": ["-y", "codeorion-mcp"]` otherwise.
 
 `ecosystem` (`"npm"` or `"pypi"`) is optional — omit it and `verify_package`/
 `verify_packages` try npm first, then PyPI.
+
+## Repo governance files
+
+Two committed files turn the tools' verdicts into team-wide enforcement.
+Both are optional; a repo without them loses nothing else.
+
+### `codeorion-mcp.lock` — MCP approval that travels with the repo
+
+Every MCP client binds approval to a server's *name*, and existing
+mitigations pin what a name runs per client machine. That protects one
+laptop — not the teammate who clones the repo tomorrow. The lockfile commits
+the approval:
+
+```bash
+npx codeorion mcp-lock     # "I approve the MCP servers as they stand"
+git add codeorion-mcp.lock && git commit -m "lock MCP servers"
+```
+
+After that, a server that changes what it runs fails `audit_staged`, the
+git hook and CI as a **critical lock mismatch** until a human re-runs
+`mcp-lock` and commits the diff — the change becomes a reviewable lockfile
+diff instead of an edit inside a config nobody re-reads. Identities are
+version-stripped, so pinned version bumps (`docs-mcp@1.2.3` → `@1.2.4`)
+never churn approval. `assess_mcp_server` accepts the lock's content as
+`lockText` and treats a contradicting proposal as a blocker, and
+`audit_tool_descriptions` returns a `toolsHash` you can record in the lock
+so a changed description — a rug pull — also surfaces as a mismatch.
+
+The lock is deliberately **not signed**: whoever can edit the config can
+edit the lock in the same commit, so a signature would claim
+tamper-evidence it cannot deliver. What it delivers is visibility.
+
+### `.codeorion-policy.json` — verdicts with teeth
+
+```json
+{
+  "minAgeDays": 30,
+  "minDownloads": 100,
+  "denyPackages": ["left-pad"],
+  "denyLicenses": ["GPL-3.0"],
+  "forbidShellMcp": true,
+  "forbidUnpinnedMcp": true
+}
+```
+
+| Key | Meaning |
+|---|---|
+| `minAgeDays` | Refuse packages younger than this — freshly registered names are the slopsquatting window |
+| `minDownloads` | Refuse packages below this floor (weekly npm / monthly PyPI) |
+| `denyPackages` | Names that may never be added, however healthy the registry says they are |
+| `allowLicenses` | When set, a package's licence must be in this list (supersedes `denyLicenses`) |
+| `denyLicenses` | Licences that may never be introduced |
+| `forbidShellMcp` | Refuse MCP servers whose invocation goes through a shell |
+| `forbidUnpinnedMcp` | Refuse MCP servers running unpinned packages |
+
+Violations **block** `audit_staged` and `codeorion scan --staged` — a policy
+the tooling merely mentions is advice wearing a policy's name. Every key is
+deliberately one a maintainer can defend in review; anything not expressible
+here is not policy, and the detectors keep their own defaults.
+
+## Environment variables
+
+| Var | Default | What it does |
+|---|---|---|
+| `CODEAUDIT_TOKEN` | unset | Per-repo token enabling hosted LLM alternative suggestions for phantom packages. When set, phantom package *names* are sent to the API with the token. |
+| `CODEAUDIT_API_URL` | the hosted dashboard | Where the two opt-in features above talk to. Set it if you self-host. |
+| `CODEAUDIT_REPORT_PHANTOMS` | unset (off) | Opt-in telemetry: when `1`, a verify that returns `phantom` reports the **package name and ecosystem — nothing else**. No code, no file paths, no repo name, no token, no identity; the server stores name, ecosystem and a counter, and the endpoint returns nothing back. Reports land in a human review queue as *candidates* for the hallucinated-names corpus — nothing is ever promoted into the shipped list automatically, because auto-promotion would let anyone poison the corpus every install carries. |
+
+With all three unset — the default — the server makes registry and OSV
+lookups only, and sends nothing derived from your machine anywhere.
 
 ## Getting a token (optional)
 

@@ -120,6 +120,32 @@ repos:
       - id: codeorion
 ```
 
+## MCP lockfile and policy
+
+```bash
+npx codeorion mcp-lock
+```
+
+Approves the repository's MCP servers as they stand into
+`codeorion-mcp.lock`. Commit the file: from then on, a server that changes
+what it runs — the silent-redefinition attack, where approval stays bound to
+the name while the program behind it changes — fails `scan --staged` as a
+**critical lock mismatch** until a human re-locks and commits the diff.
+Version-stripped identities mean pinned version bumps never churn approval.
+Re-running the command is idempotent and preserves each unchanged server's
+original approval date.
+
+A `.codeorion-policy.json` at the repo root adds blocking policy to
+`scan --staged`: `minAgeDays`, `minDownloads`, `denyPackages`,
+`allowLicenses`/`denyLicenses`, `forbidShellMcp`, `forbidUnpinnedMcp`. A
+deny-listed or licence-forbidden package blocks the commit even when the
+registry calls it perfectly healthy — that is what a policy is for. The full
+schema is documented in
+[`mcp/README.md`](https://github.com/DelTa-0/codeaudit/blob/main/mcp/README.md#codeorion-policyjson--verdicts-with-teeth),
+and the same two files are enforced identically by codeorion-mcp's
+`audit_staged` tool, so the git hook and an agent's self-review cannot
+disagree.
+
 ## What it checks
 
 - **Phantom dependencies** — packages declared or imported that don't

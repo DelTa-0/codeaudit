@@ -10,7 +10,12 @@
     "guardrails",
     "slopsquatting",
     "supply-chain-security",
-    "hallucination"
+    "hallucination",
+    "mcp-security",
+    "tool-poisoning",
+    "prompt-injection",
+    "lockfile",
+    "pre-commit"
   ],
   "author": "CodeAudit",
   "license": "MIT",

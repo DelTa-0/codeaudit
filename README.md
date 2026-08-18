@@ -406,7 +406,7 @@ No framework — each suite is a plain script that prints `PASS`/`FAIL` lines an
 exits non-zero on failure, so they run identically in CI and in a terminal.
 
 ```bash
-npm run test:ground-truth --workspace server            # 212 — engine against a seeded fixture
+npm run test:ground-truth --workspace server            # 230 — engine against a seeded fixture
 npm run test:ground-truth-python --workspace server     # 35  — the same, for Python
 npm run test:finding-lifecycle --workspace server       # 24  — needs postgres (see below)
 npm run test:agent-surface --workspace server           # 15  — agent/MCP inventory
@@ -414,7 +414,9 @@ npm run test:dependency-attribution --workspace server  # 12  — builds a real 
 npm run test:pr-comment --workspace server              # 10  — PR comment body + escaping
 npm run test:llm-protocol --workspace server            # 8   — wire format, against a mock server
 npm run test:plan-limits --workspace server             # 7   — billing tier boundaries
-npm run test:ground-truth --workspace mcp               # 17  — the MCP tools
+npm run test:phantom-reports --workspace server         # 5   — flywheel intake upsert, needs postgres
+npm run test:self-scan --workspace server               # 2   — our detectors against this repo, zero tolerance
+npm run test:ground-truth --workspace mcp               # 45  — all eight MCP tools over real JSON-RPC
 ```
 
 Two of these need something running:
