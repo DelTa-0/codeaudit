@@ -280,6 +280,25 @@ Run `docker compose -f docker-compose.prod.yml run --rm api node
 server/dist/db/migrate.js` first whenever the release adds files under
 `server/migrations/`.
 
+**Seed the admin console operator.** Needed once per environment, after the
+first deploy that includes `008_admin_console.sql`. Nothing has
+`platform_role = 'admin'` by default, so `/admin` is unreachable until this
+runs — which is the intended default, not a bug.
+
+The `api` service reads the box's `.env`, so put the credentials there rather
+than on the command line, where they would land in shell history and in `ps`:
+
+```bash
+nano .env      # add ADMIN_EMAIL= and ADMIN_PASSWORD= (12+ chars)
+docker compose -f docker-compose.prod.yml run --rm api node server/dist/db/seedAdmin.js
+nano .env      # remove both lines again — the seed only needs them once
+```
+
+The script is idempotent: run it again to promote a second operator, or with
+`ADMIN_RESET_PASSWORD=true` to change an existing one's password. Use a
+different password from any other environment — this account reads every
+tenant's logs.
+
 **Logs.**
 
 ```bash
