@@ -15,6 +15,7 @@
     "dev:worker": "npm run dev:worker --workspace server",
     "dev:web": "npm run dev --workspace web",
     "migrate": "npm run migrate --workspace server",
+    "seed:admin": "npm run seed:admin --workspace server",
     "build:engine": "npm run build --workspace @codeaudit/engine",
     "build:cli": "npm run build --workspace @codeaudit/engine && npm run build --workspace codeorion",
     "build:mcp": "npm run build --workspace @codeaudit/engine && npm run build --workspace codeorion-mcp",

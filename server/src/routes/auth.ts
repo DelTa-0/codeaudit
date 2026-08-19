@@ -5,7 +5,8 @@ import { z } from "zod";
 import { query, queryOne } from "../db/pool.js";
 import { signToken, requireAuth } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
-import { badRequest, conflict, unauthorized } from "../lib/errors.js";
+import { conflict, forbidden, unauthorized } from "../lib/errors.js";
+import { logAudit } from "../services/audit.js";
 
 export const authRouter = Router();
 
@@ -79,6 +80,7 @@ authRouter.post("/register", registerLimiter, validateBody(credentialsSchema), a
       user.id,
     ]);
 
+    await logAudit(org.id, user.id, "auth.registered", user.email);
     res.status(201).json({ token: signToken(user), user: { id: user.id, email: user.email } });
   } catch (err) {
     next(err);
@@ -92,13 +94,31 @@ authRouter.post(
   async (req, res, next) => {
     try {
       const { email, password } = req.body as { email: string; password: string };
-      const user = await queryOne<{ id: string; email: string; password_hash: string | null }>(
-        "SELECT id, email, password_hash FROM users WHERE email = $1",
-        [email],
-      );
-      if (!user?.password_hash) throw unauthorized("Invalid email or password");
+      const user = await queryOne<{
+        id: string;
+        email: string;
+        password_hash: string | null;
+        suspended_at: Date | null;
+      }>("SELECT id, email, password_hash, suspended_at FROM users WHERE email = $1", [email]);
+      // Failed sign-ins are the entries an operator most wants during an
+      // incident, and no mutation-shaped middleware would ever produce them:
+      // the request has no authenticated user to attribute. The attempted
+      // address is the target — that is what makes credential stuffing legible
+      // as a pattern rather than as scattered 401s.
+      if (!user?.password_hash) {
+        await logAudit(null, null, "auth.login_failed", email, { reason: "no_such_account" });
+        throw unauthorized("Invalid email or password");
+      }
       const ok = await bcrypt.compare(password, user.password_hash);
-      if (!ok) throw unauthorized("Invalid email or password");
+      if (!ok) {
+        await logAudit(null, user.id, "auth.login_failed", email, { reason: "bad_password" });
+        throw unauthorized("Invalid email or password");
+      }
+      if (user.suspended_at) {
+        await logAudit(null, user.id, "auth.login_blocked", email, { reason: "suspended" });
+        throw forbidden("This account has been suspended. Contact support.");
+      }
+      await logAudit(null, user.id, "auth.login", email);
       res.json({ token: signToken(user), user: { id: user.id, email: user.email } });
     } catch (err) {
       next(err);
@@ -109,7 +129,9 @@ authRouter.post(
 authRouter.get("/me", requireAuth, async (req, res, next) => {
   try {
     const user = await queryOne(
-      "SELECT id, email, name, avatar_url, github_user_id IS NOT NULL AS github_linked FROM users WHERE id = $1",
+      `SELECT id, email, name, avatar_url, platform_role,
+              github_user_id IS NOT NULL AS github_linked
+       FROM users WHERE id = $1`,
       [req.user!.id],
     );
     if (!user) throw unauthorized();

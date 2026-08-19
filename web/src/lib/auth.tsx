@@ -5,6 +5,9 @@ interface AuthUser {
   id: string;
   email: string;
   name: string | null;
+  /** "user" | "admin". Decides whether the console link is offered — never
+   *  whether the console *works*; the server re-checks on every request. */
+  platform_role?: string;
 }
 
 interface AuthState {

@@ -124,6 +124,31 @@ secrets; `.env.example` at the repo root is the template).
 | `REDIS_URL` | `redis://localhost:6380` | matches `docker-compose.yml` |
 | `JWT_SECRET` | — | **required**, any random string (`openssl rand -hex 32`) |
 
+### Admin console (optional)
+
+| Var | Default | Notes |
+|---|---|---|
+| `AUDIT_LOG_RETENTION_DAYS` | `180` | how long the "who did what" log is kept |
+| `SYSTEM_EVENT_RETENTION_DAYS` | `30` | how long operational events are kept |
+
+The retention sweep runs in the **worker**, four times a day. Both tables grow
+unboundedly without it.
+
+Seeding the operator account is a one-off command rather than config, since
+nothing has `platform_role = 'admin'` by default:
+
+```bash
+ADMIN_EMAIL=you@example.com ADMIN_PASSWORD='a-long-passphrase' \
+  npm run seed:admin --workspace server
+```
+
+Credentials come from the environment, never argv (argv lands in shell history
+and is readable via `ps`). Idempotent — an existing account is promoted, its
+password untouched unless `ADMIN_RESET_PASSWORD=true`; a new one is created
+with a personal workspace. Minimum password length 12. Then sign in normally
+and use the **Admin** button in the header, or go straight to `/admin`. Full
+detail: [`docs/features/m7-admin-console.md`](docs/features/m7-admin-console.md).
+
 ### LLM — zombie-code review (optional)
 
 | Var | Notes |

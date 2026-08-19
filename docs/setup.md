@@ -34,9 +34,25 @@ Workspaces as of the feature pack: `packages/engine` (`@codeaudit/engine`,
 shared analysis core), `server`, `web`, `cli` (`npx codeorion`) — `npm
 install` at the repo root installs all four.
 
-Migrations now number three files: `001_core.sql` (initial schema),
-`002_repo_settings.sql` (gate/autofix/badge columns), `003_cli_token.sql`
-(CLI upload token). `npm run migrate` applies whichever are pending.
+Migrations live in `server/migrations/`, numbered and applied in order by
+`npm run migrate` (which applies whichever are pending). The latest is
+`008_admin_console.sql` — platform role, presence, and the two log tables.
+
+## Seeding the operator account
+
+The admin console at `/admin` needs at least one account with
+`users.platform_role = 'admin'`. Nothing has it by default:
+
+```bash
+ADMIN_EMAIL=you@example.com ADMIN_PASSWORD='a-long-passphrase' \
+  npm run seed:admin --workspace server
+```
+
+Credentials come from the environment, never argv — argv lands in shell
+history and is readable via `ps`. The script is idempotent: an existing
+account is promoted (its password untouched unless
+`ADMIN_RESET_PASSWORD=true`), a new one is created with a personal workspace.
+Minimum password length is 12. See [[m7-admin-console]].
 
 ## Running
 

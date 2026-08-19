@@ -63,6 +63,9 @@ import {
 import { reviewCandidatesWithLlm, suggestAlternatives } from "@codeaudit/engine";
 import { config } from "./lib/config.js";
 import { reconcileFindings, type FindingDelta } from "./services/findingLifecycle.js";
+import { logEvent, logError } from "./services/systemEvents.js";
+import { startHeartbeat } from "./services/workerHeartbeat.js";
+import { startLogRetention } from "./services/logRetention.js";
 
 /**
  * Turns a scan failure into a sentence a user can act on.
@@ -561,6 +564,13 @@ async function processScanJob(scanJobId: string) {
       [scanJobId, humanizeScanError(message).slice(0, 1000)],
     );
     console.error(`[scan ${scanJobId}] failed:`, err);
+    // The user-facing column gets the humanized sentence; the operator log
+    // keeps the raw error and the stack, which is what a diagnosis needs.
+    await logError("worker", "scan.failed", err, {
+      orgId: scan.org_id,
+      scanJobId,
+      context: { repo: repo.full_name, commit: scan.commit_sha },
+    });
 
     // A failed scan never blocks anyone's merge — report neutral if gated.
     if (repo.gate_enabled && repo.installation_id && scan.commit_sha && githubConfigured()) {
@@ -587,22 +597,39 @@ const worker = new Worker<ScanJobData>(
 
 warnIfGithubAppMisconfigured();
 
+/**
+ * Job failures used to reach console.error on one machine and vanish with the
+ * container. They are now also durable rows the admin console can show, which
+ * is the difference between "a customer says scans are broken" and "seventeen
+ * scans failed in the last hour, all with the same clone error".
+ */
+function recordJobFailure(queue: string, jobId: string | undefined, err: Error | undefined) {
+  console.error(`${queue} ${jobId} failed`, err);
+  void logError("queue", `${queue}.job_failed`, err ?? new Error("unknown failure"), {
+    context: { queue, jobId: jobId ?? null },
+  });
+}
+
 worker.on("ready", () => console.log("Scan worker ready"));
-worker.on("failed", (job, err) => console.error(`job ${job?.id} failed`, err));
+worker.on("failed", (job, err) => recordJobFailure("scan", job?.id, err));
 
 const prCommentWorker = new Worker<PrCommentJobData>(
   "pr-comment",
   async (job) => processPrCommentJob(job.data.scanJobId),
   { connection: redisConnection, concurrency: 2 },
 );
-prCommentWorker.on("failed", (job, err) => console.error(`pr-comment ${job?.id} failed`, err));
+prCommentWorker.on("failed", (job, err) => recordJobFailure("pr-comment", job?.id, err));
 
 const autofixWorker = new Worker<AutofixJobData>(
   "autofix",
   async (job) => processAutofixJob(job.data.scanJobId, job.data.requestedBy),
   { connection: redisConnection, concurrency: 1 },
 );
-autofixWorker.on("failed", (job, err) => console.error(`autofix ${job?.id} failed`, err));
+autofixWorker.on("failed", (job, err) => recordJobFailure("autofix", job?.id, err));
+
+const heartbeat = startHeartbeat();
+const retention = startLogRetention();
+void logEvent({ source: "worker", event: "worker.started", message: "Scan worker started" });
 
 // SIGTERM is what actually arrives in production — Docker, ECS and Render all
 // send it on stop, and only SIGINT was handled, so every deploy killed the
@@ -610,6 +637,8 @@ autofixWorker.on("failed", (job, err) => console.error(`autofix ${job?.id} faile
 // SIGINT is kept for Ctrl-C in local dev.
 async function shutdown(signal: string) {
   console.log(`${signal} received, draining workers…`);
+  clearInterval(heartbeat);
+  clearInterval(retention);
   await Promise.all([worker.close(), prCommentWorker.close(), autofixWorker.close()]);
   process.exit(0);
 }

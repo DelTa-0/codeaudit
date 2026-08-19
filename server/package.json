@@ -6,6 +6,7 @@
     "dev": "tsx watch src/index.ts",
     "dev:worker": "tsx watch src/worker.ts",
     "migrate": "tsx src/db/migrate.ts",
+    "seed:admin": "tsx src/db/seedAdmin.ts",
     "test:ground-truth": "tsx test/ground-truth.ts",
     "test:ground-truth-python": "tsx test/ground-truth-python.ts",
     "test:llm-protocol": "tsx test/llm-protocol.ts",
@@ -17,7 +18,8 @@
     "test:dependency-attribution": "tsx test/dependency-attribution.ts",
     "test:agent-surface": "tsx test/agent-surface.ts",
     "test:self-scan": "tsx test/self-scan.ts",
-    "test:phantom-reports": "tsx test/phantom-reports.ts"
+    "test:phantom-reports": "tsx test/phantom-reports.ts",
+    "test:admin-access": "tsx test/admin-access.ts"
   },
   "dependencies": {
     "@codeaudit/engine": "*",

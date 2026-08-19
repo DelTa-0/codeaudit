@@ -15,6 +15,10 @@ import { badgeRouter, publicBadgeRouter } from "./routes/badge.js";
 import { cliTokenRouter, cliUploadRouter } from "./routes/cliScans.js";
 import { mcpAlternativesRouter } from "./routes/mcpAlternatives.js";
 import { phantomReportsRouter } from "./routes/phantomReports.js";
+import { adminRouter } from "./routes/admin/index.js";
+import { trackActivity } from "./middleware/activity.js";
+import { normalizePath } from "./lib/requestContext.js";
+import { logError } from "./services/systemEvents.js";
 import { warnIfGithubAppMisconfigured } from "./services/github.js";
 
 const app = express();
@@ -36,6 +40,11 @@ app.use("/api/webhooks", stripeWebhookRouter);
 
 app.use(express.json({ limit: "100kb" }));
 
+// Opens the request-scoped context every audit entry is written against, and
+// records the activity log when the response finishes. Mounted after the
+// webhook routers on purpose — those carry no actor and are excluded anyway.
+app.use(trackActivity);
+
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 app.use("/api", publicBadgeRouter); // no auth — README-embeddable SVG
 app.use("/api", cliUploadRouter); // no JWT — authed by per-repo CLI token
@@ -50,6 +59,8 @@ app.use("/api", githubRouter);
 app.use("/api", billingRouter);
 app.use("/api", badgeRouter);
 app.use("/api", cliTokenRouter);
+// Platform operator console. The router carries its own guard — see routes/admin/index.ts.
+app.use("/api/admin", adminRouter);
 
 // Same-origin static hosting of the built React app. When WEB_DIST_DIR is set
 // (production single-container deploy), the API serves the web bundle and falls
@@ -67,7 +78,7 @@ if (config.webDistDir) {
 app.use((req, res) => res.status(404).json({ error: "Not found" }));
 
 app.use(
-  (err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  (err: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {
     if (err instanceof HttpError) {
       return res.status(err.status).json({ error: err.message });
     }
@@ -86,7 +97,14 @@ app.use(
     if (e?.code === "22P02") {
       return res.status(400).json({ error: "A path parameter was malformed." });
     }
+    // A 500 is by definition a bug we did not anticipate, which makes it the
+    // single most valuable thing in the operator log. Until now it reached
+    // stderr on one container and was gone with it.
     console.error(err);
+    void logError("api", "request.unhandled_error", err, {
+      userId: req.user?.id ?? null,
+      context: { method: req.method, path: normalizePath(req.originalUrl || req.path) },
+    });
     res.status(500).json({ error: "Internal server error" });
   },
 );

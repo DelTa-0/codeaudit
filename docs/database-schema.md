@@ -13,8 +13,9 @@ related:
 
 # Database Schema
 
-One migration so far: `server/migrations/001_core.sql`. No ORM — tables and
-relationships are the source of truth, queried directly with `pg`.
+Migrations live in `server/migrations/`, `001_core.sql` through
+`008_admin_console.sql`. No ORM — tables and relationships are the source of
+truth, queried directly with `pg`.
 
 ## Tables
 
@@ -89,9 +90,39 @@ and the hosted worker agree on what counts as the same finding; `state` is
 a dismissed finding would make dismissal worthless. Unique on
 `(repo_id, finding_key)`.
 
-**`audit_log`** — append-only, best-effort (a failed insert is logged and
-swallowed, never breaks the request — see `services/audit.ts`). Records
-org/repo/scan/member/billing lifecycle events.
+**`audit_log`** — what a *person* did. Append-only, best-effort (a failed
+insert is logged and swallowed, never breaks the request — see
+`services/audit.ts`). Originally written by hand from a handful of routes;
+since `008_admin_console.sql` it also carries request context (`ip`,
+`user_agent`, `method`, `path`, `status`, `duration_ms`) and is written
+automatically by `middleware/activity.ts` for every mutating request plus the
+auth events. A route that calls `logAudit` gets a semantic entry
+(`repo.connected`) instead of the generic `POST /api/…` one — one action, one
+row. Reads are deliberately not recorded.
+
+**`system_events`** — what the *software* did: `level` (`debug|info|warn|
+error`) × `source` (`api|worker|queue|webhook|billing|llm|auth`) × a stable
+dotted `event` key, plus a `context` JSONB. Kept separate from `audit_log`
+because the two answer different questions for different readers. Emitted by
+the worker (scan and job failures), the API (unhandled 500s), and privileged
+admin actions. Nothing secret goes in `context` — it is rendered verbatim in
+the admin panel.
+
+Both tables are aged out by a sweep in the worker (`services/logRetention.ts`):
+180 days for `audit_log`, 30 for `system_events`, tunable via
+`AUDIT_LOG_RETENTION_DAYS` / `SYSTEM_EVENT_RETENTION_DAYS`. There is no
+endpoint that deletes a log row — an operator who can erase their own trail
+has no trail.
+
+### The platform-role columns on `users`
+
+`008_admin_console.sql` adds `platform_role` (`user | admin`), `last_seen_at`,
+`suspended_at`, and `suspended_reason`. `platform_role` is a **second axis**,
+independent of `org_members.role`: being an org `owner` administers your own
+workspace and grants nothing platform-wide. It is read from the database on
+every authenticated request rather than carried as a JWT claim, so a
+revocation takes effect immediately instead of when the 7-day token expires.
+See [[m7-admin-console]].
 
 ## Relationships
 
@@ -103,7 +134,8 @@ users ──< org_members >── organizations ──< github_installations
                                         │         ├──< finding_lifecycle
                                         │         └── latest_score (denormalized)
                                         ├──< invites
-                                        └──< audit_log
+                                        ├──< audit_log
+                                        └──< system_events
 ```
 
 `finding_lifecycle` hangs off `repositories`, not `scan_jobs` — that is the
@@ -123,6 +155,14 @@ cascades `dependency_findings`/`code_findings`).
 `code_findings(scan_job_id)`, `audit_log(org_id)` — all added in the same
 migration, sized for the current query patterns (org-scoped lookups, repo →
 scans, scan → findings).
+
+The admin console added the time-ordered indexes those tables now need:
+`audit_log(created_at DESC)`, `audit_log(user_id, created_at DESC)`,
+`audit_log(action, created_at DESC)`, the same three shapes on
+`system_events`, plus a partial `system_events(created_at DESC) WHERE level IN
+('warn','error')` for the "what is broken right now" query, and
+`users(last_seen_at DESC)` for presence. `users(platform_role) WHERE
+platform_role <> 'user'` is partial because operators are a handful of rows.
 
 `finding_lifecycle(repo_id, state)` and `finding_lifecycle(repo_id, kind)`
 (migration 006) serve the two queries that table exists for: "what is open

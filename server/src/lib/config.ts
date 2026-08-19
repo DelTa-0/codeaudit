@@ -11,6 +11,11 @@ function bool(name: string): boolean {
   return v === "1" || v === "true" || v === "require" || v === "yes";
 }
 
+function int(name: string, fallback: number): number {
+  const n = Number(process.env[name]);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
+}
+
 export const config = {
   port: Number(process.env.PORT ?? 4000),
   appUrl: process.env.APP_URL ?? "http://localhost:5174",
@@ -33,6 +38,14 @@ export const config = {
   // when billing turns on. A single env flag, so it flips off with a restart
   // and no code change.
   betaUnlimited: bool("BETA_UNLIMITED_PLANS"),
+  // How long the two log tables keep rows. audit_log is the "who did what"
+  // record you come back to months later; system_events is operational exhaust
+  // that stops being interesting within days. Different questions, different
+  // windows.
+  retention: {
+    auditLogDays: int("AUDIT_LOG_RETENTION_DAYS", 180),
+    systemEventDays: int("SYSTEM_EVENT_RETENTION_DAYS", 30),
+  },
   llm: {
     apiKey: process.env.XAI_API_KEY ?? "",
     baseUrl: process.env.XAI_BASE_URL ?? "https://api.x.ai/v1",

@@ -48,6 +48,16 @@ export function Layout() {
             </nav>
           )}
           <div className="ml-auto flex items-center gap-2 sm:gap-3">
+            {/* Only platform operators see this. Hiding it is a courtesy, not a
+                control — the console's routes are refused server-side. */}
+            {user?.platform_role === "admin" && (
+              <Link
+                to="/admin"
+                className="rounded-full bg-ink px-3 py-1.5 font-mono text-xs font-medium tracking-wide text-ink-foreground uppercase transition-opacity hover:opacity-90"
+              >
+                Admin
+              </Link>
+            )}
             {org && (
               <span className="hidden rounded-full bg-surface-2 px-3 py-1 text-xs font-medium text-muted lg:inline">
                 {org.name} · {org.plan}
