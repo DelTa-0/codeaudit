@@ -8,6 +8,7 @@ import { Landing } from "./pages/Landing";
 import { AuthPage } from "./pages/Auth";
 import { SignInLinkPage } from "./pages/SignInLink";
 import { SetPasswordPage } from "./pages/SetPassword";
+import { PrivacyPage, TermsPage } from "./pages/Legal";
 import { Dashboard } from "./pages/Dashboard";
 import { RepoDetail } from "./pages/RepoDetail";
 import { ScanDetail } from "./pages/ScanDetail";
@@ -74,6 +75,11 @@ function App() {
             query string is the credential, so requiring a session here would
             make the link useless to the person it was sent to. */}
         <Route path="/signin" element={<SignInLinkPage />} />
+        {/* Public and real. These were catch-all redirects to "/", which meant
+            the privacy link given to Google, and to users, quietly served the
+            marketing page. */}
+        <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/terms" element={<TermsPage />} />
         <Route element={<RequireAuth />}>
           {/* Inside RequireAuth, outside Layout: it needs a session, but it is
               a full-screen auth card and the app chrome around it would be

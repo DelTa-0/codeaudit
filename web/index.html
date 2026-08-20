@@ -39,46 +39,54 @@
     />
   </head>
   <body>
-    <div id="root"></div>
     <!--
-      The app renders client-side, so without this the page a crawler receives is
-      an empty div — no product name, no description, nothing that says what this
-      is. That is invisible day to day and very visible the moment something
-      fetches the page without running scripts, which is what OAuth review, link
-      previews and search indexers all do.
+      The markup inside #root is a fallback, not decoration. React replaces it on
+      mount, so nobody running JavaScript ever sees it — but the app renders
+      entirely client-side, which means the page anyone else receives is whatever
+      sits here. Empty, that was a bare div: no product name, no description.
+      Google's OAuth review rejected the homepage twice on exactly that.
 
-      Not SEO decoration: it is the same claim the rendered page makes, in a form
-      that does not depend on JavaScript. Kept short deliberately, so it stays
-      true as the marketing copy changes.
+      Deliberately inside #root rather than in <noscript>. Both survive a fetch,
+      but noscript is conditional markup that parsers routinely skip on the
+      grounds that it is not visible; this is ordinary visible HTML, and there is
+      nothing to decide about whether it counts.
+
+      Keep it short and keep it true. It is a claim about the product made in a
+      place nobody looks, which is exactly how it goes stale.
     -->
-    <noscript>
-      <h1>CodeAudit — AI Technical Debt Intelligence</h1>
-      <p>
-        CodeAudit audits GitHub repositories for the technical debt AI coding
-        assistants leave behind. It checks every declared and imported dependency
-        against the live npm and PyPI registries, so packages that do not exist —
-        the ones language models invent and attackers then register — are caught
-        before they ship.
-      </p>
-      <p>It also reports:</p>
-      <ul>
-        <li>Known vulnerabilities in declared and transitive dependencies</li>
-        <li>Hardcoded secrets, in git history as well as the working tree</li>
-        <li>Unreferenced code that no longer has a caller</li>
-        <li>
-          Prompt injection and unsafe configuration in the instruction files an AI
-          agent trusts, such as CLAUDE.md, AGENTS.md and MCP server configs
-        </li>
-      </ul>
-      <p>
-        Sign in with a link sent to your email address, or with GitHub. Scanning a
-        repository requires an account.
-      </p>
-      <p>
-        <a href="/register">Create an account</a> ·
-        <a href="/login">Sign in</a>
-      </p>
-    </noscript>
+    <div id="root">
+      <main style="max-width: 42rem; margin: 4rem auto; padding: 0 1.5rem; font-family: system-ui, sans-serif; line-height: 1.6;">
+        <h1>CodeAudit — AI Technical Debt Intelligence</h1>
+        <p>
+          CodeAudit audits GitHub repositories for the technical debt AI coding
+          assistants leave behind. It verifies every declared and imported dependency
+          against the live npm and PyPI registries, so packages that do not exist —
+          the ones language models invent and attackers then register — are caught
+          before they reach your main branch.
+        </p>
+        <p>It also reports:</p>
+        <ul>
+          <li>Known vulnerabilities in declared and transitive dependencies</li>
+          <li>Hardcoded secrets, in git history as well as the working tree</li>
+          <li>Unreferenced code that no longer has a caller</li>
+          <li>
+            Prompt injection and unsafe configuration in the instruction files an AI
+            agent trusts — CLAUDE.md, AGENTS.md, MCP server configs and skill files
+          </li>
+        </ul>
+        <p>
+          It runs as a hosted dashboard with a GitHub App, and as a command-line tool
+          that needs no account. Sign in with a link sent to your email address, or
+          with GitHub.
+        </p>
+        <p>
+          <a href="/register">Create an account</a> ·
+          <a href="/login">Sign in</a> ·
+          <a href="/privacy">Privacy</a> ·
+          <a href="/terms">Terms</a>
+        </p>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
