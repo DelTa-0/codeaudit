@@ -1,6 +1,6 @@
 {
   "name": "codeorion-mcp",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "type": "module",
   "description": "MCP server for AI coding agents (Claude Code, Cursor, Cline, etc.): verify packages before installing, assess MCP servers before adding them, scan for secrets, audit agent configs, and self-review staged changes before committing.",
   "keywords": [
