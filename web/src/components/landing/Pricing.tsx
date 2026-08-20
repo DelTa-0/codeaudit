@@ -5,7 +5,7 @@ export function Pricing() {
     <section id="pricing" className="ca-section">
       <div className="ca-wrap">
         <div className="ca-file" data-reveal>
-          <span className="ca-file-no">FILE 08</span>
+          <span className="ca-file-no">FILE 07</span>
           <span>PRICING</span>
         </div>
         <h2 className="ca-h2" data-reveal style={{ maxWidth: 560 }}>

@@ -18,7 +18,7 @@ export function DashboardPreview() {
     <section className="ca-section">
       <div className="ca-wrap" style={{ textAlign: "center" }}>
         <div className="ca-file" data-reveal>
-          <span className="ca-file-no">FILE 06</span>
+          <span className="ca-file-no">FILE 05</span>
           <span>THE DASHBOARD</span>
         </div>
         <h2 className="ca-h2" data-reveal style={{ maxWidth: 620, margin: "0 auto" }}>

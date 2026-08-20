@@ -6,8 +6,7 @@ import { Hero, ThreatMarquee } from "../components/landing/Hero";
 import { Problem } from "../components/landing/Problem";
 import { HowItWorks } from "../components/landing/HowItWorks";
 import { Features } from "../components/landing/Features";
-import { Cli } from "../components/landing/Cli";
-import { PrExample } from "../components/landing/PrExample";
+import { Try } from "../components/landing/Try";
 import { DashboardPreview } from "../components/landing/DashboardPreview";
 import { Trust } from "../components/landing/Trust";
 import { Pricing } from "../components/landing/Pricing";
@@ -62,8 +61,7 @@ export function Landing() {
       <Problem />
       <HowItWorks />
       <Features />
-      <Cli />
-      <PrExample />
+      <Try />
       <DashboardPreview />
       <Trust />
       <Pricing />

@@ -1484,3 +1484,51 @@
     opacity: 1;
   }
 }
+
+/* --- Try section: CLI / MCP surface switch -------------------------------
+   The product has two things a visitor can run in the next minute, and the
+   page used to show one. Tabs rather than two stacked sections: they answer
+   the same question, and stacking makes the second read as an afterthought —
+   which is how the MCP server ended up mentioned only inside a feature card.
+   Styling borrows the command chip's palette so the switch reads as part of
+   the same control, not a new component. */
+.ca-try-tabs {
+  display: inline-flex;
+  gap: 4px;
+  margin-top: 26px;
+  padding: 4px;
+  background: var(--ink-2);
+  border: 1px solid #ddd9cf;
+  border-radius: 8px;
+}
+.ca-try-tab {
+  font: 600 12px var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  padding: 8px 16px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: color 0.2s, background 0.2s;
+}
+.ca-try-tab:hover {
+  color: var(--paper);
+}
+.ca-try-tab.is-on {
+  color: var(--accent);
+  background: var(--ink-1);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
+}
+.ca-try-tab:focus-visible {
+  outline: 2px solid var(--accent-dim);
+  outline-offset: 2px;
+}
+.ca-try-note {
+  margin-top: 18px;
+  max-width: 46ch;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--muted);
+}

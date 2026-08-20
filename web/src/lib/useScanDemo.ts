@@ -107,10 +107,17 @@ export function useScanDemo() {
 
 const COPY_COMMAND = "npx codeorion scan .";
 
-export function useCopyCommand() {
+/**
+ * Copy-to-clipboard for a shell command.
+ *
+ * Takes the command so one section can offer several — the try section shows
+ * both the CLI scan and the MCP install, and a hook that only knows one
+ * command would mean two hooks or a copy button that copies the wrong thing.
+ */
+export function useCopyCommand(command: string = COPY_COMMAND) {
   const [copied, setCopied] = useState(false);
   const copy = () => {
-    void navigator.clipboard?.writeText(COPY_COMMAND);
+    void navigator.clipboard?.writeText(command);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };

@@ -24,7 +24,7 @@ export function Trust() {
     <section className="ca-trust">
       <div className="ca-wrap" style={{ padding: "clamp(72px, 9vw, 128px) clamp(20px, 4vw, 48px)" }}>
         <div className="ca-file" data-reveal>
-          <span className="ca-file-no">FILE 07</span>
+          <span className="ca-file-no">FILE 06</span>
           <span>TERMS OF ENGAGEMENT</span>
         </div>
         <div className="ca-split">

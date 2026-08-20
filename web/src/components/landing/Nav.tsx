@@ -13,7 +13,7 @@ export function Nav() {
       <div className="ca-nav-links">
         <a href="#how">How it works</a>
         <a href="#features">Features</a>
-        <a href="#cli">CLI</a>
+        <a href="#try">CLI &amp; MCP</a>
         <a href="#pricing">Pricing</a>
       </div>
       <div className="ca-nav-cta">
