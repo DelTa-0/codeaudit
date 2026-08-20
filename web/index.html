@@ -4,6 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CodeAudit — AI Technical Debt Intelligence</title>
+    <meta
+      name="description"
+      content="CodeAudit audits GitHub repositories for the technical debt AI coding assistants leave behind: packages that do not exist, dependencies with known vulnerabilities, hardcoded secrets in git history, unreferenced code, and prompt injection hidden in the instruction files your AI agent reads."
+    />
+    <link rel="canonical" href="https://codeaudit.madhavaryal.info.np/" />
+    <meta property="og:site_name" content="CodeAudit" />
+    <meta property="og:title" content="CodeAudit — AI Technical Debt Intelligence" />
+    <meta
+      property="og:description"
+      content="Audit GitHub repositories for hallucinated packages, known vulnerabilities, leaked secrets and prompt injection in AI agent config."
+    />
+    <meta property="og:url" content="https://codeaudit.madhavaryal.info.np/" />
+    <meta property="og:type" content="website" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script>
       // Set the theme before first paint to avoid a flash of the wrong theme.
@@ -27,6 +40,45 @@
   </head>
   <body>
     <div id="root"></div>
+    <!--
+      The app renders client-side, so without this the page a crawler receives is
+      an empty div — no product name, no description, nothing that says what this
+      is. That is invisible day to day and very visible the moment something
+      fetches the page without running scripts, which is what OAuth review, link
+      previews and search indexers all do.
+
+      Not SEO decoration: it is the same claim the rendered page makes, in a form
+      that does not depend on JavaScript. Kept short deliberately, so it stays
+      true as the marketing copy changes.
+    -->
+    <noscript>
+      <h1>CodeAudit — AI Technical Debt Intelligence</h1>
+      <p>
+        CodeAudit audits GitHub repositories for the technical debt AI coding
+        assistants leave behind. It checks every declared and imported dependency
+        against the live npm and PyPI registries, so packages that do not exist —
+        the ones language models invent and attackers then register — are caught
+        before they ship.
+      </p>
+      <p>It also reports:</p>
+      <ul>
+        <li>Known vulnerabilities in declared and transitive dependencies</li>
+        <li>Hardcoded secrets, in git history as well as the working tree</li>
+        <li>Unreferenced code that no longer has a caller</li>
+        <li>
+          Prompt injection and unsafe configuration in the instruction files an AI
+          agent trusts, such as CLAUDE.md, AGENTS.md and MCP server configs
+        </li>
+      </ul>
+      <p>
+        Sign in with a link sent to your email address, or with GitHub. Scanning a
+        repository requires an account.
+      </p>
+      <p>
+        <a href="/register">Create an account</a> ·
+        <a href="/login">Sign in</a>
+      </p>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
