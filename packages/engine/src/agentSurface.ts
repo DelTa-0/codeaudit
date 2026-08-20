@@ -39,6 +39,13 @@ export interface McpServerInventory {
   pinned: boolean;
   /** Invocation runs through a shell — high confidence, read from the command. */
   shell: boolean;
+  /**
+   * Set when the server is a remote endpoint (http/SSE) rather than a local
+   * command. Null for local servers. A remote server is the one shape where
+   * there is no invocation to read at all: what runs lives on someone else's
+   * machine and can change between one request and the next.
+   */
+  remoteEndpoint: string | null;
   /** Paths handed to the server as arguments: a grant visible in the config. */
   filesystemPaths: string[];
   risk: AgentRisk;
@@ -74,6 +81,13 @@ const SHELL_METACHAR = /[;&|`$(){}<>]/;
 const EXCLUDED_DIR = /(^|\/)(node_modules|dist|build|out|coverage|vendor|\.git|__pycache__|\.venv|venv)\//;
 const MAX_FILE_BYTES = 512 * 1024;
 
+/**
+ * A remote MCP endpoint, as clients express it: the transport is a URL, not
+ * an executable. Recognised so it is described as what it is rather than
+ * silently treated as a local command with nothing suspicious in it.
+ */
+const REMOTE_ENDPOINT = /^(?:https?|wss?):\/\/\S+$/i;
+
 /** An argument that is a filesystem path being handed to the server. */
 function looksLikePath(arg: string): boolean {
   if (arg.startsWith("-")) return false;
@@ -100,7 +114,13 @@ function assessServer(
     SHELL_COMMANDS.has(command.toLowerCase().split(/[\\/]/).pop() ?? "") ||
     args.some((a) => SHELL_METACHAR.test(a));
   const filesystemPaths = args.filter(looksLikePath);
-  const { ref, pinned } = packageFromInvocation(command, args);
+  const trimmedCommand = command.trim();
+  const remoteEndpoint = REMOTE_ENDPOINT.test(trimmedCommand) ? trimmedCommand : null;
+  const { ref, pinned: pinnedFromPackage } = packageFromInvocation(command, args);
+  // `pinned` means "reviewing this today binds what runs tomorrow". A remote
+  // endpoint never satisfies that — the operator can change what it serves at
+  // any moment — so reporting it as pinned was false, not merely unhelpful.
+  const pinned = remoteEndpoint ? false : pinnedFromPackage;
 
   const reasons: string[] = [];
   if (shell) reasons.push("starts through a shell, so its arguments are executable, not just data");
@@ -108,15 +128,24 @@ function assessServer(
     reasons.push(
       `granted ${filesystemPaths.length} filesystem path${filesystemPaths.length === 1 ? "" : "s"} as arguments`,
     );
+  if (remoteEndpoint)
+    reasons.push(
+      `is a remote endpoint (${remoteEndpoint}) — the conversation is sent to a third party, and what answers can change without any local change`,
+    );
+  if (!remoteEndpoint && !trimmedCommand)
+    reasons.push("names no executable, so there is no invocation to assess");
   if (!pinned && ref)
     reasons.push(`runs an unpinned package (${ref}), so reviewing it today does not bind what runs tomorrow`);
 
   // Shell is the only single fact severe enough to be high on its own: it
   // turns the config into an execution primitive. Everything else is
   // cumulative — one soft signal is worth noting, two is worth reviewing.
-  const risk: AgentRisk = shell ? "high" : reasons.length >= 2 ? "medium" : reasons.length === 1 ? "medium" : "low";
+  const risk: AgentRisk = shell ? "high" : reasons.length >= 1 ? "medium" : "low";
 
-  return { name, filePath, command, args, packageRef: ref, pinned, shell, filesystemPaths, risk, reasons };
+  return {
+    name, filePath, command, args, packageRef: ref, pinned, shell,
+    filesystemPaths, remoteEndpoint, risk, reasons,
+  };
 }
 
 export interface McpServerProposalAssessment {

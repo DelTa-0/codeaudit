@@ -19,7 +19,9 @@
     "test:agent-surface": "tsx test/agent-surface.ts",
     "test:self-scan": "tsx test/self-scan.ts",
     "test:phantom-reports": "tsx test/phantom-reports.ts",
-    "test:admin-access": "tsx test/admin-access.ts"
+    "test:admin-access": "tsx test/admin-access.ts",
+    "test:canonicalize": "tsx test/canonicalize.ts",
+    "bench:agent-scan": "tsx test/bench-agent-scan.ts"
   },
   "dependencies": {
     "@codeaudit/engine": "*",

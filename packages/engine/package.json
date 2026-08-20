@@ -14,6 +14,10 @@
       "types": "./dist/secrets.d.ts",
       "default": "./dist/secrets.js"
     },
+    "./canonicalize": {
+      "types": "./dist/canonicalize.d.ts",
+      "default": "./dist/canonicalize.js"
+    },
     "./agentConfig": {
       "types": "./dist/agentConfig.d.ts",
       "default": "./dist/agentConfig.js"

@@ -39,6 +39,8 @@ export {
   buildMcpLock,
   writeMcpLock,
   verifyMcpLock,
+  hashInstructionContent,
+  type InstructionFileLockEntry,
   MCP_LOCK_FILENAME,
   type McpLock,
   type McpLockEntry,
@@ -88,9 +90,19 @@ export {
   type PriorityBand,
 } from "./priority.js";
 export {
+  canonicalizeInstructionText,
+  canonicalizeWithTrace,
+  findMixedScriptWords,
+  CONFUSABLE_FOLD,
+  INVISIBLE_CHARS,
+  type CanonicalizationStep,
+  type CanonicalizationTrace,
+} from "./canonicalize.js";
+export {
   findSecrets,
   scanTextForSecrets,
   isSecretScannablePath,
+  secretScanSkipReason,
   redact,
   fingerprintSecret,
   type SecretFinding,

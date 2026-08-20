@@ -40,6 +40,43 @@ const PROVIDER_PATTERNS: { provider: string; pattern: RegExp }[] = [
   { provider: "DigitalOcean token", pattern: /\bdop_v1_[a-f0-9]{64}\b/ },
   { provider: "private key", pattern: /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----/ },
 ];
+/**
+ * A credential embedded in a connection URI — `scheme://user:password@host`.
+ * One of the most common ways a live credential reaches a repository, and the
+ * one shape the tier-2 keyword scan structurally cannot see: the value is not
+ * assigned to a secret-named identifier, it is a substring of a URL that is
+ * usually assigned to something as innocuous as `DATABASE_URL`.
+ *
+ * The scheme is deliberately not an allowlist. `postgres`, `mongodb+srv` and
+ * `rediss` are the common cases, but `https://user:token@host` and
+ * `git://user:pat@host` leak exactly the same way, and enumerating schemes
+ * means the next one is missed by default.
+ */
+const CONNECTION_STRING =
+  /\b[a-z][a-z0-9+.-]{2,15}:\/\/([A-Za-z0-9_.~%-]+):([^@\s'"/]+)@([A-Za-z0-9_.-]+)/gi;
+
+/** Hosts that exist only inside the machine or the deployment running them. */
+const LOOPBACK_HOST = new Set([
+  "localhost",
+  "127.0.0.1",
+  "0.0.0.0",
+  "::1",
+  "host.docker.internal",
+]);
+
+/**
+ * Whether a connection-string host points somewhere only the developer can
+ * reach. A password beside such a host is a local-dev convenience, not a
+ * leaked credential — and every compose file, CI workflow and quick-start
+ * README carries one, so firing on them would bury the real findings.
+ */
+function isUnreachableHost(host: string): boolean {
+  if (LOOPBACK_HOST.has(host.toLowerCase())) return true;
+  // A bare, unqualified name is a compose/Kubernetes service alias:
+  // `postgres:5432` resolves only inside the deployment that defines it.
+  return !host.includes(".");
+}
+
 
 /**
  * Tier 2 — a secret-sounding name assigned a high-entropy literal.
@@ -203,6 +240,9 @@ const SCANNABLE_EXTENSIONS = new Set([
   ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".json", ".yml", ".yaml",
   ".ini", ".cfg", ".conf", ".toml", ".tf", ".tfvars", ".sh", ".bash", ".zsh",
   ".py", ".rb", ".go", ".java", ".properties", ".xml", ".txt", ".md", ".env",
+  // The file types a private key actually lives in. Detecting PEM material
+  // everywhere except here was the wrong direction to be wrong in.
+  ".pem", ".key",
 ]);
 
 /**
@@ -230,17 +270,35 @@ const MINIFIED = /\.min\.(js|css)$|\.map$/;
  */
 const LOCAL_SECRET_FILE = /(^|\/)\.env(\.[A-Za-z0-9_-]+)?$/;
 
-export function isSecretScannablePath(relPath: string): boolean {
+/**
+ * Why a path will not be secret-scanned, or null if it will be.
+ *
+ * `isSecretScannablePath` answers yes/no, which is all a walker needs. A tool
+ * reporting back to an agent needs the category too: "not scanned" collapses
+ * a deliberate exclusion (a template full of fake values) and a plain gap
+ * (a file type nothing knows how to read) into one sentence, and an agent
+ * cannot tell which it got. Naming the reason keeps the honest-refusal
+ * contract honest — the same reason `audit_agent_config` reports an
+ * unrecognised surface rather than an empty finding list.
+ */
+export function secretScanSkipReason(relPath: string): string | null {
   const normalized = relPath.split(path.sep).join("/");
-  if (EXCLUDED_PATH.test(normalized)) return false;
-  if (EXCLUDED_FIXTURE.test(normalized)) return false;
-  if (LOCKFILE.test(normalized)) return false;
-  if (TEMPLATE_FILE.test(normalized)) return false;
-  if (MINIFIED.test(normalized)) return false;
+  if (EXCLUDED_PATH.test(normalized)) return "generated or vendored output";
+  if (EXCLUDED_FIXTURE.test(normalized)) return "a test fixture directory";
+  if (LOCKFILE.test(normalized)) return "a lockfile of integrity hashes";
+  if (TEMPLATE_FILE.test(normalized)) return "a template file, which exists to hold placeholder values";
+  if (MINIFIED.test(normalized)) return "minified or generated output";
   const base = path.posix.basename(normalized);
   // `.env`, `.env.local`, `.npmrc` have no extension in the usual sense.
-  if (base.startsWith(".env") || base === ".npmrc" || base === ".netrc") return true;
-  return SCANNABLE_EXTENSIONS.has(path.posix.extname(base).toLowerCase());
+  if (base.startsWith(".env") || base === ".npmrc" || base === ".netrc") return null;
+  if (!SCANNABLE_EXTENSIONS.has(path.posix.extname(base).toLowerCase())) {
+    return "an unsupported file type for text secret scanning";
+  }
+  return null;
+}
+
+export function isSecretScannablePath(relPath: string): boolean {
+  return secretScanSkipReason(relPath) === null;
 }
 
 /**
@@ -289,6 +347,17 @@ export function scanTextForSecrets(text: string, filePath: string): SecretFindin
     for (const { provider, pattern } of PROVIDER_PATTERNS) {
       const match = pattern.exec(line);
       if (match) push(match[0], provider, lineNumber, 1);
+    }
+
+    CONNECTION_STRING.lastIndex = 0;
+    let conn: RegExpExecArray | null;
+    while ((conn = CONNECTION_STRING.exec(line)) !== null) {
+      const [matched, user, password, host] = conn;
+      if (PLACEHOLDER.test(password)) continue;
+      // `ci:ci`, `postgres:postgres` — a convention, not a credential.
+      if (password === user) continue;
+      if (isUnreachableHost(host)) continue;
+      push(matched, "connection string credential", lineNumber, 1);
     }
 
     if (ENV_REFERENCE.test(line)) return;

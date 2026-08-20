@@ -38,7 +38,7 @@ import { parseManifest } from "./manifest.js";
 import { parsePythonManifest } from "./python/manifest.js";
 import { verifyPackage, type PackageVerifyResult } from "./verify.js";
 import { diffMcpServers, extractMcpServers } from "./mcpDrift.js";
-import { verifyMcpLock } from "./mcpLock.js";
+import { verifyMcpLock, type UnreviewedInstructionFile } from "./mcpLock.js";
 import { loadPolicy, evaluatePackagePolicy, evaluateMcpPolicy, type PolicyViolation } from "./policy.js";
 import { assessMcpServerProposal } from "./agentSurface.js";
 import type { Ecosystem } from "./registry.js";
@@ -146,6 +146,16 @@ export interface StagedReport {
   policyViolations: PolicyViolation[];
   /** True when codeorion-mcp.lock exists and was checked. */
   lockChecked: boolean;
+  /**
+   * Instruction files the agent will trust that carry no approval record.
+   *
+   * Not blocking, and that is the design. The question it answers — has
+   * anyone here read this file — is the one question about an instruction
+   * file that can be answered without judging its contents, which is what
+   * makes it reliable where detection is not. Charging it as a blocker on a
+   * repository that never opted in would spend that reliability on noise.
+   */
+  unreviewedInstructionFiles: UnreviewedInstructionFile[];
 }
 
 export async function scanStaged(repoDir: string = process.cwd()): Promise<StagedReport> {
@@ -229,5 +239,6 @@ export async function scanStaged(repoDir: string = process.cwd()): Promise<Stage
     dependenciesNotChecked: added.length - toCheck.length,
     policyViolations,
     lockChecked: lock.hasLock,
+    unreviewedInstructionFiles: lock.unreviewed,
   };
 }

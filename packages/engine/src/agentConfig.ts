@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { createHash } from "node:crypto";
 import path from "node:path";
+import { canonicalizeWithTrace, findMixedScriptWords, type CanonicalizationStep } from "./canonicalize.js";
 
 /**
  * A file the AI coding agent itself trusts as instructions or configuration —
@@ -35,6 +36,14 @@ export interface AgentConfigFinding {
   surface: AgentSurface;
   /** Remediation sentence. Always written by us, never repo text. */
   message: string;
+  /**
+   * True when the rule only matched after canonicalization — i.e. the payload
+   * was written to defeat a literal matcher. Absent on a raw match, so an
+   * existing consumer sees exactly what it saw before.
+   */
+  canonicalized?: boolean;
+  /** Which canonicalization steps changed the text, when `canonicalized`. */
+  transformations?: CanonicalizationStep[];
   /** Sanitized excerpt. Produced only by `redactSnippet` — never raw. */
   evidence: string;
 }
@@ -86,7 +95,24 @@ export function classifyAgentSurface(relPath: string): AgentSurface | null {
 // ---------------------------------------------------------------------------
 
 /** curl|wget piped straight into a shell. Bounded to guard against a long adversarial line. */
-const CURL_PIPE_SHELL = /\b(?:curl|wget)\b[^\n|]{0,200}\|\s*(?:ba|z|da)?sh\b/i;
+const CURL_PIPE_SHELL =
+  /\b(?:curl|wget)\b[^\n|]{0,200}\|\s*(?:sudo(?:\s+-\w+)*\s+)?(?:\/bin\/)?(?:ba|z|da)?sh\b/i;
+/**
+ * Download-to-a-file, then execute that file — the same attack as
+ * `curl | sh` with the pipe taken out, and the form real install docs most
+ * often use. Deliberately two parts on one line rather than one regex: the
+ * download alone is ordinary (`curl -o data.json …` appears in this repo's
+ * own docs) and the shell call alone is ordinary. Only the pair is an
+ * instruction to run remote code — the same shape as the CREDENTIAL_PATH +
+ * EGRESS_VERB pairing already used for exfiltration.
+ *
+ * Same-line only. A payload split across lines is not caught here; widening
+ * to a window would spend a false-positive budget this rule has not earned.
+ */
+const DOWNLOAD_TO_FILE =
+  /\b(?:curl|wget)\b[^\n]{0,200}(?:\s-[oO]\b|\s--output(?:-document)?\b|>)/i;
+const SHELL_EXEC_AFTER =
+  /(?:&&|;|\|\|)\s*(?:sudo(?:\s+-\w+)*\s+)?(?:\/bin\/)?(?:ba|z|da)?sh\s+\S/i;
 const POWERSHELL_DOWNLOAD_EXEC =
   /\b(?:iex\s*\(|Invoke-Expression\b)[^\n]{0,200}(?:Invoke-WebRequest|iwr|DownloadString)/i;
 const BASE64_EXEC =
@@ -114,6 +140,17 @@ const CREDENTIAL_PATH =
   /\.env\b|~\/\.ssh\b|id_rsa\b|~\/\.aws\/credentials\b|~\/\.npmrc\b|\.npmrc\b|~\/\.config\/gh\b|credentials\.json\b/i;
 const EGRESS_VERB =
   /\bcurl\b|\bwget\b|\bfetch\(|\bPOST\s|\bupload\b|\bexfiltrat\w*\b|\bsend\s+(?:it|them|these)\s+to\b|\bwebhook\b|https?:\/\//i;
+
+/**
+ * Window sizes for canonicalized phrase matching, smallest first so the
+ * tightest span that explains a payload is the one reported.
+ */
+const PHRASE_WINDOW_SIZES = [1, 2, 3] as const;
+
+/** Short, non-reversible key for deduplicating findings by their evidence. */
+function fingerprintEvidence(evidence: string): string {
+  return createHash("sha256").update(evidence).digest("hex").slice(0, 12);
+}
 
 /** Bounded so a huge unclosed `<!--` can't force a runaway scan. */
 const HTML_COMMENT = /<!--([\s\S]{0,500}?)-->/g;
@@ -172,11 +209,18 @@ export function scanAgentText(text: string, filePath: string, surface: AgentSurf
     line: number,
     message: string,
     evidence: string,
+    extra?: { canonicalized: true; transformations: CanonicalizationStep[] },
   ) => {
-    const key = `${rule}:${line}`;
+    // Keyed by evidence as well as rule and line: a canonicalized window and
+    // a raw line can share a start line while describing different spans.
+    const key = `${rule}:${line}:${fingerprintEvidence(evidence)}`;
     if (seen.has(key)) return;
     seen.add(key);
-    findings.push({ filePath, line, category, rule, severity, tier, surface, message, evidence: redactSnippet(evidence) });
+    findings.push({
+      filePath, line, category, rule, severity, tier, surface, message,
+      evidence: redactSnippet(evidence),
+      ...(extra ?? {}),
+    });
   };
 
   // A BOM at the very start of a file is a byte-order mark, not an attack.
@@ -229,10 +273,34 @@ export function scanAgentText(text: string, filePath: string, surface: AgentSurf
       }
     }
 
+    // MIXED_SCRIPT_WORD — tier 1, and the only rule here that is independent
+    // of wording: it reports the tampering rather than the payload, so it
+    // catches homoglyph attacks whose phrasing no list anticipated.
+    //
+    // Deliberately does NOT set hasTier1Hit. That flag unlocks tier-2 phrase
+    // matching on README/CONTRIBUTING, and a single stray Greek character in
+    // a README is far weaker evidence than a zero-width character — not
+    // enough to change how the rest of the file is judged.
+    const mixedScriptWords = findMixedScriptWords(line);
+    if (mixedScriptWords.length) {
+      push(
+        "hidden_text", "mixed_script_word", "medium", 1, lineNumber,
+        `Word mixes Latin with Cyrillic or Greek characters (${mixedScriptWords.length} on this line) — visually identical to plain text, but a different string to every matcher.`,
+        line,
+      );
+    }
+
     if (CURL_PIPE_SHELL.test(line) || POWERSHELL_DOWNLOAD_EXEC.test(line)) {
       push(
         "instruction_injection", "curl_pipe_shell", "critical", 1, lineNumber,
         "Instructs downloading and piping remote content directly into a shell.", line,
+      );
+      hasTier1Hit = true;
+    }
+    if (DOWNLOAD_TO_FILE.test(line) && SHELL_EXEC_AFTER.test(line)) {
+      push(
+        "instruction_injection", "download_then_exec", "critical", 1, lineNumber,
+        "Instructs downloading remote content to a file and then executing it.", line,
       );
       hasTier1Hit = true;
     }
@@ -248,15 +316,64 @@ export function scanAgentText(text: string, filePath: string, surface: AgentSurf
   // injection_phrase — tier 2. On corroborate_only (README/CONTRIBUTING) this
   // fires only alongside a tier-1 hit in the same file, so a security-focused
   // README describing these exact phrases doesn't self-trigger.
-  lines.forEach((rawLine, idx) => {
-    const line = rawLine.slice(0, 2000);
+  const PHRASE_MESSAGE =
+    "Contains phrasing associated with prompt-injection attacks (role hijack, instruction override).";
+  const boundedLines = lines.map((l) => l.slice(0, 2000));
+  /** Line indices already accounted for, so one payload yields one finding. */
+  const phraseReported = new Set<number>();
+
+  // Pass A — raw, per line. Unchanged on purpose: a payload written plainly
+  // keeps the rule id, severity and evidence it has always had, so nothing
+  // downstream (scoring, dashboards, the PR comment) sees a different shape.
+  boundedLines.forEach((line, idx) => {
     if (!INJECTION_PHRASE.test(line)) return;
     if (surface === "corroborate_only" && !hasTier1Hit) return;
-    push(
-      "instruction_injection", "injection_phrase", "high", 2, idx + 1,
-      "Contains phrasing associated with prompt-injection attacks (role hijack, instruction override).", line,
-    );
+    push("instruction_injection", "injection_phrase", "high", 2, idx + 1, PHRASE_MESSAGE, line);
+    phraseReported.add(idx);
   });
+
+  // Pass B — canonicalized, over a bounded sliding window.
+  //
+  // Each line is canonicalized ONCE and windows are assembled from the cached
+  // results, which the composition property in canonicalize.ts makes exact.
+  // The naive form — canonicalize every window — would triple the work for an
+  // identical answer.
+  //
+  // Bounded at three lines, matching the budget credential_exfiltration
+  // already spends. A whole-file join is the tempting version and the wrong
+  // one: it manufactures phrases out of unrelated paragraphs.
+  const canonicalLines = boundedLines.map((line) => canonicalizeWithTrace(line));
+  for (let i = 0; i < boundedLines.length; i++) {
+    if (phraseReported.has(i)) continue;
+    for (const size of PHRASE_WINDOW_SIZES) {
+      if (i + size > boundedLines.length) break;
+      // Skip a window that reaches into a line already reported. Checking
+      // only the START line was not enough: a raw hit on line 3 and a
+      // three-line window opening at line 1 are one phrase, and were being
+      // reported as two findings. Found against a real corpus, not in
+      // review. A larger window can only overlap more, so stop rather than
+      // continue.
+      let overlapsReported = false;
+      for (let k = i; k < i + size; k++) {
+        if (phraseReported.has(k)) { overlapsReported = true; break; }
+      }
+      if (overlapsReported) break;
+      const slice = canonicalLines.slice(i, i + size);
+      const canonical = slice.map((c) => c.text).join(" ").trim();
+      if (!INJECTION_PHRASE.test(canonical)) continue;
+      if (surface === "corroborate_only" && !hasTier1Hit) break;
+      const steps = [...new Set(slice.flatMap((c) => c.transformations))];
+      push(
+        "instruction_injection", "injection_phrase_canonicalized", "high", 2, i + 1,
+        `${PHRASE_MESSAGE} Matched only after canonicalization (${steps.join(", ")}), meaning the text was written to read normally while defeating a literal matcher.`,
+        boundedLines.slice(i, i + size).join("\n"),
+        { canonicalized: true, transformations: steps },
+      );
+      // Smallest matching window wins, and every line it covers is spent.
+      for (let k = i; k < i + size; k++) phraseReported.add(k);
+      break;
+    }
+  }
 
   // credential_exfiltration — tier 2, two-part requirement within a 3-line window.
   const credLines: number[] = [];

@@ -368,9 +368,14 @@ dead-code candidate is a hook that gets a permanent `--no-verify`.
 prints the one line to add instead.
 
 Two repo-level governance files extend the hook: `codeorion-mcp.lock`
-(created by `npx codeorion mcp-lock`) commits MCP approval as a team
-artifact — a server that changes what it runs fails the staged scan as a
-critical mismatch until re-locked — and `.codeorion-policy.json` turns
+(created by `npx codeorion mcp-lock`) commits approval as a team artifact —
+both for MCP servers, where a server that changes what it runs fails the
+staged scan as a critical mismatch until re-locked, and for the instruction
+files the agent reads (`CLAUDE.md`, `AGENTS.md`, `.cursorrules`, skill files,
+permission settings), recorded by content hash. That second half is the one
+check here that never inspects the payload, which is exactly why it reaches
+what detection cannot: a rewritten instruction file fails whether or not any
+detector understands what it now says. `.codeorion-policy.json` turns
 verdicts into blocking policy (package age/download floors, deny lists,
 licence rules, no shell or unpinned MCP servers). Users of the
 [pre-commit framework](https://pre-commit.com) can reference this repo
@@ -431,8 +436,9 @@ No framework — each suite is a plain script that prints `PASS`/`FAIL` lines an
 exits non-zero on failure, so they run identically in CI and in a terminal.
 
 ```bash
-npm run test:ground-truth --workspace server            # 230 — engine against a seeded fixture
+npm run test:ground-truth --workspace server            # 336 — engine against a seeded fixture
 npm run test:ground-truth-python --workspace server     # 35  — the same, for Python
+npm run test:canonicalize --workspace server            # 63  — instruction canonicalization + mixed script
 npm run test:finding-lifecycle --workspace server       # 24  — needs postgres (see below)
 npm run test:agent-surface --workspace server           # 15  — agent/MCP inventory
 npm run test:dependency-attribution --workspace server  # 12  — builds a real git repo
@@ -441,7 +447,7 @@ npm run test:llm-protocol --workspace server            # 8   — wire format, a
 npm run test:plan-limits --workspace server             # 7   — billing tier boundaries
 npm run test:phantom-reports --workspace server         # 5   — flywheel intake upsert, needs postgres
 npm run test:self-scan --workspace server               # 2   — our detectors against this repo, zero tolerance
-npm run test:ground-truth --workspace mcp               # 45  — all eight MCP tools over real JSON-RPC
+npm run test:ground-truth --workspace mcp               # 69  — all eight MCP tools over real JSON-RPC
 ```
 
 Two of these need something running:
@@ -451,6 +457,17 @@ Two of these need something running:
   to change, and which it must leave alone.
 - `test:dependency-attribution` builds a throwaway git repository in a temp
   dir; it needs `git` on PATH but nothing else.
+
+One script is a benchmark rather than a test:
+
+```bash
+npm run bench:agent-scan --workspace server
+```
+
+It measures what canonicalization costs the agent-config scanner, and exits
+non-zero if per-line cost grows super-linearly with file size. The sliding
+window is the part that could plausibly regress into quadratic behaviour, so
+that property is checked rather than assumed.
 
 Everything else is offline except the registry-backed checks in
 `test:ground-truth`, which hit npm/PyPI.
@@ -470,6 +487,48 @@ Everything else is offline except the registry-backed checks in
 (4000) preview configs for agent tooling.
 
 ---
+
+## What instruction-file detection does not catch
+
+Agent-config auditing canonicalizes text before matching, so a payload
+rewritten with markdown emphasis, inserted punctuation, Unicode homoglyphs,
+fullwidth forms, invisible characters or a line break mid-phrase is detected
+as readily as the plain form. That closes the character layer. It does not
+close the meaning layer, and four classes pass through untouched:
+
+- **Semantic paraphrase.** "Set aside the guidance you were given earlier"
+  shares no keyword with any rule. A phrase list is a denylist, and denylists
+  do not enumerate a language.
+- **Acrostics.** The instruction spelled by the first letter of each line.
+  Every line is innocent; the arrangement is the attack.
+- **Multi-file staging.** A clean `CLAUDE.md` pointing at a second file that
+  carries the payload. Each file scans clean in isolation.
+- **Font-level spoofing.** Explicitly outside what any Unicode-data approach
+  reaches — [UTS #39](https://www.unicode.org/reports/tr39/) says so itself.
+
+Every instruction file starts **unreviewed**, and a scan says so — with no
+suspicion test in the middle, because `is this file suspicious` cannot be
+answered reliably while `has anyone here approved it` always can. A freshly
+cloned repository therefore reports its instruction files for reading rather
+than reporting silence, and silence is what would otherwise be
+indistinguishable from approval. It is never charged as a finding: a
+repository that never asked for a lock is not handed a critical on first run.
+
+That also settles what detection is for. It is triage, not a gate — it decides
+which file a reviewer opens first, not whether anyone opens one. Its false
+negatives stop being fatal once it is no longer the thing standing between a
+payload and a person.
+
+The lockfile is the answer to all four, and the reason it is the answer is
+that it does not try to be a detector. `codeorion-mcp.lock` records the
+content hash of every instruction file a human approved; a file that differs
+from what was approved is a critical finding regardless of what it now says.
+Detection tells you a file looks malicious. The lock tells you a file is not
+the one you read — which is the question that can actually be answered.
+
+Detection is mitigation, not a fix. The durable protection is that every
+automated action here is opt-in per repository, off by default, and
+audit-logged, so a missed payload still cannot act on its own.
 
 ## Security posture
 

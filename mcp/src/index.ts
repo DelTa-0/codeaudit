@@ -4,7 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { verifyPackage, type PackageVerifyResult } from "@codeaudit/engine";
-import { scanTextForSecrets, isSecretScannablePath } from "@codeaudit/engine/secrets";
+import { scanTextForSecrets, secretScanSkipReason } from "@codeaudit/engine/secrets";
 import { classifyAgentSurface, scanAgentText, auditAgentJson } from "@codeaudit/engine/agentConfig";
 import { assessMcpServerProposal } from "@codeaudit/engine/agentSurface";
 import { checkProposedDependency } from "@codeaudit/engine/duplicates";
@@ -201,13 +201,14 @@ server.registerTool(
     const target = filePath ?? "<buffer>";
     // Say so explicitly rather than returning an empty result, or the agent
     // reads "no findings" as "safe" when we simply did not look.
-    if (filePath && !isSecretScannablePath(filePath)) {
+    const skipReason = filePath ? secretScanSkipReason(filePath) : null;
+    if (skipReason) {
       return {
         content: [
           {
             type: "text" as const,
             text: JSON.stringify(
-              { scanned: false, reason: `${filePath} is a template or excluded path; not scanned.`, findings: [] },
+              { scanned: false, reason: `${filePath} is ${skipReason}; not scanned.`, findings: [] },
               null,
               2,
             ),
@@ -374,6 +375,14 @@ server.registerTool(
     if (pkg?.deprecated) cautions.push(`the package is deprecated: ${pkg.deprecated}`);
     if (!assessment.server.pinned && assessment.server.packageRef)
       cautions.push("the package is unpinned, so reviewing it today does not bind what runs tomorrow — pin a version");
+    if (assessment.server.remoteEndpoint)
+      cautions.push(
+        `this is a remote endpoint (${assessment.server.remoteEndpoint}), not a local command — every request and its context go to a third party, and what answers there can change with no change here. Confirm you trust the operator.`,
+      );
+    if (!assessment.server.remoteEndpoint && !command.trim())
+      cautions.push(
+        "the proposal names no executable, so nothing about what it would run could be assessed — this is not a clean result",
+      );
     if (assessment.server.filesystemPaths.length)
       cautions.push(`filesystem paths are granted as arguments: ${assessment.server.filesystemPaths.join(", ")}`);
 
@@ -554,10 +563,15 @@ server.registerTool(
               policyViolations: report.policyViolations,
               lockChecked: report.lockChecked,
               blocking,
+              // Reported to the agent that is about to read these files. Not
+              // counted in `blocking`: unreviewed is a state, not a defect.
+              unreviewedInstructionFiles: report.unreviewedInstructionFiles,
               guidance:
                 blocking > 0
                   ? `Do not commit: ${blocking} blocking finding(s). Fix them, or ask the user to override explicitly.`
-                  : "Nothing blocking in the staged changes.",
+                  : report.unreviewedInstructionFiles.length > 0
+                    ? `Nothing blocking in the staged changes. ${report.unreviewedInstructionFiles.length} instruction file(s) here carry no approval record — you will read them as instructions, and no one has recorded reading them first. Show the user the list and ask them to review, then record approval with \`npx codeorion mcp-lock\`.`
+                    : "Nothing blocking in the staged changes.",
             },
             null,
             2,

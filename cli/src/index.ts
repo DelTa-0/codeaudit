@@ -199,22 +199,47 @@ function parseArgs(argv: string[]): CliArgs {
  * critical lock mismatch until a human re-runs this command and commits the
  * diff. Deliberately explicit and manual: an auto-updating approval file
  * would approve everything and record nothing.
+ *
+ * The lock covers instruction files too — CLAUDE.md, AGENTS.md, .cursorrules,
+ * skill files, permission settings — by content hash. That half is the one
+ * that does not depend on recognising an attack: a rewritten instruction file
+ * fails the check whether or not any detector understands what it now says,
+ * which is what reaches paraphrase and other payloads no rule enumerates.
  */
 function mcpLockCommand(): never {
   const dir = process.cwd();
   const previous = readMcpLock(dir);
   const lock = buildMcpLock(dir, previous);
   const names = Object.keys(lock.servers);
-  if (!names.length && !previous) {
-    console.log("codeorion: no MCP servers found in this repository — nothing to lock.");
+  const files = Object.keys(lock.files ?? {});
+  if (!names.length && !files.length && !previous) {
+    console.log("codeorion: no MCP servers or instruction files found in this repository — nothing to lock.");
     process.exit(0);
   }
   writeMcpLock(dir, lock);
-  console.log(`codeorion: ${previous ? "updated" : "created"} ${MCP_LOCK_FILENAME} with ${names.length} server(s):`);
-  for (const name of names) {
-    console.log(`  ${name.padEnd(24)} ${lock.servers[name].identity}`);
+  console.log(`codeorion: ${previous ? "updated" : "created"} ${MCP_LOCK_FILENAME}.`);
+  if (names.length) {
+    console.log(``);
+    console.log(`  ${names.length} MCP server(s) — approved by what they run:`);
+    for (const name of names) {
+      console.log(`    ${name.padEnd(24)} ${lock.servers[name].identity}`);
+    }
   }
-  console.log("Commit this file. Any later change to what these servers run fails scan --staged until re-locked.");
+  if (files.length) {
+    console.log(``);
+    console.log(`  ${files.length} instruction file(s) — approved by content:`);
+    for (const file of files) {
+      const entry = lock.files![file];
+      console.log(`    ${file.padEnd(40)} ${entry.surface.padEnd(12)} ${entry.hash.slice(0, 12)}`);
+    }
+  }
+  console.log(``);
+  console.log(
+    "Commit this file. A later change to what a server runs, or to the text of an",
+  );
+  console.log(
+    "instruction file, fails scan --staged until a human reads the diff and re-locks.",
+  );
   process.exit(0);
 }
 
@@ -368,6 +393,7 @@ async function runStaged(json: boolean): Promise<never> {
           dependenciesNotChecked: report.dependenciesNotChecked,
           policyViolations: report.policyViolations,
           lockChecked: report.lockChecked,
+          unreviewedInstructionFiles: report.unreviewedInstructionFiles,
           blocking,
           exitCode,
         },
@@ -406,16 +432,39 @@ async function runStaged(json: boolean): Promise<never> {
     console.log(`         ${DIM}${v.message}${RESET}`);
   }
 
+  // Unreviewed instruction files. Printed whether or not anything blocked,
+  // and never counted as a finding — the point is that this is the one
+  // statement about an instruction file that is always true or always false,
+  // with no detector in the middle deciding whether to believe it.
+  if (report.unreviewedInstructionFiles.length) {
+    const n = report.unreviewedInstructionFiles.length;
+    console.log(
+      `${YELLOW}review${RESET}   ${n} file(s) your agent reads as instructions carry no approval record:`,
+    );
+    for (const u of report.unreviewedInstructionFiles) {
+      console.log(`         ${u.file.padEnd(44)} ${DIM}${String(u.lines).padStart(5)} lines  ${u.surface}${RESET}`);
+    }
+    console.log(
+      `         ${DIM}Read them, then \`npx codeorion mcp-lock\` to record that you did.${RESET}`,
+    );
+  }
+
   if (exitCode === 0) {
     const warned =
       report.agentConfig.length +
       report.newDependencies.length +
       report.secrets.length +
       report.policyViolations.length;
+    // "clean" must not appear above an unread instruction file. Nothing was
+    // detected, which is exactly the situation the review prompt exists for --
+    // printing a green all-clear beside it is how a reader learns to skip it.
+    const awaiting = report.unreviewedInstructionFiles.length;
     console.log(
-      warned > 0
-        ? `${DIM}codeorion: ${report.fileCount} staged file(s), nothing blocking.${RESET}`
-        : `${GREEN}codeorion${RESET} ${DIM}${report.fileCount} staged file(s) clean.${RESET}`,
+      awaiting > 0
+        ? `${DIM}codeorion: ${report.fileCount} staged file(s), nothing blocking — ${awaiting} instruction file(s) awaiting review.${RESET}`
+        : warned > 0
+          ? `${DIM}codeorion: ${report.fileCount} staged file(s), nothing blocking.${RESET}`
+          : `${GREEN}codeorion${RESET} ${DIM}${report.fileCount} staged file(s) clean.${RESET}`,
     );
   } else {
     console.log(
