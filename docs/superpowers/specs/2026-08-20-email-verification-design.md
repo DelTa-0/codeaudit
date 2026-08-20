@@ -1,7 +1,18 @@
 # Email verification — design
 
 **Date:** 2026-08-20
-**Status:** approved for implementation
+**Status:** superseded by
+[2026-08-20-magic-link-signup-design.md](2026-08-20-magic-link-signup-design.md)
+
+> Kept rather than deleted. The reasoning below about enumeration oracles and
+> address squatting carries directly into the replacement, and the decision
+> trail explains why the product went passwordless at signup rather than
+> bolting verification onto a form that should not have existed.
+
+> What changed: signup by magic link means an account can only come into
+> existence when someone clicks a link in a mailbox they control. Verification
+> stops being a step to enforce and becomes a property of how accounts are
+> created — so every column, route and gate specified below is unnecessary.
 
 ## Problem
 
