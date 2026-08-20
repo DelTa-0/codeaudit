@@ -39,13 +39,52 @@ These need your AWS account and are **not** created by anything in this repo:
   set `DATABASE_SSL=require`.
 - **ElastiCache Redis** — with in-transit encryption, use a `rediss://` URL (or
   set `REDIS_TLS=true`).
-- **ECR repository** named `codeorion`.
+- **ECR repository** named `codeorion`, with a lifecycle policy — see below.
 - **ECS Fargate cluster**, an **ALB** with an ACM TLS cert, and a target group
   pointing at container port `4000` (health check path `/api/health`).
 - **Secrets Manager** entries for `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, and
   any optional keys (`XAI_API_KEY`, `GITHUB_APP_PRIVATE_KEY`, Stripe). The GitHub
   App key goes in as PEM contents via `GITHUB_APP_PRIVATE_KEY` — no file needed.
 - IAM roles: `ecsTaskExecutionRole` (pull image + read secrets) and a task role.
+
+### Give the repository a lifecycle policy
+
+Nothing prunes ECR on its own, and every deploy adds roughly 130 MB. Worse,
+each push that moves the `latest` tag leaves the previous manifest behind
+*untagged* — unreferenced, unpullable, and still billed. Left alone this repo
+reached 65 images and 5.35 GB, two thirds of it images nobody could deploy
+even if they wanted to.
+
+```bash
+aws ecr put-lifecycle-policy --repository-name codeorion --lifecycle-policy-text '{
+  "rules": [
+    { "rulePriority": 1,
+      "description": "Expire untagged manifests after a day",
+      "selection": { "tagStatus": "untagged", "countType": "sinceImagePushed", "countUnit": "days", "countNumber": 1 },
+      "action": { "type": "expire" } },
+    { "rulePriority": 2,
+      "description": "Keep the 15 most recent images",
+      "selection": { "tagStatus": "any", "countType": "imageCountMoreThan", "countNumber": 15 },
+      "action": { "type": "expire" } }
+  ]
+}'
+```
+
+Preview before applying — `put-lifecycle-policy` takes effect on its own
+schedule and there is no undo:
+
+```bash
+aws ecr start-lifecycle-policy-preview --repository-name codeorion --lifecycle-policy-text file://policy.json
+```
+
+```bash
+aws ecr get-lifecycle-policy-preview --repository-name codeorion --query 'previewResults[?imageTags].imageTags'
+```
+
+> Check that `latest` and the currently deployed tag are absent from that
+> list. ECR does not treat `latest` as special: a policy that counts images
+> will happily expire it if it is old enough, and the first sign is a
+> deploy that cannot pull.
 
 ## 1. Build and push the image to ECR
 
