@@ -266,19 +266,42 @@ caddy` shows the ACME exchange if it does not.
 
 ## Day-two operations
 
-These commands assume you are still pre-TLS. Once step 8 is done, either add
-`-f docker-compose.tls.yml` to each or set `COMPOSE_FILE` as shown above.
+**Set `COMPOSE_FILE` on the box before running any of these**, if you have not
+already:
+
+```bash
+echo 'export COMPOSE_FILE=docker-compose.prod.yml:docker-compose.tls.yml' >> ~/.bashrc && source ~/.bashrc
+```
+
+Every command below then addresses the whole deployment, TLS included. This is
+not a convenience — it is the difference between a correct command and a
+dangerous one. `caddy` is defined only in `docker-compose.tls.yml`, so a
+command that names just `docker-compose.prod.yml` describes a deployment with
+no TLS proxy in it. Compose will not remove Caddy unprompted, but it now
+considers it an orphan: `--remove-orphans` deletes it, and anything that
+recreates the network can strand it. Losing HTTPS is a strange way to find out
+you dropped a flag.
+
+Pre-TLS, before step 8, use `-f docker-compose.prod.yml` explicitly instead.
 
 **Deploy a new version.** Build and push from your machine (step 2), then on the
 box:
 
 ```bash
-docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d
+docker compose pull && docker compose up -d
 ```
 
-Run `docker compose -f docker-compose.prod.yml run --rm api node
-server/dist/db/migrate.js` first whenever the release adds files under
-`server/migrations/`.
+Confirm the swap actually happened rather than assuming it — `pull` is a no-op
+when the tag has not moved, and `up -d` then recreates nothing:
+
+```bash
+docker inspect --format='{{index .Image}}' $(docker ps -q --filter name=api)
+```
+
+Run it before and after; a deploy that changed something changes that digest.
+
+Run `docker compose run --rm api node server/dist/db/migrate.js` first
+whenever the release adds files under `server/migrations/`.
 
 **Seed the admin console operator.** Needed once per environment, after the
 first deploy that includes `008_admin_console.sql`. Nothing has
@@ -290,7 +313,7 @@ than on the command line, where they would land in shell history and in `ps`:
 
 ```bash
 nano .env      # add ADMIN_EMAIL= and ADMIN_PASSWORD= (12+ chars)
-docker compose -f docker-compose.prod.yml run --rm api node server/dist/db/seedAdmin.js
+docker compose run --rm api node server/dist/db/seedAdmin.js
 nano .env      # remove both lines again — the seed only needs them once
 ```
 
@@ -302,13 +325,13 @@ tenant's logs.
 **Logs.**
 
 ```bash
-docker compose -f docker-compose.prod.yml logs -f --tail 100 api worker
+docker compose logs -f --tail 100 api worker
 ```
 
 **Back up the database.** Nothing does this for you on a single box:
 
 ```bash
-docker compose -f docker-compose.prod.yml exec -T postgres pg_dump -U codeorion codeorion | gzip > backup-$(date +%F).sql.gz
+docker compose exec -T postgres pg_dump -U codeorion codeorion | gzip > backup-$(date +%F).sql.gz
 ```
 
 Copy it off the instance — a backup that only exists on the box being backed up
@@ -317,3 +340,40 @@ is not a backup. Worth a cron job to S3 once you have real users.
 **Disk.** The worker clones repositories into the container's `/tmp` and cleans
 up per job, but a crashed job can leave directories behind. `df -h` if things
 get strange; `docker system prune -a` reclaims old images after a few deploys.
+
+**Shell access without an open SSH port.** The security group above admits SSH
+from a single `/32`, which is the right shape and the wrong mechanism: most
+home connections get a new address whenever the ISP feels like it, and the
+rule then locks out the only person it was written for — usually at the
+moment a deploy is needed. Widening the CIDR trades a lockout for an exposed
+port, which is a worse deal.
+
+Session Manager removes the question. The agent is preinstalled on Amazon
+Linux 2023 and already running; it needs one policy on the instance role:
+
+```bash
+aws iam attach-role-policy --role-name codeorionEc2Role \
+  --policy-arn arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+```
+
+```bash
+aws ssm describe-instance-information --query 'InstanceInformationList[].{id:InstanceId,ping:PingStatus}' --output table
+```
+
+Once the instance reports `Online` there — allow a minute, and restart
+`amazon-ssm-agent` if it does not — a shell is:
+
+```bash
+aws ssm start-session --target <INSTANCE_ID>
+```
+
+Authentication is then IAM rather than a key file, access is logged in
+CloudTrail, and port 22 can be revoked entirely:
+
+```bash
+aws ec2 revoke-security-group-ingress --group-id <SG_ID> --protocol tcp --port 22 --cidr <YOUR_CIDR>
+```
+
+> Confirm `start-session` actually works **before** revoking port 22. The
+> failure mode is symmetrical: a box you cannot reach either way needs console
+> access or a stop/start to recover, and both are worse than the problem.
