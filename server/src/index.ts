@@ -5,6 +5,7 @@ import { config } from "./lib/config.js";
 import { HttpError } from "./lib/errors.js";
 import { authRouter } from "./routes/auth.js";
 import { githubAuthRouter } from "./routes/githubAuth.js";
+import { googleAuthRouter } from "./routes/googleAuth.js";
 import { orgsRouter } from "./routes/orgs.js";
 import { reposRouter } from "./routes/repos.js";
 import { scansRouter } from "./routes/scans.js";
@@ -52,6 +53,7 @@ app.use("/api", mcpAlternativesRouter); // no JWT — authed by per-repo CLI tok
 app.use("/api", phantomReportsRouter); // no auth — opt-in telemetry, name+ecosystem only
 app.use("/api/auth", authRouter);
 app.use("/api/auth", githubAuthRouter);
+app.use("/api/auth", googleAuthRouter);
 app.use("/api/orgs", orgsRouter);
 app.use("/api", reposRouter);
 app.use("/api", scansRouter);

@@ -436,11 +436,12 @@ No framework — each suite is a plain script that prints `PASS`/`FAIL` lines an
 exits non-zero on failure, so they run identically in CI and in a terminal.
 
 ```bash
-npm run test:ground-truth --workspace server            # 336 — engine against a seeded fixture
+npm run test:ground-truth --workspace server            # 342 — engine against a seeded fixture
 npm run test:ground-truth-python --workspace server     # 35  — the same, for Python
 npm run test:canonicalize --workspace server            # 63  — instruction canonicalization + mixed script
 npm run test:magic-link --workspace server              # 24  — sign-in tokens, needs postgres
 npm run test:magic-link-api --workspace server          # 20  — the auth routes, needs postgres + the API
+npm run test:google-oauth --workspace server            # 15  — Google identity linking + OAuth state
 npm run test:finding-lifecycle --workspace server       # 24  — needs postgres (see below)
 npm run test:agent-surface --workspace server           # 15  — agent/MCP inventory
 npm run test:dependency-attribution --workspace server  # 12  — builds a real git repo

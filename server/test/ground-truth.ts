@@ -609,6 +609,43 @@ ${"MIIEowIBAAKCAQEA" + "b".repeat(48)}
     "does NOT fire on ROUTING_KEY (a message-queue concept, not a secret)",
     fire(`ROUTING_KEY = "orders.created.v2.high_priority"`, "backend/queue.py").length === 0,
   ],
+  // --- endpoints are not credentials (found by self-scan, 2026-08-21) ---
+  // A constant named TOKEN holding an OAuth endpoint URL tripped the tier-2
+  // entropy rule: the identifier matched, the value had no whitespace and
+  // cleared both entropy floors. Renaming the constant would have hidden it;
+  // the pattern (TOKEN_URL, TOKEN_ENDPOINT, AUTH_TOKEN_URI) is everywhere.
+  //
+  // The discriminator is not 'is it a URL' — a Slack webhook is a URL and is a
+  // credential. It is whether any path segment looks random. An endpoint built
+  // from dictionary words is an endpoint.
+  [
+    "does NOT fire on an OAuth token endpoint URL",
+    fire(`const TOKEN = "https://oauth2.googleapis.com/token";`).length === 0,
+  ],
+  [
+    "does NOT fire on an API key management endpoint",
+    fire(`const API_KEY_URL = "https://api.example.com/v1/keys/rotate";`).length === 0,
+  ],
+  [
+    "does NOT fire on a token endpoint with a version query",
+    fire(`const TOKEN_URI = "https://login.microsoftonline.com/common/oauth2/v2.0/token";`).length === 0,
+  ],
+  [
+    // The other direction, and the reason this is not just 'skip URLs': the
+    // random-looking tail IS the credential.
+    "STILL fires on a webhook URL whose path carries the secret",
+    fire(
+      `const WEBHOOK_SECRET = "https://hooks.acmecorp.io/services/${"T024BE7LD"}/${"B01LMNOPQ"}/${"8Xk2Pq7ZmVb3LmNp8RtYw1CsE"}";`,
+    ).length === 1,
+  ],
+  [
+    "STILL fires on a plain high-entropy token, URL or not",
+    fire(`const TOKEN = "${GROQ}";`).length === 1,
+  ],
+  [
+    "a connection string with credentials is still caught by its own rule",
+    fire(`const TOKEN = "postgres://admin:${SYNTHETIC_DB_VALUE}@db.acmecorp.io:5432/main";`).length >= 1,
+  ],
 
   // --- key-bearing file types (gap found 2026-08-20) ---
   // The PEM detector fires correctly on key material embedded in a .js or a

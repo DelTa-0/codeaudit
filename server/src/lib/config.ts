@@ -71,6 +71,12 @@ export const config = {
     clientSecret: process.env.GITHUB_CLIENT_SECRET ?? "",
     webhookSecret: process.env.GITHUB_WEBHOOK_SECRET ?? "",
   },
+  google: {
+    // Unset is a supported state: the route answers 501 and the button is
+    // hidden, matching how every other optional integration degrades here.
+    clientId: process.env.GOOGLE_CLIENT_ID ?? "",
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+  },
   stripe: {
     secretKey: process.env.STRIPE_SECRET_KEY ?? "",
     webhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? "",

@@ -212,6 +212,55 @@ function shannonEntropy(value: string): number {
 }
 
 /**
+ * Whether a value is a plain endpoint URL rather than a credential.
+ *
+ * Found by this repository's own self-scan: `const TOKEN =
+ * "https://oauth2.googleapis.com/token"` was reported as a leaked credential.
+ * The identifier matched the tier-2 keyword list, the value had no whitespace,
+ * and a URL clears both entropy floors comfortably — so the rule fired on an
+ * OAuth endpoint. `TOKEN_URL`, `TOKEN_ENDPOINT` and `AUTH_TOKEN_URI` are
+ * everywhere, which makes this a false positive that would follow users into
+ * their own repositories.
+ *
+ * The discriminator is NOT 'is it a URL'. A Slack webhook is a URL and is a
+ * credential; so is a signed download link. What separates them is whether any
+ * path or query segment looks random: an endpoint assembled from dictionary
+ * words is an endpoint, and a path ending in twenty-five characters of noise
+ * is carrying a secret. That question is already answerable with the entropy
+ * floors used everywhere else here, so this reuses them rather than inventing
+ * a second notion of 'looks random'.
+ *
+ * A URL carrying userinfo (`scheme://user:pass@host`) returns false and falls
+ * through deliberately — the tier-1 connection-string rule owns that shape and
+ * reports it better than this path would.
+ */
+function isPlainEndpointUrl(value: string): boolean {
+  if (!/^https?:\/\//i.test(value)) return false;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  if (url.username || url.password) return false;
+
+  const segments = [...url.pathname.split("/"), ...url.searchParams.values()].filter(Boolean);
+  for (const segment of segments) {
+    // Short segments cannot carry enough entropy to be a credential, and
+    // checking them would reject ordinary paths like /v1 or /token.
+    if (segment.length < 12) continue;
+    const bitsPerChar = shannonEntropy(segment);
+    if (
+      bitsPerChar >= MIN_ENTROPY_BITS_PER_CHAR &&
+      bitsPerChar * segment.length >= MIN_TOTAL_ENTROPY_BITS
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
  * The single choke point through which a secret may be described. Everything
  * that leaves this module — database row, API payload, CLI line, PR comment,
  * exported report — must describe the value through this, never directly.
@@ -368,6 +417,7 @@ export function scanTextForSecrets(text: string, filePath: string): SecretFindin
       const value = contextual[2];
       if (PLACEHOLDER.test(value)) continue;
       if (CONTAINS_WHITESPACE.test(value)) continue;
+      if (isPlainEndpointUrl(value)) continue;
       const bitsPerChar = shannonEntropy(value);
       if (bitsPerChar < MIN_ENTROPY_BITS_PER_CHAR) continue;
       if (bitsPerChar * value.length < MIN_TOTAL_ENTROPY_BITS) continue;

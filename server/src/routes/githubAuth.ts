@@ -1,5 +1,5 @@
 import { Router } from "express";
-import crypto from "node:crypto";
+import { issueOauthState, consumeOauthState } from "../lib/oauthState.js";
 import { query, queryOne } from "../db/pool.js";
 import { signToken } from "../middleware/auth.js";
 import { config } from "../lib/config.js";
@@ -8,26 +8,17 @@ import { exchangeOauthCode, oauthAuthorizeUrl } from "../services/github.js";
 
 export const githubAuthRouter = Router();
 
-// Short-lived in-memory state store (single-process dev; move to Redis for multi-instance).
-const pendingStates = new Map<string, number>();
-setInterval(() => {
-  const cutoff = Date.now() - 10 * 60_000;
-  for (const [state, ts] of pendingStates) if (ts < cutoff) pendingStates.delete(state);
-}, 60_000).unref();
 
 githubAuthRouter.get("/github", (_req, res) => {
   if (!config.github.clientId)
     return res.status(501).json({ error: "GitHub OAuth is not configured (set GITHUB_CLIENT_ID)" });
-  const state = crypto.randomBytes(16).toString("hex");
-  pendingStates.set(state, Date.now());
-  res.redirect(oauthAuthorizeUrl(state));
+  res.redirect(oauthAuthorizeUrl(issueOauthState()));
 });
 
 githubAuthRouter.get("/github/callback", async (req, res, next) => {
   try {
     const { code, state } = req.query as { code?: string; state?: string };
-    if (!code || !state || !pendingStates.has(state)) throw badRequest("Invalid OAuth state");
-    pendingStates.delete(state);
+    if (!code || !consumeOauthState(state)) throw badRequest("Invalid OAuth state");
 
     const gh = await exchangeOauthCode(code);
     if (!gh.email) throw badRequest("Your GitHub account has no accessible email address");

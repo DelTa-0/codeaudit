@@ -5,6 +5,7 @@ import { useAuth } from "../lib/auth";
 import { Button, Input, Card } from "../components/ui";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { LogoMark } from "../components/Logo";
+import { GoogleButton } from "../components/GoogleButton";
 
 /**
  * Where to land after signing in. RequireAuth sets ?next when it bounces an
@@ -117,9 +118,12 @@ function LoginPage() {
       <div className="my-4 flex items-center gap-3 text-xs text-muted">
         <div className="h-px flex-1 bg-border" /> or <div className="h-px flex-1 bg-border" />
       </div>
-      <Button variant="ghost" className="w-full" onClick={() => (window.location.href = "/api/auth/github")}>
-        Continue with GitHub
-      </Button>
+      <div className="space-y-2">
+        <GoogleButton />
+        <Button variant="ghost" className="w-full" onClick={() => (window.location.href = "/api/auth/github")}>
+          Continue with GitHub
+        </Button>
+      </div>
       <p className="mt-4 text-center text-sm text-muted">
         No password, or no account?{" "}
         <Link className="text-primary hover:underline" to="/register">
@@ -237,9 +241,12 @@ function SignUpPage() {
       <div className="my-4 flex items-center gap-3 text-xs text-muted">
         <div className="h-px flex-1 bg-border" /> or <div className="h-px flex-1 bg-border" />
       </div>
-      <Button variant="ghost" className="w-full" onClick={() => (window.location.href = "/api/auth/github")}>
-        Continue with GitHub
-      </Button>
+      <div className="space-y-2">
+        <GoogleButton />
+        <Button variant="ghost" className="w-full" onClick={() => (window.location.href = "/api/auth/github")}>
+          Continue with GitHub
+        </Button>
+      </div>
       <p className="mt-4 text-center text-sm text-muted">
         Have a password?{" "}
         <Link className="text-primary hover:underline" to="/login">
