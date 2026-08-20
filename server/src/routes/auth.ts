@@ -7,6 +7,13 @@ import { signToken, requireAuth } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
 import { conflict, forbidden, unauthorized } from "../lib/errors.js";
 import { logAudit } from "../services/audit.js";
+import {
+  issueSignInToken,
+  consumeSignInToken,
+  isWithinCooldown,
+  normalizeEmail,
+} from "../lib/emailTokens.js";
+import { sendSignInEmail } from "../lib/email.js";
 
 export const authRouter = Router();
 
@@ -55,37 +62,108 @@ function slugify(name: string): string {
   );
 }
 
-authRouter.post("/register", registerLimiter, validateBody(credentialsSchema), async (req, res, next) => {
-  try {
-    const { email, password, name } = req.body as z.infer<typeof credentialsSchema>;
-    const existing = await queryOne("SELECT id FROM users WHERE email = $1", [email]);
-    if (existing) throw conflict("An account with this email already exists");
+// Signup is a magic link, not a form. The old handler took an address that
+// merely *parsed*, created a user, an organization and a session, and handed
+// back a token — so admin@admin.com was a working account. Verification could
+// have been bolted on; removing the form is stronger, because an account can
+// now only exist once someone has clicked a link in a mailbox they control.
+// There is no unverified state to enforce, and therefore no call site that can
+// forget to enforce it.
+authRouter.post(
+  "/signin-link",
+  registerLimiter,
+  validateBody(credentialsSchema.pick({ email: true })),
+  async (req, res, next) => {
+    try {
+      const email = normalizeEmail((req.body as { email: string }).email);
 
-    const hash = await bcrypt.hash(password, 10);
-    const [user] = await query<{ id: string; email: string }>(
-      "INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING id, email",
-      [email, hash, name ?? null],
-    );
+      // One response for every case — known address, unknown address, typo,
+      // or too soon. Saying anything more specific would rebuild the account
+      // enumeration oracle that removing the signup form just closed.
+      if (!(await isWithinCooldown(email))) {
+        const { token, code } = await issueSignInToken(email);
+        const url = `${process.env.APP_URL ?? ""}/signin?token=${encodeURIComponent(token)}`;
+        await sendSignInEmail(email, url, code);
+      }
 
-    // Every new user gets a personal org so the app is usable immediately.
-    const orgName = name ? `${name}'s workspace` : "My workspace";
-    const baseSlug = slugify(name ?? email.split("@")[0]);
-    const slug = `${baseSlug}-${user.id.slice(0, 6)}`;
-    const [org] = await query<{ id: string }>(
-      "INSERT INTO organizations (name, slug) VALUES ($1, $2) RETURNING id",
-      [orgName, slug],
-    );
-    await query("INSERT INTO org_members (org_id, user_id, role) VALUES ($1, $2, 'owner')", [
-      org.id,
-      user.id,
-    ]);
+      res.status(202).json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
-    await logAudit(org.id, user.id, "auth.registered", user.email);
-    res.status(201).json({ token: signToken(user), user: { id: user.id, email: user.email } });
-  } catch (err) {
-    next(err);
-  }
-});
+// The click, or the typed code. Either creates the account if this is its
+// first use, and signs the holder in.
+const signInVerifySchema = z
+  .object({
+    token: z.string().min(10).max(200).optional(),
+    email: z.string().email().optional(),
+    code: z.string().regex(/^\d{6}$/).optional(),
+  })
+  .refine((v) => Boolean(v.token) || Boolean(v.email && v.code), {
+    message: "Provide either a token or an email and code",
+  });
+
+authRouter.post(
+  "/signin-verify",
+  loginLimiter,
+  validateBody(signInVerifySchema),
+  async (req, res, next) => {
+    try {
+      const body = req.body as z.infer<typeof signInVerifySchema>;
+      const result = body.token
+        ? await consumeSignInToken({ token: body.token })
+        : await consumeSignInToken({ email: body.email!, code: body.code! });
+
+      // Reasons are flattened to one message on purpose. Telling an
+      // unauthenticated caller that a token expired rather than never existed
+      // is useful to an honest user and equally useful to someone probing.
+      if (!result.ok) {
+        throw unauthorized("That sign-in link or code is no longer valid. Request a new one.");
+      }
+
+      const suspended = await queryOne<{ suspended_at: Date | null }>(
+        "SELECT suspended_at FROM users WHERE id = $1",
+        [result.user.id],
+      );
+      if (suspended?.suspended_at)
+        throw forbidden("This account has been suspended. Contact support.");
+
+      res.json({
+        token: signToken(result.user),
+        user: result.user,
+        mustSetPassword: result.mustSetPassword,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// Optional, and deliberately so. An account created by a link works without a
+// password forever — requesting another link is always available, which is
+// also the password reset this product has never had. Setting one only buys
+// the convenience of the login form.
+authRouter.post(
+  "/set-password",
+  requireAuth,
+  validateBody(credentialsSchema.pick({ password: true })),
+  async (req, res, next) => {
+    try {
+      const { password } = req.body as { password: string };
+      const userId = req.user!.id;
+      await query("UPDATE users SET password_hash = $2 WHERE id = $1", [
+        userId,
+        await bcrypt.hash(password, 10),
+      ]);
+      await logAudit(null, userId, "auth.password_set", req.user!.email);
+      res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 authRouter.post(
   "/login",

@@ -21,7 +21,9 @@
     "test:phantom-reports": "tsx test/phantom-reports.ts",
     "test:admin-access": "tsx test/admin-access.ts",
     "test:canonicalize": "tsx test/canonicalize.ts",
-    "bench:agent-scan": "tsx test/bench-agent-scan.ts"
+    "bench:agent-scan": "tsx test/bench-agent-scan.ts",
+    "test:magic-link": "tsx test/magic-link.ts",
+    "test:magic-link-api": "tsx test/magic-link-api.ts"
   },
   "dependencies": {
     "@codeaudit/engine": "*",

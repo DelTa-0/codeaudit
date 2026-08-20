@@ -6,6 +6,8 @@ import { AuthProvider, useAuth } from "./lib/auth";
 import { Layout } from "./components/Layout";
 import { Landing } from "./pages/Landing";
 import { AuthPage } from "./pages/Auth";
+import { SignInLinkPage } from "./pages/SignInLink";
+import { SetPasswordPage } from "./pages/SetPassword";
 import { Dashboard } from "./pages/Dashboard";
 import { RepoDetail } from "./pages/RepoDetail";
 import { ScanDetail } from "./pages/ScanDetail";
@@ -68,7 +70,15 @@ function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<AuthPage mode="login" />} />
         <Route path="/register" element={<AuthPage mode="register" />} />
+        {/* Landing page for an emailed sign-in link. Public: the token in the
+            query string is the credential, so requiring a session here would
+            make the link useless to the person it was sent to. */}
+        <Route path="/signin" element={<SignInLinkPage />} />
         <Route element={<RequireAuth />}>
+          {/* Inside RequireAuth, outside Layout: it needs a session, but it is
+              a full-screen auth card and the app chrome around it would be
+              claiming the user has arrived somewhere they have not. */}
+          <Route path="/set-password" element={<SetPasswordPage />} />
           <Route element={<Layout />}>
             <Route path="/dashboard" element={<Dashboard />} />
             {/* GitHub's post-install Setup URL lands here. Inside RequireAuth
