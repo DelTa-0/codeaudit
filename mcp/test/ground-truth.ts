@@ -175,16 +175,24 @@ checks.push([
   binaryKeystore.scanned === false && !binaryKeystore.reason.includes("template"),
 ]);
 
-const MCP_TEST_DB_PASSWORD = "S3cr" + "etP4ssw0rdXyz";
+// Synthetic, and deliberately shaped to be unmistakable. This value has to
+// clear the engine's own placeholder filters or the test proves nothing —
+// which is exactly the shape external secret scanners flag. GitGuardian
+// raised an incident on the previous value, a password-shaped literal under a
+// name ending in _PASSWORD, so both halves changed: the name is no longer a
+// credential keyword, and the value now reads as an instruction rather than a
+// secret. It is still detected by our own connection-string rule, which is
+// the only property the tests below depend on.
+const SYNTHETIC_DB_VALUE = "rotate-me-before-use";
 const connString = await callTool(send, "scan_secrets", {
-  content: `DATABASE_URL=postgres://admin:${MCP_TEST_DB_PASSWORD}@db.acmecorp.io:5432/main`,
+  content: `DATABASE_URL=postgres://admin:${SYNTHETIC_DB_VALUE}@db.acmecorp.io:5432/main`,
   filePath: ".env",
 });
 checks.push(
   ["scan_secrets detects a connection string with an inline password", connString.findingCount === 1],
   [
     "the connection-string response never contains the password",
-    !JSON.stringify(connString).includes(MCP_TEST_DB_PASSWORD),
+    !JSON.stringify(connString).includes(SYNTHETIC_DB_VALUE),
   ],
 );
 

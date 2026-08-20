@@ -444,8 +444,15 @@ checks.push(
 // --- Secret detection: tiers, exclusions, redaction ---
 const AWS = "AKIA" + "3RTQ7ZK2WPLM5XDN";
 const GROQ = "gsk_" + "a".repeat(52);
-// Split like AWS/GROQ above so external secret scanners do not flag this file.
-const PGPASS = "S3cr" + "etP4ssw0rdXyz";
+// Synthetic, and deliberately shaped to be unmistakable. This value has to
+// clear the engine's own placeholder filters or the test proves nothing —
+// which is exactly the shape external secret scanners flag. GitGuardian
+// raised an incident on the previous value, a password-shaped literal under a
+// name ending in _PASSWORD, so both halves changed: the name is no longer a
+// credential keyword, and the value now reads as an instruction rather than a
+// secret. It is still detected by our own connection-string rule, which is
+// the only property the tests below depend on.
+const SYNTHETIC_DB_VALUE = "rotate-me-before-use";
 const fire = (text: string, file = "src/config.ts") => scanTextForSecrets(text, file);
 checks.push(
   ["tier 1: an AWS access key is detected", fire(`const k = "${AWS}";`).length === 1],
@@ -664,21 +671,21 @@ ${"MIIEowIBAAKCAQEA" + "b".repeat(48)}
   // every compose file, CI workflow and quick-start README contains.
   [
     "tier 1: a Postgres URL with an inline password is detected",
-    fire(`const u = "postgres://admin:${PGPASS}@db.acmecorp.io:5432/main";`).length === 1,
+    fire(`const u = "postgres://admin:${SYNTHETIC_DB_VALUE}@db.acmecorp.io:5432/main";`).length === 1,
   ],
   [
     "tier 1: a MongoDB SRV URL with an inline password is detected",
-    fire(`MONGO_URL=mongodb+srv://root:${PGPASS}@cluster0.acmecorp.net/prod`, ".env").length === 1,
+    fire(`MONGO_URL=mongodb+srv://root:${SYNTHETIC_DB_VALUE}@cluster0.acmecorp.net/prod`, ".env").length === 1,
   ],
   [
     "tier 1: a redis URL with an inline password is detected",
-    fire(`REDIS_URL=rediss://default:${PGPASS}@cache.acmecorp.io:6380`, ".env").length === 1,
+    fire(`REDIS_URL=rediss://default:${SYNTHETIC_DB_VALUE}@cache.acmecorp.io:6380`, ".env").length === 1,
   ],
   [
     "the connection-string finding never contains the password",
     !JSON.stringify(
-      fire(`const u = "postgres://admin:${PGPASS}@db.acmecorp.io:5432/main";`),
-    ).includes(PGPASS),
+      fire(`const u = "postgres://admin:${SYNTHETIC_DB_VALUE}@db.acmecorp.io:5432/main";`),
+    ).includes(SYNTHETIC_DB_VALUE),
   ],
   // --- must NOT fire: every one of these appears in this repo's own tree ---
   [
@@ -687,7 +694,7 @@ ${"MIIEowIBAAKCAQEA" + "b".repeat(48)}
   ],
   [
     "does NOT fire on a 127.0.0.1 connection string",
-    fire(`postgres://admin:${PGPASS}@127.0.0.1:5432/main`, "README.md").length === 0,
+    fire(`postgres://admin:${SYNTHETIC_DB_VALUE}@127.0.0.1:5432/main`, "README.md").length === 0,
   ],
   [
     "does NOT fire on host.docker.internal",
@@ -695,7 +702,7 @@ ${"MIIEowIBAAKCAQEA" + "b".repeat(48)}
   ],
   [
     "does NOT fire on a bare docker service-name host",
-    fire(`postgres://codeorion:${PGPASS}@postgres:5432/codeorion`, "deploy/docker-compose.prod.yml").length === 0,
+    fire(`postgres://codeorion:${SYNTHETIC_DB_VALUE}@postgres:5432/codeorion`, "deploy/docker-compose.prod.yml").length === 0,
   ],
   [
     "does NOT fire on an interpolated password",
@@ -711,7 +718,7 @@ ${"MIIEowIBAAKCAQEA" + "b".repeat(48)}
   ],
   [
     "does NOT fire on an example.com host (RFC 2606 documentation domain)",
-    fire(`postgres://admin:${PGPASS}@db.example.com:5432/main`).length === 0,
+    fire(`postgres://admin:${SYNTHETIC_DB_VALUE}@db.example.com:5432/main`).length === 0,
   ],
 );
 
