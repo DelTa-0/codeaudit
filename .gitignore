@@ -9,3 +9,9 @@ coverage/
 
 # Personal defense/presentation materials — never shipped, never reviewed
 /defense/
+
+# Obsidian workspace state — per-machine, changes on every open
+.obsidian/
+
+# Claude Code personal overrides (project config in .claude/ is committed)
+.claude/settings.local.json
