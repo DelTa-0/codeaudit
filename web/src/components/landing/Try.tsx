@@ -14,19 +14,27 @@ import { useMagnetic } from "../../lib/useFx";
  * Two panels rather than two sections, because they answer the same question —
  * "can I try this right now" — and stacking them would make the second look
  * like an afterthought again.
+ *
+ * The MCP panel shows both steps of the install, not one. A single
+ * `claude mcp add` line was shorter but it was also incomplete: it connects a
+ * server the agent has no reason to call, and it used the `npx` form the mcp
+ * README singles out as unreliable on Windows. The global install is the
+ * paste-and-go path in that README because it is the one that works on every
+ * platform, so it is the one shown here.
  */
 
 type Surface = "cli" | "mcp";
 
-const COMMANDS: Record<Surface, string> = {
-  cli: "npx codeorion scan .",
-  mcp: "claude mcp add codeaudit -- npx -y codeorion-mcp",
+const NPM: Record<Surface, string> = {
+  cli: "https://www.npmjs.com/package/codeorion",
+  mcp: "https://www.npmjs.com/package/codeorion-mcp",
 };
+
+/** The mcp README's per-client setup — Cursor, Cline, Codex, raw JSON. */
+const MCP_CLIENTS = "https://github.com/DelTa-0/codeaudit/tree/main/mcp#1-connect-the-server";
 
 export function Try() {
   const [surface, setSurface] = useState<Surface>("cli");
-  const { copied, copy } = useCopyCommand(COMMANDS[surface]);
-  const chipRef = useMagnetic<HTMLSpanElement>(0.25, 8);
 
   return (
     <section id="try" className="ca-section">
@@ -67,31 +75,7 @@ export function Try() {
               </button>
             </div>
 
-            <p className="ca-try-note">
-              {surface === "cli"
-                ? "The whole scan, offline. Works in CI, and in a pre-commit hook that blocks the commit rather than commenting on it afterwards."
-                : "Eight guardrail tools your agent calls at the moment of the decision — verify a package, assess an MCP server before adding it, audit tool descriptions for poisoning, review staged changes before the commit."}
-            </p>
-
-            <span
-              className="ca-cmd-chip"
-              ref={chipRef}
-              onClick={copy}
-              role="button"
-              tabIndex={0}
-              aria-label={`Copy the ${surface === "cli" ? "scan" : "install"} command to your clipboard`}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  copy();
-                }
-              }}
-            >
-              $ {COMMANDS[surface]}
-              <span className="ca-copy-hint" style={{ fontSize: 11 }}>
-                {copied ? "✓ copied" : "⧉"}
-              </span>
-            </span>
+            {surface === "cli" ? <CliInstall /> : <McpInstall />}
           </div>
 
           <div className="ca-term" data-reveal style={{ transitionDelay: "0.12s" }}>
@@ -100,6 +84,115 @@ export function Try() {
         </div>
       </div>
     </section>
+  );
+}
+
+/**
+ * One copyable command.
+ *
+ * A component rather than state on the section, because the MCP install is
+ * four commands across two steps and each needs its own "copied" flag — one
+ * shared flag would tick every chip on the page at once.
+ */
+function CmdChip({ command, magnetic = false }: { command: string; magnetic?: boolean }) {
+  const { copied, copy } = useCopyCommand(command);
+  const ref = useMagnetic<HTMLSpanElement>(0.25, 8);
+  // A prompt marker, not part of what gets copied. `/plugin` is typed into a
+  // Claude Code session; everything else goes to a shell.
+  const prompt = command.startsWith("/") ? ">" : "$";
+
+  return (
+    <span
+      className="ca-cmd-chip"
+      ref={magnetic ? ref : undefined}
+      onClick={copy}
+      role="button"
+      tabIndex={0}
+      aria-label={`Copy "${command}" to your clipboard`}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          copy();
+        }
+      }}
+    >
+      {prompt} {command}
+      <span className="ca-copy-hint" style={{ fontSize: 11 }}>
+        {copied ? "✓ copied" : "⧉"}
+      </span>
+    </span>
+  );
+}
+
+function NpmLink({ surface }: { surface: Surface }) {
+  return (
+    <a className="ca-pkg-link" href={NPM[surface]} target="_blank" rel="noreferrer">
+      <span className="ca-pkg-mark">npm</span>
+      {surface === "cli" ? "codeorion" : "codeorion-mcp"}
+      <span aria-hidden="true"> ↗</span>
+    </a>
+  );
+}
+
+function CliInstall() {
+  return (
+    <>
+      <p className="ca-try-note">
+        The whole scan, offline. Works in CI, and in a pre-commit hook that blocks the commit
+        rather than commenting on it afterwards.
+      </p>
+      <div className="ca-cmd-stack">
+        <CmdChip command="npx codeorion scan ." magnetic />
+      </div>
+      <p className="ca-try-meta">
+        Any terminal, Node 18 or newer, nothing to install first. <NpmLink surface="cli" />
+      </p>
+    </>
+  );
+}
+
+function McpInstall() {
+  return (
+    <>
+      <p className="ca-try-note">
+        Eight guardrail tools your agent calls at the moment of the decision — verify a package,
+        assess an MCP server before adding it, audit tool descriptions for poisoning, review
+        staged changes before the commit.
+      </p>
+
+      <ol className="ca-setup">
+        <li>
+          <span className="ca-setup-label">1 — Connect the server</span>
+          <span className="ca-setup-where">in your terminal</span>
+          <div className="ca-cmd-stack">
+            <CmdChip command="npm install -g codeorion-mcp" />
+            <CmdChip command="claude mcp add codeaudit -- codeorion-mcp" />
+          </div>
+        </li>
+        <li>
+          <span className="ca-setup-label">2 — Install the skill that calls it</span>
+          <span className="ca-setup-where">in a Claude Code session, after restarting it</span>
+          <div className="ca-cmd-stack">
+            <CmdChip command="/plugin marketplace add DelTa-0/codeaudit" />
+            <CmdChip command="/plugin install codeorion-guardrails@codeaudit" />
+          </div>
+        </li>
+      </ol>
+
+      <p className="ca-try-meta">
+        <code>claude</code> is the Claude Code CLI, so step 1 is an ordinary terminal command on
+        macOS, Linux and Windows alike — step 2 is typed inside a session. Both are required: the
+        server on its own is eight tools your agent never thinks to reach for.
+      </p>
+      <p className="ca-try-meta">
+        Cursor, Cline, Codex or another MCP client: run <code>codeorion-mcp</code> as a stdio
+        command —{" "}
+        <a href={MCP_CLIENTS} target="_blank" rel="noreferrer">
+          config for each client ↗
+        </a>
+        . <NpmLink surface="mcp" />
+      </p>
+    </>
   );
 }
 

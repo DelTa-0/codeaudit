@@ -31,6 +31,25 @@
         document.documentElement.setAttribute("data-theme", theme);
       })();
     </script>
+    <script>
+      // Hide the #root fallback below from anything that runs JavaScript.
+      //
+      // That markup exists for fetchers that never execute this file (see the
+      // comment on it). A browser does execute it, and React replaces the
+      // fallback on mount — but mount waits for the bundle, so on every reload
+      // the fallback got a paint of its own first: a plain-HTML document
+      // flashing up before the real page. This runs while <head> is still
+      // parsing, so the rule is in place before the fallback is laid out.
+      //
+      // Injected from script rather than written into the stylesheet on
+      // purpose. The fallback's only live audience is a client with JavaScript
+      // off, and for them this line never runs, so they still see it.
+      document.head.appendChild(
+        Object.assign(document.createElement("style"), {
+          textContent: "#ca-fallback{display:none}",
+        }),
+      );
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -55,7 +74,7 @@
       place nobody looks, which is exactly how it goes stale.
     -->
     <div id="root">
-      <main style="max-width: 42rem; margin: 4rem auto; padding: 0 1.5rem; font-family: system-ui, sans-serif; line-height: 1.6;">
+      <main id="ca-fallback" style="max-width: 42rem; margin: 4rem auto; padding: 0 1.5rem; font-family: system-ui, sans-serif; line-height: 1.6;">
         <h1>CodeAudit — AI Technical Debt Intelligence</h1>
         <p>
           CodeAudit audits GitHub repositories for the technical debt AI coding

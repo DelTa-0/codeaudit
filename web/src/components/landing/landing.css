@@ -1016,7 +1016,8 @@
   display: inline-flex;
   align-items: center;
   gap: 12px;
-  margin-top: 28px;
+  max-width: 100%;
+  text-align: left;
   font: 600 14px var(--mono);
   color: var(--accent);
   background: var(--ink-1);
@@ -1531,4 +1532,106 @@
   font-size: 14px;
   line-height: 1.6;
   color: var(--muted);
+}
+
+/* One command, or a short stack of them. align-items:start keeps each chip as
+   wide as its own command rather than stretching the short ones to match
+   `claude mcp add codeaudit -- codeorion-mcp`. */
+.ca-cmd-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+/* The MCP install is two steps in two different places — a shell and a Claude
+   Code session — and the landing page showed one command with no hint that a
+   second existed. Numbering them makes the sequence the shape of the block
+   rather than something to infer from the prose underneath. */
+.ca-setup {
+  display: block; /* not .ca-steps — that name is the HowItWorks stepper's grid */
+  margin-top: 24px;
+  padding: 0;
+  list-style: none;
+}
+.ca-setup > li + li {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line-soft);
+}
+.ca-setup-label {
+  display: block;
+  font: 600 12px var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--paper);
+}
+.ca-setup-where {
+  display: block;
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--faint);
+}
+/* A notch smaller inside the setup steps than the CLI's single headline chip.
+   Four of them stacked is a lot of monospace, and `claude mcp add codeaudit --
+   codeorion-mcp` at 14px sits flush against the column edge on a laptop. */
+.ca-setup .ca-cmd-chip {
+  font-size: 13px;
+  padding: 12px 16px;
+}
+
+/* Where the caveats live: platform notes, other clients, the package links.
+   Small enough to stay out of the way of the commands, present enough that
+   nobody has to guess whether `claude mcp add` is a thing their shell knows. */
+.ca-try-meta {
+  margin-top: 16px;
+  max-width: 52ch;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--muted);
+}
+.ca-try-meta code {
+  font: 500 12px var(--mono);
+  color: var(--paper);
+  background: var(--ink-2);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.ca-try-meta a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+.ca-try-meta a:hover {
+  color: var(--accent-bright);
+}
+
+/* Link to the package on npm — the one page that answers "is this real, who
+   publishes it, when did it last ship", which is a fair question to ask of a
+   supply-chain tool asking to sit in your install path. */
+.ca-pkg-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  font: 500 12px var(--mono);
+  color: var(--paper) !important;
+  text-decoration: none !important;
+}
+.ca-pkg-link:hover .ca-pkg-mark {
+  background: var(--accent);
+}
+.ca-pkg-link:hover {
+  color: var(--accent) !important;
+}
+.ca-pkg-mark {
+  font: 700 10px var(--mono);
+  letter-spacing: 0.04em;
+  color: #fff;
+  background: #cb3837; /* npm's own red — it reads as a badge, not a brand slip */
+  padding: 2px 5px;
+  border-radius: 3px;
+  transition: background 0.2s;
 }
