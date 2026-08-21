@@ -82,7 +82,7 @@ EXPOSE 4000
 
 # Applies to the DEFAULT run-mode (the API). The worker serves no HTTP and would
 # fail this forever — the ECS worker task definition drops healthCheck entirely
-# (see deploy/README.md); for plain `docker run`, pass --no-healthcheck.
+# (the worker serves no HTTP); for plain `docker run`, pass --no-healthcheck.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||4000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 

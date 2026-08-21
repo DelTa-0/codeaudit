@@ -562,10 +562,8 @@ started yet:
 
 A production `Dockerfile` (repo root) builds a single image that runs the API
 (which also serves the built web app same-origin), the BullMQ worker, and the
-one-off migration task — selected by the container command. See
-[`deploy/README.md`](deploy/README.md) for the AWS ECR + ECS Fargate runbook,
-including RDS/ElastiCache TLS, Secrets Manager wiring, and the local
-`docker build` + `docker run` parity check. Production env additions
+one-off migration task — selected by the container command. Production env
+additions
 (`DATABASE_SSL`, `REDIS_TLS`, `WEB_DIST_DIR`, `GITHUB_APP_PRIVATE_KEY`) are
 documented in `.env.example`.
 

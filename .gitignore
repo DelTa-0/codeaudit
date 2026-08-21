@@ -15,3 +15,8 @@ coverage/
 
 # Claude Code personal overrides (project config in .claude/ is committed)
 .claude/settings.local.json
+
+# Deployment topology and runbook — kept local. Nothing secret in here
+# (values are placeholders), but the production compose file lives here and
+# it is not something a reader of this repo needs.
+/deploy/
