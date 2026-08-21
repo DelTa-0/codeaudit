@@ -1,6 +1,7 @@
 # CodeAudit
 
 [![CI](https://github.com/DelTa-0/codeaudit/actions/workflows/ci.yml/badge.svg)](https://github.com/DelTa-0/codeaudit/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 AI Technical Debt Intelligence — a SaaS that audits GitHub repositories
 (**JS/TS + Python**, polyglot repos analyze both at once) for:
@@ -569,3 +570,19 @@ including RDS/ElastiCache TLS, Secrets Manager wiring, and the local
 documented in `.env.example`.
 
 See [`docs/roadmap.md`](docs/roadmap.md) for the fuller, running list.
+
+---
+
+## License
+
+MIT, throughout — the server, the web app, the engine, the `codeorion` CLI and
+the `codeorion-mcp` server. Use it, fork it, run it commercially, no
+conditions beyond keeping the copyright notice.
+
+Earlier versions carried PolyForm Shield at the root, which is source-available
+rather than open source. It was dropped for two reasons. It claimed a
+non-compete over the CLI and MCP server while those were simultaneously
+published to npm under MIT — the repository said two different things about the
+same code. And GitHub does not recognise PolyForm, so the repository reported
+`NOASSERTION`, which is the kind of ambiguity that makes a licence the topic
+instead of the product.

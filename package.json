@@ -2,6 +2,7 @@
   "name": "codeaudit",
   "private": true,
   "version": "0.1.0",
+  "license": "MIT",
   "workspaces": [
     "packages/engine",
     "server",
@@ -24,6 +25,5 @@
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
-  },
-  "license": "PolyForm-Shield-1.0.0"
+  }
 }
